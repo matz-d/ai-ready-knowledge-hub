@@ -10,7 +10,6 @@ import { payrollTrainingStrategistFixture } from '../demo/strategistFixture';
 import type {
   AiUsePolicy,
   BusinessDomain,
-  DocumentType,
   Freshness,
   Sensitivity,
 } from '../agents/curator/schema';
@@ -83,10 +82,6 @@ const aiPolicyLabels: Record<AiUsePolicy, string> = {
 
 function aiPolicyLabel(policy: AiUsePolicy): string {
   return aiPolicyLabels[policy];
-}
-
-function documentTypeBadge(type: DocumentType): string {
-  return type;
 }
 
 export default function Home() {
@@ -247,7 +242,7 @@ export default function Home() {
                       <strong>{entry.fileName}</strong>
                       <span>{entry.rationale}</span>
                     </td>
-                    <td>{documentTypeBadge(entry.documentType)}</td>
+                    <td>{entry.documentType}</td>
                     <td>{entry.businessDomain}</td>
                     <td>
                       <span
@@ -372,7 +367,7 @@ function DocumentCard({ entry }: { entry: InventorySnapshotEntry }) {
   return (
     <article className={`document-card ${promoted ? 'danger-card' : ''}`}>
       <div className="card-topline">
-        <span>{documentTypeBadge(entry.documentType)}</span>
+        <span>{entry.documentType}</span>
         <span>{entry.businessDomain}</span>
       </div>
       <h3>{entry.fileName}</h3>

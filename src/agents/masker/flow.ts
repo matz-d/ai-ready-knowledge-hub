@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import {
   ResidualRiskInput,
   ResidualRiskOutput,
@@ -9,97 +8,26 @@ import {
   MASKER_RISK_SYSTEM_PROMPT,
   buildMaskerRiskUserPrompt,
 } from './prompt';
-import { ai, modelRef, parseJsonFromModelText } from '../_shared/genkitClient';
+import { ai, generateValidated } from '../_shared/genkitClient';
 
 /**
  * Masker residual risk flow (A8).
  *
- * 3 段フォールバック (Curator と同様の構造化出力リカバリ):
- *   1. structured output (responseJsonSchema constrained)
- *   2. structured output の `text` から JSON.parse
- *   3. format=json + schema (unconstrained)
+ * 構造化出力のリカバリは `_shared/genkitClient.ts#generateValidated` に集約。
+ * Masker は 3 段フォールバックで運用しているため `includeBareJsonFallback` は付けない。
  */
-async function generateResidualRiskValidated(
-  input: z.infer<typeof ResidualRiskInput>
-): Promise<ResidualRiskOutputResult> {
-  const base = {
-    model: modelRef(),
-    system: MASKER_RISK_SYSTEM_PROMPT,
-    prompt: buildMaskerRiskUserPrompt(input),
-    config: { temperature: 0 },
-  };
-
-  const attempts: string[] = [];
-
-  const primary = await ai.generate({
-    ...base,
-    output: {
-      schema: ResidualRiskOutputCore,
-      constrained: true,
-    },
-  });
-
-  let validated = ResidualRiskOutput.safeParse(primary.output);
-  if (validated.success) {
-    return validated.data;
-  }
-  attempts.push(`structured(output): ${validated.error.message}`);
-
-  if (primary.text) {
-    try {
-      const parsed = parseJsonFromModelText(primary.text);
-      validated = ResidualRiskOutput.safeParse(parsed);
-      if (validated.success) {
-        return validated.data;
-      }
-      attempts.push(`structured(text): ${validated.error.message}`);
-    } catch (e) {
-      attempts.push(
-        `structured(text JSON.parse): ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-
-  const looseJson = await ai.generate({
-    ...base,
-    output: {
-      format: 'json',
-      schema: ResidualRiskOutputCore,
-      constrained: false,
-    },
-  });
-
-  validated = ResidualRiskOutput.safeParse(looseJson.output);
-  if (validated.success) {
-    return validated.data;
-  }
-  attempts.push(`json+schema(unconstrained output): ${validated.error.message}`);
-
-  if (looseJson.text) {
-    try {
-      const parsed = parseJsonFromModelText(looseJson.text);
-      validated = ResidualRiskOutput.safeParse(parsed);
-      if (validated.success) {
-        return validated.data;
-      }
-      attempts.push(`json+schema(text): ${validated.error.message}`);
-    } catch (e) {
-      attempts.push(
-        `json+schema(text JSON.parse): ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-
-  throw new Error(
-    `Residual risk 出力を Zod で検証できませんでした。\n${attempts.join('\n')}`
-  );
-}
-
 export const maskerRiskFlow = ai.defineFlow(
   {
     name: 'maskerRiskFlow',
     inputSchema: ResidualRiskInput,
     outputSchema: ResidualRiskOutput,
   },
-  async (input) => generateResidualRiskValidated(input)
+  async (input): Promise<ResidualRiskOutputResult> =>
+    generateValidated<ResidualRiskOutputResult>({
+      label: 'Residual risk',
+      system: MASKER_RISK_SYSTEM_PROMPT,
+      prompt: buildMaskerRiskUserPrompt(input),
+      coreSchema: ResidualRiskOutputCore,
+      validate: (output) => ResidualRiskOutput.safeParse(output),
+    })
 );

@@ -3,8 +3,8 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { curatorFlow } from '../src/agents/curator/flow';
 import { maskerRiskFlow } from '../src/agents/masker/flow';
-import type { CuratorOutputResult } from '../src/agents/curator/schema';
 import type { ResidualRiskOutputResult } from '../src/agents/masker/schema';
+import type { InventorySnapshotEntry } from '../src/demo/inventory';
 
 /**
  * sample-data/accounting-office を curatorFlow に通し、
@@ -41,12 +41,11 @@ const MASKED_PAIR: Record<string, string | undefined> = {
   '顧客対応メモ_匿名化.txt': 'masked-memo-safe.txt',
 };
 
-type SnapshotEntry = CuratorOutputResult & {
-  fileName: string;
-  sourcePath: string;
-  maskerEvaluation?: ResidualRiskOutputResult;
-};
-
+/**
+ * Snapshot に書き出すエントリの型は src/demo/inventory.ts で定義された
+ * `InventorySnapshotEntry` を正本として参照する。snapshot 生成側と読み出し側で
+ * 型がズレないようにするのが狙い (D-W1-Close 原則)。
+ */
 async function listTargetFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   return entries
@@ -87,7 +86,7 @@ async function main(): Promise<void> {
     throw new Error(`検証対象ファイルが見つかりません: ${SAMPLE_DIR}`);
   }
 
-  const snapshot: SnapshotEntry[] = [];
+  const snapshot: InventorySnapshotEntry[] = [];
 
   for (const filePath of files) {
     const fileName = path.basename(filePath);
@@ -98,7 +97,7 @@ async function main(): Promise<void> {
         ? await evaluateMasker(fileName)
         : undefined;
 
-    const entry: SnapshotEntry = {
+    const entry: InventorySnapshotEntry = {
       ...curator,
       fileName,
       sourcePath: path.relative(process.cwd(), filePath),

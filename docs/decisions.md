@@ -114,7 +114,7 @@ Purpose Query (Strategist の知性)
 README.md
 LICENSE
 .gitignore
-Dockerfile
+next.config.ts
 .github/workflows/deploy.yml
 .github/workflows/eval.yml
 docs/architecture.md
@@ -133,7 +133,7 @@ src/
 
 **理由:** 顧客機密データを扱う前提のため。
 - Vertex AI = データを学習に使わない、リージョン固定 (asia-northeast1)、IAM権限制御
-- Genkit プラグイン: `@genkit-ai/googleai` → `@genkit-ai/vertexai` に変更
+- Genkit プラグイン: `@genkit-ai/googleai` → `@genkit-ai/google-genai` (Vertex AI 経由) に変更
 - ハッカソン提出時点では AI 呼び出しを Vertex AI API に統一する
 - READMEで「顧客機密データを扱う前提でVertex AI API採用」を明記 → 審査基準#2/#5 で得点
 
@@ -281,7 +281,7 @@ type MaskerOutput = {
 
 **残存リスク判定プロンプト (TODO: 仕上げ要):**
 
-`src/agents/masker.ts` 内で Vertex AI (Gemini 2.5 Pro) に投げる判定プロンプトの骨組み。
+`src/agents/masker/flow.ts` 内で Vertex AI (Gemini 2.5 Flash) に投げる判定プロンプトの骨組み。
 判定の中核ロジック (どういう条件で「再識別可能」と判定するか) は本作品の精度を直接決めるため、
 ここで明文化しておく。
 

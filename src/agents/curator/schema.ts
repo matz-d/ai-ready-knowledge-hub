@@ -64,10 +64,6 @@ export function expectedAiUsePolicy(sensitivity: Sensitivity): AiUsePolicy {
       return 'requires_masking';
     case 'Restricted':
       return 'blocked';
-    default: {
-      const _exhaustive: never = sensitivity;
-      return _exhaustive;
-    }
   }
 }
 

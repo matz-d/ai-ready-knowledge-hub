@@ -231,10 +231,9 @@ MVP評価対象:
 ├── README.md
 ├── LICENSE                          # Apache 2.0
 ├── .gitignore
-├── Dockerfile                       # Cloud Run用
 ├── package.json
 ├── tsconfig.json
-├── next.config.ts
+├── next.config.ts                  # Cloud Run 用 standalone 出力
 ├── .github/
 │   └── workflows/
 │       ├── deploy.yml               # Cloud Run デプロイ

@@ -1,23 +1,25 @@
-// `Sensitivity` の値域は正本である curator schema を参照する (R5 確定 enum)。
-// Strategist 出力の都合で AI-safe 変換注記など派生表現も許容するため `| string` を残す。
-import type { Sensitivity } from '../agents/curator/schema';
-export type { Sensitivity };
-
-export type ExportSourceType =
-  | 'Text'
-  | 'Markdown'
-  | 'CSV'
-  | 'PDF'
-  | 'Template'
-  | 'Checklist'
-  | 'Policy'
-  | 'Other';
+// 機密度・文書種別の値域は curator schema (R5 確定 enum) を直接参照する。
+// D-W1-Close 原則: UI 都合で英語の派生 enum を作らず、Strategist 側で揃える。
+import type {
+  DocumentType,
+  Sensitivity,
+} from '../agents/curator/schema';
 
 export type IncludedContextDocument = {
   fileName: string;
   reason: string;
-  sourceType: ExportSourceType | string;
-  sensitivity: Sensitivity | string;
+  /** Curator が判定した文書種別 (R5 enum)。 */
+  sourceType: DocumentType;
+  /**
+   * Curator が判定した機密度 (R5 enum)。Masker 由来の AI-safe 変換は
+   * `aiSafeViaMasking` で別途表現し、enum 値そのものは汚さない。
+   */
+  sensitivity: Sensitivity;
+  /**
+   * `true` なら Masker のマスキング後テキスト (`ai_safe_version`) を採用していること、
+   * すなわち原本ではなく AI-safe 版を Context Package に同梱していることを示す。
+   */
+  aiSafeViaMasking?: boolean;
   aiSafeContent: string;
 };
 
@@ -78,6 +80,12 @@ function numberedList(items: string[]): string {
   return items.map((item, index) => `${index + 1}. ${item}`).join('\n');
 }
 
+function sensitivityForDisplay(document: IncludedContextDocument): string {
+  return document.aiSafeViaMasking
+    ? `${document.sensitivity} (AI-safe via masking)`
+    : document.sensitivity;
+}
+
 function includedDocumentsMarkdown(documents: IncludedContextDocument[]): string {
   if (documents.length === 0) {
     return '- None';
@@ -88,7 +96,7 @@ function includedDocumentsMarkdown(documents: IncludedContextDocument[]): string
       (document) => `- ${document.fileName}
   - Reason: ${document.reason}
   - Source type: ${document.sourceType}
-  - Sensitivity: ${document.sensitivity}`
+  - Sensitivity: ${sensitivityForDisplay(document)}`
     )
     .join('\n');
 }

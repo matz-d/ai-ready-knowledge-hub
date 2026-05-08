@@ -61,7 +61,3 @@ export const inventoryDomains: BusinessDomain[] =
 /** ヒートマップ列順 */
 export const inventorySensitivityLevels: Sensitivity[] =
   SensitivityEnum.options.slice();
-
-/** R5 enum と UI ラベル定数の同期チェック (ビルド時に弾けるよう型のみで担保) */
-const _businessDomainGuard: BusinessDomain = BusinessDomainEnum.options[0];
-void _businessDomainGuard;

@@ -1,7 +1,8 @@
-// TODO(W3-strategist): sensitivity に 'Confidential -> AI-safe' などの
-// enum 外文字列が含まれている。Strategist agent 実装時に
-// src/agents/strategist/schema.ts を切り、専用 enum (例: AiSafetyTransform)
-// で表現し直す。現状は Strategist 未実装のため fixture として暫定許容。
+// Strategist 未実装のため fixture 経由で UI を回している。
+// 値域はすべて R5 確定 enum (curator/schema.ts) に揃える。
+// Masker のマスキング後テキストを採用していることは `aiSafeViaMasking` で表現する。
+// W3 で Strategist agent を実装する際は src/agents/strategist/schema.ts を切り、
+// この fixture を実出力で置き換える。
 import type { ContextPackageExportInput } from '../lib/exportContextPackage';
 
 export const payrollTrainingStrategistFixture: ContextPackageExportInput = {
@@ -12,7 +13,7 @@ export const payrollTrainingStrategistFixture: ContextPackageExportInput = {
     {
       fileName: '給与計算チェックリスト.md',
       reason: '現行版であり、月次給与計算の基本手順を含む',
-      sourceType: 'Checklist',
+      sourceType: 'チェックリスト',
       sensitivity: 'Internal',
       aiSafeContent:
         '勤怠データを確認する\n残業時間、欠勤、控除項目を確認する\n健康保険料・厚生年金保険料の標準報酬月額を確認する\n支給前に先輩確認が必要なケースを確認する',
@@ -20,7 +21,7 @@ export const payrollTrainingStrategistFixture: ContextPackageExportInput = {
     {
       fileName: '給与計算_例外対応メモ.txt',
       reason: '新人がつまずきやすい例外対応の論点を含む。最新値は人間確認が必要',
-      sourceType: 'Text',
+      sourceType: 'メモ',
       sensitivity: 'Internal',
       aiSafeContent:
         '月途中退職、遡及支給、産休・育休復帰、賞与の社会保険料などは例外対応として扱う。\n顧問先ごとの運用差分と最新料率は人間の確認対象にする。',
@@ -28,8 +29,9 @@ export const payrollTrainingStrategistFixture: ContextPackageExportInput = {
     {
       fileName: '顧客対応メモ_匿名化.txt',
       reason: '匿名化済みの相談例として、顧問先ごとの差分確認の流れを学習できる',
-      sourceType: 'Text',
-      sensitivity: 'Confidential -> AI-safe',
+      sourceType: 'メモ',
+      sensitivity: 'Confidential',
+      aiSafeViaMasking: true,
       aiSafeContent:
         '[Customer_001] の育児休業給付金申請で、必要書類と賃金算定の確認を行った。\n追加資料を依頼し、期限までに申請書類を完成させる。',
     },
