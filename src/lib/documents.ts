@@ -1,4 +1,6 @@
 import type { CuratorOutputResult } from '../agents/curator/schema';
+import type { MaskerSummary } from './uploadOrchestrator';
+import type { FirestoreDocumentStatus } from './firestoreSchema';
 
 export const DOCUMENTS_COLLECTION = 'documents';
 
@@ -6,11 +8,7 @@ export const MAX_UPLOAD_BYTES = 1 * 1024 * 1024;
 
 const ALLOWED_EXTENSIONS = ['.txt', '.md', '.csv'] as const;
 
-export type DocumentLifecycleStatus =
-  | 'uploaded'
-  | 'curating'
-  | 'curated'
-  | 'failed';
+export type DocumentLifecycleStatus = FirestoreDocumentStatus;
 
 /** HTTP / UI 向け。Firestore の Timestamp は含めない。 */
 export type SerializableCuratorBlock = {
@@ -25,14 +23,28 @@ export type SerializableCuratorBlock = {
   modelId: string;
 };
 
+export type SerializableMaskerBlock = {
+  decision: 'ai_safe_ready' | 'restricted_promoted';
+  provider: 'simple-rule';
+  maskedSpansCount: number;
+  ruleHits: Record<string, number>;
+  residualRisk: { detected: boolean; reasons: string[] };
+  rationale: string;
+  recommendedSensitivity: 'Confidential' | 'Restricted';
+  completedAt: string;
+  modelId: string;
+};
+
 export type DocumentUploadSuccessResponse = {
   docId: string;
   fileName: string;
   contentType: string;
   byteSize: number;
   storagePath: string;
-  status: 'curated';
+  aiSafeStoragePath?: string;
+  status: 'curated' | 'blocked' | 'ai_safe' | 'restricted';
   curator: SerializableCuratorBlock;
+  masker?: SerializableMaskerBlock;
 };
 
 export type DocumentUploadCuratorErrorResponse = {
@@ -96,5 +108,21 @@ export function toSerializableCurator(
     rationale: result.rationale,
     completedAt: completedAt.toISOString(),
     modelId,
+  };
+}
+
+export function toSerializableMasker(
+  summary: MaskerSummary
+): SerializableMaskerBlock {
+  return {
+    decision: summary.decision,
+    provider: summary.provider,
+    maskedSpansCount: summary.maskedSpansCount,
+    ruleHits: summary.ruleHits,
+    residualRisk: summary.residualRisk,
+    rationale: summary.rationale,
+    recommendedSensitivity: summary.recommendedSensitivity,
+    completedAt: summary.completedAt.toISOString(),
+    modelId: summary.modelId,
   };
 }

@@ -1,18 +1,27 @@
+/**
+ * `POST /api/documents` の責務は HTTP 境界に限定する。
+ *
+ * - multipart formData 解析、`file` フィールド検証
+ * - サイズ / 拡張子 / MIME / UTF-8 / バケット設定（`getKnowledgeHubBucketName()`）検証
+ * - `orchestrateUploadProcessing` への委譲（GCS / Firestore / Curator / Masker の副作用順序は
+ *   `src/lib/uploadOrchestrator.ts` 側の単一責務）
+ * - 成功・失敗レスポンスの整形（Curator/Masker 段の失敗は `docId` 付き 500、その他基盤は 502）
+ */
 import { NextResponse } from 'next/server';
-import { randomUUID } from 'node:crypto';
-import { curatorFlow } from '../../../agents/curator/flow';
 import { modelId } from '../../../agents/_shared/genkitClient';
-import { FieldValue, getFirestoreClient } from '../../../lib/firestore';
-import { deleteRawObject, uploadRawObject } from '../../../lib/storage';
 import {
-  DOCUMENTS_COLLECTION,
+  CuratorPhaseError,
+  MaskerPhaseError,
+  orchestrateUploadProcessing,
+} from '../../../lib/uploadOrchestrator';
+import { getKnowledgeHubBucketName } from '../../../lib/storage';
+import {
   MAX_UPLOAD_BYTES,
-  buildRawObjectPath,
   decodeUtf8Strict,
   getAllowedExtension,
   isAllowedMimeType,
-  sanitizeOriginalFileName,
   toSerializableCurator,
+  toSerializableMasker,
   type DocumentUploadSuccessResponse,
 } from '../../../lib/documents';
 
@@ -22,13 +31,8 @@ export const dynamic = 'force-dynamic';
 const CURATOR_FAILURE_CLIENT_MESSAGE =
   '分類処理に失敗しました。設定またはログを確認してください。';
 
-/** Firestore `curatorError.message` 用（詳細可）。 */
-function curatorErrorDetailForFirestore(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return `分類処理に失敗しました。${error.message}`;
-  }
-  return '分類処理に失敗しました。';
-}
+const MASKER_FAILURE_CLIENT_MESSAGE =
+  'マスク処理に失敗しました。設定またはログを確認してください。';
 
 function defaultContentTypeForExt(
   ext: string
@@ -107,127 +111,67 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!process.env.KNOWLEDGE_HUB_BUCKET?.trim()) {
+  try {
+    getKnowledgeHubBucketName();
+  } catch {
     return NextResponse.json(
       { error: 'サーバー設定 (KNOWLEDGE_HUB_BUCKET) が未完了です。' },
       { status: 503 }
     );
   }
 
-  const docId = randomUUID();
-  const safeOriginalFileName = sanitizeOriginalFileName(displayName);
-  const storagePath = buildRawObjectPath(docId, safeOriginalFileName);
-  const contentType = mime
-    ? mime
-    : defaultContentTypeForExt(extCheck);
+  const contentType = mime ? mime : defaultContentTypeForExt(extCheck);
 
   try {
-    await uploadRawObject(storagePath, buffer, contentType);
-  } catch (e) {
-    console.error('[documents] GCS upload failed', e);
-    return NextResponse.json(
-      { error: 'クラウドストレージへのアップロードに失敗しました。' },
-      { status: 502 }
-    );
-  }
-
-  const db = getFirestoreClient();
-  const docRef = db.collection(DOCUMENTS_COLLECTION).doc(docId);
-  const now = FieldValue.serverTimestamp();
-
-  try {
-    await docRef.set({
-      id: docId,
-      fileName: displayName,
+    const result = await orchestrateUploadProcessing({
+      displayName,
       contentType,
-      byteSize: buffer.length,
-      storagePath,
-      status: 'uploaded',
-      createdAt: now,
-      updatedAt: now,
-      curator: null,
-      curatorError: null,
-    });
-  } catch (e) {
-    console.error('[documents] Firestore create failed', e);
-    try {
-      await deleteRawObject(storagePath);
-    } catch (delErr) {
-      console.error('[documents] GCS rollback after Firestore create failed', delErr);
-    }
-    return NextResponse.json(
-      { error: 'メタデータの保存に失敗しました。' },
-      { status: 502 }
-    );
-  }
-
-  try {
-    await docRef.update({
-      status: 'curating',
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  } catch (e) {
-    console.error('[documents] Firestore curating update failed', e);
-    return NextResponse.json(
-      { error: 'メタデータの更新に失敗しました。', docId },
-      { status: 502 }
-    );
-  }
-
-  try {
-    const curatorResult = await curatorFlow({
-      fileName: displayName,
+      buffer,
       content,
-    });
-    const completedAt = new Date();
-    await docRef.update({
-      status: 'curated',
-      updatedAt: FieldValue.serverTimestamp(),
-      curator: {
-        documentType: curatorResult.documentType,
-        businessDomain: curatorResult.businessDomain,
-        sensitivity: curatorResult.sensitivity,
-        freshness: curatorResult.freshness,
-        isAuthoritativeCandidate: curatorResult.isAuthoritativeCandidate,
-        aiUsePolicy: curatorResult.aiUsePolicy,
-        rationale: curatorResult.rationale,
-        completedAt: FieldValue.serverTimestamp(),
-        modelId,
-      },
-      curatorError: null,
     });
 
     const body: DocumentUploadSuccessResponse = {
-      docId,
+      docId: result.docId,
       fileName: displayName,
       contentType,
       byteSize: buffer.length,
-      storagePath,
-      status: 'curated',
-      curator: toSerializableCurator(curatorResult, modelId, completedAt),
+      storagePath: result.storagePath,
+      status: result.kind,
+      curator: toSerializableCurator(
+        result.curator,
+        modelId,
+        result.curatorCompletedAt
+      ),
     };
+
+    if (result.kind === 'ai_safe') {
+      body.aiSafeStoragePath = result.aiSafeStoragePath;
+      body.masker = toSerializableMasker(result.masker);
+    } else if (result.kind === 'restricted') {
+      body.masker = toSerializableMasker(result.masker);
+    }
+
     return NextResponse.json(body);
   } catch (e) {
-    console.error('[documents] curatorFlow failed', e);
-    const detail = curatorErrorDetailForFirestore(e);
-    const truncated =
-      detail.length > 8000 ? `${detail.slice(0, 8000)}…` : detail;
-    try {
-      await docRef.update({
-        status: 'failed',
-        updatedAt: FieldValue.serverTimestamp(),
-        curator: null,
-        curatorError: {
-          message: truncated,
-          occurredAt: FieldValue.serverTimestamp(),
-        },
-      });
-    } catch (updateErr) {
-      console.error('[documents] failed status update', updateErr);
+    console.error('[documents] upload processing failed', e);
+
+    if (e instanceof CuratorPhaseError) {
+      return NextResponse.json(
+        { error: CURATOR_FAILURE_CLIENT_MESSAGE, docId: e.docId },
+        { status: 500 }
+      );
     }
+
+    if (e instanceof MaskerPhaseError) {
+      return NextResponse.json(
+        { error: MASKER_FAILURE_CLIENT_MESSAGE, docId: e.docId },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
-      { error: CURATOR_FAILURE_CLIENT_MESSAGE, docId },
-      { status: 500 }
+      { error: 'アップロード処理に失敗しました。' },
+      { status: 502 }
     );
   }
 }

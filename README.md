@@ -42,11 +42,11 @@ src/
     strategist/types.ts               # Strategist の型境界（LLM本体は未実装）
   lib/
     exportContextPackage.ts           # A9 Markdown export 純関数
-    storage.ts / firestore.ts / documents.ts
+    storage.ts / firestore.ts / documents.ts / uploadOrchestrator.ts
     inventory.ts / contextPackageInput.ts
   app/
-    api/curator/route.ts
-    api/documents/route.ts            # Upload → GCS → Firestore → Curator
+    api/curator/route.ts              # Curator 単体 eval/smoke（UI からは未使用）
+    api/documents/route.ts            # multipart 検証 → uploadOrchestrator
     upload/                           # 単票アップロード UI
     page.tsx                          # W1 snapshot 適用デモ + /upload CTA
 scripts/
@@ -74,8 +74,14 @@ sample-data/
 | `npm run context:demo` | W1 snapshot を適用し、Restricted 除外済み Context Package Markdown を出力 |
 | `npm run curator:ui` | Genkit dev UI で flow を観察 |
 
+### HTTP API（upload と Curator 単体）
+
+| エンドポイント | 用途 |
+|---|---|
+| `POST /api/documents` | `/upload` UI からの単票アップロード。検証後は `src/lib/uploadOrchestrator.ts` の `orchestrateUploadProcessing` に委譲し、GCS / Firestore / Curator / Masker の順序付き副作用はここに集約される。 |
+| `POST /api/curator` | **UI 非使用。** Curator 単体の curl / eval / smoke 専用。upload の本線は `/api/documents` のみ。 |
+
 ### 次にやること
-- Task1/2/3 の接続: `/api/documents` の Curator 後に Masker pipeline を呼び、`ai_safe_version` / Restricted 昇格を Firestore に反映する
 - Knowledge Inventory UI を実 Firestore 接続で実装
 - Purpose Query UI + Strategist / Interviewer flow を実装し、A9 export を実 Context Package に接続する
 - Cloud DLP を `SimpleMasker` provider 境界へ差し替える

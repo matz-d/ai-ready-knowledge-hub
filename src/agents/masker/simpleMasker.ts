@@ -16,6 +16,15 @@ type InternalSpan = {
   ruleId: string;
 };
 
+/**
+ * 複数ルールが同じ文字列区間に重なるとき、重ならない集合を選ぶ。
+ *
+ * 第 1 キーで `start` 昇順に並べ、左から貪欲に採用するため、走査順が安定する。
+ * 第 2 キー（同一 `start`）では `end` 降順＝span 長い順に並べる。同じ開始位置で
+ * 短い span が先だと長い span が後から弾かれ、内側だけマスクされて外側の機密が
+ * 残ることがある。長い span を先に採用すると、同一アンカーでより広いマスクを
+ * 優先でき、ルール競合時の取りこぼしを減らせる。
+ */
 function selectNonOverlapping(spans: InternalSpan[]): InternalSpan[] {
   const sorted = [...spans].sort((a, b) => {
     if (a.start !== b.start) return a.start - b.start;

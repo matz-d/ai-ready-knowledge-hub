@@ -1,6 +1,10 @@
 import { Storage } from '@google-cloud/storage';
 
-function requireBucketName(): string {
+/**
+ * KNOWLEDGE_HUB_BUCKET の集中アクセス点。route.ts / orchestrator / storage 内部の
+ * いずれもこの関数を経由する。.env.local.example を参照。
+ */
+export function getKnowledgeHubBucketName(): string {
   const name = process.env.KNOWLEDGE_HUB_BUCKET?.trim();
   if (!name) {
     throw new Error(
@@ -8,6 +12,10 @@ function requireBucketName(): string {
     );
   }
   return name;
+}
+
+function bucketFile(objectPath: string) {
+  return new Storage().bucket(getKnowledgeHubBucketName()).file(objectPath);
 }
 
 /**
@@ -18,10 +26,7 @@ export async function uploadRawObject(
   body: Buffer,
   contentType: string
 ): Promise<void> {
-  const storage = new Storage();
-  const bucket = storage.bucket(requireBucketName());
-  const file = bucket.file(objectPath);
-  await file.save(body, {
+  await bucketFile(objectPath).save(body, {
     contentType,
     resumable: false,
     metadata: { cacheControl: 'private, max-age=0' },
@@ -32,8 +37,46 @@ export async function uploadRawObject(
  * GCS 上のオブジェクトを削除する（ロールバック用）。
  */
 export async function deleteRawObject(objectPath: string): Promise<void> {
-  const storage = new Storage();
-  const bucket = storage.bucket(requireBucketName());
-  const file = bucket.file(objectPath);
-  await file.delete({ ignoreNotFound: true });
+  await bucketFile(objectPath).delete({ ignoreNotFound: true });
+}
+
+/** Masker pipeline が ai_safe_ready のときに呼ぶ。restricted_promoted では呼ばない。 */
+export type MaskedObjectMetadata = {
+  sourceContentHash: string;
+  aiSafeSchemaVersion: 1;
+  provider: string;
+};
+
+/**
+ * AI 参照版本文を `masked/{docId}/{safeOriginalFileName}` に保存する。
+ * GCS の object metadata (X-Goog-Meta-*) に `sourceContentHash` / `aiSafeSchemaVersion` /
+ * `provider` を入れ、再生成判定や integrity 検証の足場とする。
+ *
+ * GCS の `metadata.metadata` は string 値のみ受け付けるため、数値・リテラルは String() でシリアライズする。
+ */
+export async function uploadMaskedObject(
+  objectPath: string,
+  body: string | Buffer,
+  metadata: MaskedObjectMetadata
+): Promise<void> {
+  await bucketFile(objectPath).save(body, {
+    contentType: 'text/plain; charset=utf-8',
+    resumable: false,
+    metadata: {
+      cacheControl: 'private, max-age=0',
+      metadata: {
+        sourceContentHash: metadata.sourceContentHash,
+        aiSafeSchemaVersion: String(metadata.aiSafeSchemaVersion),
+        provider: metadata.provider,
+      },
+    },
+  });
+}
+
+/**
+ * Masker 失敗時に masked オブジェクトを消すための rollback。
+ * D-W2-Step2 の方針: orchestrator は masked 残置せず failed に倒す。
+ */
+export async function deleteMaskedObject(objectPath: string): Promise<void> {
+  await bucketFile(objectPath).delete({ ignoreNotFound: true });
 }

@@ -13,6 +13,7 @@ W2 MVP で `/upload` から始まる Walking Skeleton が書き込む Firestore 
 2. **maskedContent は GCS が正本**: Firestore document には保存せず、`masked/{docId}/{safeOriginalFileName}` のパスのみ持つ。Firestore document の 1 MiB 上限に張り付くリスクを避ける。
 3. **Masker 昇格は不可逆**: 一度 `sensitivitySource: 'masker'` になった document を Curator 値に戻す経路は持たない（A8 と整合）。
 4. **status='failed' は一本化**: Masker pipeline 失敗時も `status='failed'` に倒す。`curator` ブロックは成功記録として保持され、`maskerError` ブロックに失敗詳細が残る。UI 側で「Curator 成功・Masker 失敗」を組み立てる。
+5. **終端 status は扱い方を表す**: `curated` は Curator だけで AI 参照可、`blocked` は Curator 時点で AI 不可、`ai_safe` は Masker 後に AI 参照版あり、`restricted` は Masker 後に AI 不可へ昇格、を意味する。
 
 ---
 
@@ -33,9 +34,11 @@ export const FIRESTORE_DOCUMENT_SCHEMA_VERSION = 1 as const;
 export type FirestoreDocumentStatus =
   | 'uploaded'   // GCS 保存・Firestore set 直後
   | 'curating'   // Curator flow 実行中
-  | 'curated'    // Curator 成功・Masker 不要 (direct/blocked) の終端
   | 'masking'    // Curator 成功・Masker pipeline 実行中
-  | 'masked'     // Masker 完了 (ai_safe_ready / restricted_promoted) の終端
+  | 'curated'    // Curator 完了・AI 参照可 (direct) の終端
+  | 'blocked'    // Curator 完了・AI 参照不可 (blocked) の終端
+  | 'ai_safe'    // Masker 完了・AI 参照版あり (ai_safe_ready) の終端
+  | 'restricted' // Masker 完了・Restricted 昇格 (restricted_promoted) の終端
   | 'failed';    // どこかで失敗。詳細は curatorError / maskerError ブロック
 
 export type FirestoreDocument = {
@@ -107,29 +110,28 @@ export type FirestoreDocument = {
             │
             ▼
         curating ──── (curator 失敗) ────► failed
-            │
-            ▼
-         curated   ◄── 終端（aiUsePolicy が direct / blocked のとき）
-            │
-            │ aiUsePolicy === 'requires_masking'
-            ▼
-         masking  ──── (masker 失敗) ────► failed
-            │                              ※curator block は保持される
-            ▼
-         masked    ◄── 終端（ai_safe_ready / restricted_promoted いずれも masked）
+            ├──── aiUsePolicy === 'direct' ───────────────► curated
+            ├──── aiUsePolicy === 'blocked' ──────────────► blocked
+            └──── aiUsePolicy === 'requires_masking' ─────► masking
+                                                              │
+                                                              ├── (masker 失敗) ─► failed
+                                                              ├── ai_safe_ready ─► ai_safe
+                                                              └── restricted_promoted ─► restricted
 ```
 
-終端は 3 つ:
+終端は 5 つ:
 
-- `curated`: Curator が `aiUsePolicy === 'direct' | 'blocked'` を返し、Masker pipeline をスキップ
-- `masked`: Masker pipeline が完走（成果は `masker.decision` で判別）
+- `curated`: Curator が `aiUsePolicy === 'direct'` を返し、原文のまま AI 参照可
+- `blocked`: Curator が `aiUsePolicy === 'blocked'` を返し、Masker pipeline をスキップして AI 参照不可
+- `ai_safe`: Masker pipeline が `ai_safe_ready` を返し、GCS に AI 参照版がある
+- `restricted`: Masker pipeline が `restricted_promoted` を返し、AI 参照不可へ昇格
 - `failed`: Curator または Masker のいずれかが失敗（成功側のブロックは保持）
 
 ---
 
 ## 終端ごとの具体例
 
-### Case A: aiUsePolicy='direct' / 'blocked'（Masker skip → terminal: `curated`）
+### Case A: aiUsePolicy='direct'（Masker skip → terminal: `curated`）
 
 ```ts
 {
@@ -158,13 +160,31 @@ export type FirestoreDocument = {
 }
 ```
 
-### Case B: requires_masking → ai_safe_ready（terminal: `masked`）
+### Case B: aiUsePolicy='blocked'（Masker skip → terminal: `blocked`）
+
+```ts
+{
+  // ...
+  aiSafeStoragePath: null,
+  status: 'blocked',
+  sensitivity: 'Restricted',
+  aiUsePolicy: 'blocked',
+  sensitivitySource: 'curator',
+  originalCuratorSensitivity: null,
+  sensitivityReason: null,
+  curator: { sensitivity: 'Restricted', aiUsePolicy: 'blocked', /* ... */ },
+  masker: null,
+  maskerError: null,
+}
+```
+
+### Case C: requires_masking → ai_safe_ready（terminal: `ai_safe`）
 
 ```ts
 {
   // ...
   aiSafeStoragePath: 'masked/<uuid>/顧客対応メモ_匿名化.txt',
-  status: 'masked',
+  status: 'ai_safe',
   documentType: 'メモ',
   businessDomain: '顧客対応',
   sensitivity: 'Confidential',         // top は Confidential のまま
@@ -190,13 +210,13 @@ export type FirestoreDocument = {
 }
 ```
 
-### Case C: requires_masking → restricted_promoted（terminal: `masked`）
+### Case D: requires_masking → restricted_promoted（terminal: `restricted`）
 
 ```ts
 {
   // ...
   aiSafeStoragePath: null,             // 作らない
-  status: 'masked',
+  status: 'restricted',
   sensitivity: 'Restricted',           // top が Masker 値で上書き
   aiUsePolicy: 'blocked',
   sensitivitySource: 'masker',
@@ -213,7 +233,7 @@ export type FirestoreDocument = {
 }
 ```
 
-### Case D: Masker 実行中に失敗（terminal: `failed`）
+### Case E: Masker 実行中に失敗（terminal: `failed`）
 
 ```ts
 {
@@ -258,12 +278,14 @@ businessDomain ASC, documentType ASC                   # ヒートマップ
 
 実装側でアサート可能な制約:
 
-1. `aiSafeStoragePath !== null` ⇔ `status === 'masked'` かつ `masker?.decision === 'ai_safe_ready'`
-2. `sensitivitySource === 'masker'` ⇒ `originalCuratorSensitivity !== null` かつ `sensitivity === 'Restricted'` かつ `aiUsePolicy === 'blocked'`
+1. `aiSafeStoragePath !== null` ⇔ `status === 'ai_safe'` かつ `masker?.decision === 'ai_safe_ready'`
+2. `sensitivitySource === 'masker'` ⇒ `originalCuratorSensitivity !== null` かつ `sensitivity === 'Restricted'` かつ `aiUsePolicy === 'blocked'` かつ `status === 'restricted'`
 3. `originalCuratorSensitivity !== null` ⇒ `sensitivitySource === 'masker'`
 4. `masker !== null` ⇒ `curator !== null` かつ `curator.aiUsePolicy === 'requires_masking'`
 5. `masker.sourceContentHash === contentSha256`（同一原本由来であることの証跡）
-6. `status === 'curated'` の終端 ⇒ `curator.aiUsePolicy ∈ {'direct', 'blocked'}`（`'requires_masking'` なら本来 `masking` か `masked` か `failed` のいずれか）
+6. `status === 'curated'` ⇒ `curator.aiUsePolicy === 'direct'`
+7. `status === 'blocked'` ⇒ `curator.aiUsePolicy === 'blocked'`
+8. `status === 'restricted'` ⇒ `masker.decision === 'restricted_promoted'` かつ `sensitivitySource === 'masker'`
 
 これらは pure 関数で検証可能（`src/lib/firestoreSchema.ts` に invariant validator として置く想定）。
 

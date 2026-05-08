@@ -3,9 +3,9 @@ import { curatorFlow } from '../../../agents/curator/flow';
 import { CuratorInput } from '../../../agents/curator/schema';
 
 /**
- * W2 Walking Skeleton で `src/app/page.tsx` の Server Action から呼ぶ予定の
- * Curator Flow Route Handler。W1 時点ではまだ UI からの呼び出し経路が無いが、
- * Server Action 配線の seed として残している (D-W1-Close → W2 引き継ぎ)。
+ * Curator 単体を JSON で叩く eval / smoke / curl 用 Route Handler。
+ * `/upload` などの UI からは呼ばない。ファイルアップロードと基盤副作用の順序は
+ * `POST /api/documents` → `orchestrateUploadProcessing`（`src/lib/uploadOrchestrator.ts`）に集約する。
  */
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

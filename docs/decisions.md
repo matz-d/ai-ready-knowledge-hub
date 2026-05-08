@@ -600,7 +600,7 @@ sample-data/
 
 ## D-W2-Schema: Firestore document shape と lifecycle (2026-05-08)
 
-**決定**: `documents/{docId}` を「effective top-level + audit block 分離」型で定義し、status state machine は `uploaded → curating → curated | masking → masked | failed` の 6 状態とする。詳細は [docs/firestore-schema.md](firestore-schema.md) を正本とする。本決定は Step 2（`/api/documents` への Masker 接続）以降の前提となる設計境界。
+**決定**: `documents/{docId}` を「effective top-level + audit block 分離」型で定義し、status state machine は `uploaded → curating → curated | blocked | masking → ai_safe | restricted | failed` の 8 状態とする。詳細は [docs/firestore-schema.md](firestore-schema.md) を正本とする。本決定は Step 2（`/api/documents` への Masker 接続）以降の前提となる設計境界。
 
 **採用した設計:**
 - Effective fields (`sensitivity` / `aiUsePolicy` / `sensitivitySource` / `originalCuratorSensitivity` / `sensitivityReason`) は document の top-level に置き、Inventory クエリ (`where sensitivity == 'Restricted'`) を可能にする。
@@ -608,6 +608,7 @@ sample-data/
 - Masker の評価結果（生データ）は `masker: {...}` ブロックに集約する。`masker.maskedSpansCount` と `masker.ruleHits` は UI 集計表示用に block 内に置く。
 - マスク済み本文 (`maskedContent`) は **Firestore に直書きせず**、GCS `masked/{docId}/{safeOriginalFileName}` に保存する。Firestore document には `aiSafeStoragePath` パスのみ持つ。
 - 原本コンテンツの SHA-256 (`contentSha256`) は `uploaded` 時に書く。Masker 側の `sourceContentHash` と照合できる足場とする。
+- 終端 status は文書の扱い方を表す。`curated` は Curator だけで AI 参照可、`blocked` は Curator 時点で AI 参照不可、`ai_safe` は Masker 後に AI 参照版あり、`restricted` は Masker 後に AI 参照不可へ昇格。
 - Masker pipeline 失敗時は `status='failed'` 一本化。`curator` ブロックの成功記録は保持され、`maskerError` ブロックに失敗詳細を残す。UI 側で「Curator 成功・Masker 失敗」を組み立てる。
 - **Masker による Restricted 昇格は不可逆**。一度 `sensitivitySource: 'masker'` になった document を Curator 値に戻す経路は持たない（A8 と整合）。
 - Firestore document 自体に `schemaVersion: 1` を持たせる。マイグレーション時にインクリメント。
@@ -627,6 +628,34 @@ sample-data/
 **撤退条件:**
 - Firestore document が 1 MiB 上限に張り付くケースが MVP 範囲（最大 1 MB のテキスト原本 + Curator block + Masker block）で頻発した場合、`masker.ruleHits` を subcollection 化、または `masker` ブロックを別 document に分離する。
 - `status='failed'` 一本化が UI で「成功成分の表示」を作りづらくし、デモ表現を阻害する場合は `masking_failed` を後追いで追加する。
+
+---
+
+## D-W2-Step2: Upload Orchestrator と Masker 接続 (2026-05-08)
+
+**決定**: `POST /api/documents` に跨る GCS / Firestore / Curator / Masker の副作用順序を `src/lib/uploadOrchestrator.ts` に集約し、Route Handler は multipart 検証とレスポンス直列化に限定する。Walking Skeleton では疑似分散トランザクションは採用せず、明示的な rollback と `failed` 記録で整合する。
+
+**採用した設計:**
+- `/api/documents` から GCS / Firestore / Curator / Masker の順序制御を切り出し、`uploadOrchestrator` に一手にまとめる。
+- 処理順は **raw object upload → Firestore 初期書き込み (`status='uploaded'`) → `status='curating'` への更新 → Curator → 必要時のみ Masker** とする。
+- Masker が `ai_safe_ready` を返した場合は、**masked GCS object を先に作成**し、その後 Firestore を `ai_safe` に更新する。
+- masked object 作成後に Firestore 更新が失敗した場合は、**masked object を rollback delete** する。
+- Masker が `restricted_promoted` を返した場合は **masked object は作らず**、Firestore を `restricted` に更新する。
+- `POST /api/curator` は **UI の upload flow からは外し**、Curator 単体の curl / eval / smoke 用 route として残す。
+
+**やらない判断:**
+- GCS と Firestore をまたぐ疑似 Transaction 化はしない。
+- masked object を残置して後続 retry に回す設計は採用しない。
+- `/api/curator` は削除しない。評価・疎通確認用として残す。
+
+**理由:**
+- Route Handler を HTTP 境界に限定し、副作用順序と rollback 方針を一箇所で読めるようにするため。
+- Firestore が存在しない GCS path を指す瞬間を避けるため、`ai_safe_ready` では **GCS 先・Firestore 後** にする。
+- GCS / Firestore の完全な分散 transaction は過剰で、Walking Skeleton では rollback と `failed` status 記録で十分と判断する。
+
+**撤退条件:**
+- `uploadOrchestrator.ts` が肥大化し、Curator / Masker / rollback / Firestore shape の責務が読みにくくなったら、段ごとの service / helper に分割する。
+- retry 要件や監査要件が強くなり、masked object の一時残置・再試行キューが必要になったら設計を見直す。
 
 ---
 
