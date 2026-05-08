@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * Curator 分類スキーマ。
  *
- * R5 で確定した 6 項目 (`docs/open-questions.md` R5)。
+ * R5 で確定した 6 分類項目 + rationale (`docs/open-questions.md` R5)。
  * このファイルは PoC w1 から移植された「正本」であり、UI 表示・eval・移行スクリプト
  * すべてここを参照する。enum の表記揺れを増やしてはいけない。
  */

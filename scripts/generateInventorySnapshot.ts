@@ -3,14 +3,15 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { curatorFlow } from '../src/agents/curator/flow';
 import { maskerRiskFlow } from '../src/agents/masker/flow';
+import type { CuratorOutputResult } from '../src/agents/curator/schema';
 import type { ResidualRiskOutputResult } from '../src/agents/masker/schema';
-import type { InventorySnapshotEntry } from '../src/demo/inventory';
 
 /**
  * sample-data/accounting-office を curatorFlow に通し、
- * src/demo/inventory.snapshot.json として実 LLM 出力を保存する。
+ * docs/w1-artifacts/inventory.snapshot.json として W1 回顧用の実 LLM 出力を保存する。
  *
- * UI 側はこの snapshot を読むことで「見た目 = 実出力のフリーズ」を担保する。
+ * この snapshot は実アプリ UI からは読まない。W1 の判定結果を後から確認するための
+ * archived artifact として扱う。
  *
  * Masker A8 評価は、Curator が `requires_masking` を返した文書のうち、
  * sample-data/masked/ にマスク済みテキストが用意されているものだけ実行する。
@@ -25,8 +26,8 @@ const SAMPLE_DIR = path.resolve(
 const MASKED_DIR = path.resolve(process.cwd(), 'sample-data', 'masked');
 const OUTPUT_FILE = path.resolve(
   process.cwd(),
-  'src',
-  'demo',
+  'docs',
+  'w1-artifacts',
   'inventory.snapshot.json'
 );
 
@@ -41,11 +42,12 @@ const MASKED_PAIR: Record<string, string | undefined> = {
   '顧客対応メモ_匿名化.txt': 'masked-memo-safe.txt',
 };
 
-/**
- * Snapshot に書き出すエントリの型は src/demo/inventory.ts で定義された
- * `InventorySnapshotEntry` を正本として参照する。snapshot 生成側と読み出し側で
- * 型がズレないようにするのが狙い (D-W1-Close 原則)。
- */
+type InventorySnapshotEntry = CuratorOutputResult & {
+  fileName: string;
+  sourcePath: string;
+  maskerEvaluation?: ResidualRiskOutputResult;
+};
+
 async function listTargetFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   return entries

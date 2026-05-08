@@ -20,11 +20,11 @@
 
 ### 完了済み
 - ハッカソン要件の調査・整理 / 作品コンセプト・技術スタック・4エージェント構成・MVPスコープ確定
-- W1-1: Genkit + Vertex AI で Curator 6 項目 structured output が sample-data 10/10 件で Zod parse 通過
+- W1-1: Genkit + Vertex AI で Curator 6 分類項目 + rationale の structured output が sample-data 10/10 件で Zod parse 通過
 - W1-2: Masker A8 residualRisk 判定 (`Restricted` 格上げ / `Confidential` 維持) を structured JSON で実観測
 - W1-3: A9 Markdown export 純関数 (`src/lib/exportContextPackage.ts`)
 - W1-4: Next.js 最小アプリを Cloud Run (`ai-ready-knowledge-hub-w1`, `asia-northeast1`) にデプロイ済み (組織ポリシーで `allUsers` 不可、認証付きで HTTP 200)
-- **W1 統合 (5/8 PM)**: `poc/w1/` を削除し、Curator/Masker の schema・prompt・Genkit flow を `src/agents/{curator,masker,_shared}/` の正本へ昇格。`src/demo/inventory.ts` は `InventorySnapshotEntry = CuratorOutputResult + fileName + maskerEvaluation` 型として R5 確定 enum を直接参照 (`docs/decisions.md` D-W1-Close)。
+- **W1 統合 (5/8 PM)**: `poc/w1/` を削除し、Curator/Masker の schema・prompt・Genkit flow を `src/agents/{curator,masker,_shared}/` の正本へ昇格。固定デモ用 fixture は通常 UI から外し、W1 の実 LLM snapshot は `docs/w1-artifacts/` に回顧用 artifact として退避。
 - 詳細振り返り: [docs/week1-retrospective.md](docs/week1-retrospective.md)
 
 ### コードの位置 (W2 着手前)
@@ -35,14 +35,13 @@ src/
     _shared/genkitClient.ts
     curator/{schema,prompt,flow}.ts   # R5 確定 enum + 4段フォールバック
     masker/{schema,prompt,flow}.ts    # A8 residualRisk + 3段フォールバック
-  demo/
-    inventory.ts                      # Curator 出力スナップショット (snapshot 生成可能)
-    strategistFixture.ts              # Strategist 出力フィクスチャ
   lib/exportContextPackage.ts         # A9 Markdown export 純関数
-  app/page.tsx                        # 縦長デモページ (静的 snapshot を描画)
+  app/page.tsx                        # fixture なしの実データ接続待ち UI
 scripts/
   runCurator.ts / runCuratorAll.ts / runMaskerRisk.ts
-  generateInventorySnapshot.ts        # 実LLM出力で UI スナップショットを更新
+  generateInventorySnapshot.ts        # W1 回顧用 snapshot artifact を更新
+docs/
+  w1-artifacts/inventory.snapshot.json # W1 実 LLM 出力の退避先
 sample-data/
   accounting-office/                  # 原本 10 件
   masked/                             # Masker A8 評価のマスク済み入力 2 件
@@ -57,14 +56,14 @@ sample-data/
 | `npm run curator [path]` | Curator flow を 1 ファイルに対し実行 |
 | `npm run curator:all [dir]` | sample-data 全件で smoke 実行 |
 | `npm run masker:risk [path]` | A8 residualRisk 評価 |
-| `npm run inventory:snapshot` | 実 LLM 出力で `src/demo/inventory.snapshot.json` を再生成 |
+| `npm run inventory:snapshot` | 実 LLM 出力で `docs/w1-artifacts/inventory.snapshot.json` を再生成 |
 | `npm run curator:ui` | Genkit dev UI で flow を観察 |
 
 ### 次にやること (W2)
-- Walking Skeleton (Cloud Storage + Firestore + Upload UI + Server Action から Curator flow 呼び出し)
+- Walking Skeleton (Cloud Storage + Firestore + Upload UI + Curator Route Handler 接続)
 - Masker + Cloud DLP 統合
 - Strategist / Interviewer と A9 export の実 Context Package 接続
-- Knowledge Inventory UI を snapshot 経由から実 Firestore 接続へ切替
+- Knowledge Inventory UI を実 Firestore 接続で実装
 - Curator / Masker eval パイプライン (W6 マイルストーン)
 
 ---

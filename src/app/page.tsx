@@ -1,386 +1,183 @@
-import { exportContextPackageMarkdown } from '../lib/exportContextPackage';
-import {
-  accountingOfficeInventory,
-  effectiveSensitivity,
-  inventoryDomains,
-  inventorySensitivityLevels,
-  type InventorySnapshotEntry,
-} from '../demo/inventory';
-import { payrollTrainingStrategistFixture } from '../demo/strategistFixture';
-import type {
-  AiUsePolicy,
-  BusinessDomain,
-  Freshness,
-  Sensitivity,
-} from '../agents/curator/schema';
 import './styles.css';
 
-// W2 で Server Action から実データを引く前提。snapshot だけの今は no-op だが残す。
 export const dynamic = 'force-dynamic';
 
-const rawFileExamples = [
-  '顧問契約書_実案件サンプル.txt',
-  '給与計算チェックリスト.md',
-  '古い料金表_2023.csv',
-  '顧客対応メモ_匿名化.txt',
-  '就業規則テンプレート.md',
+const pipelineSteps = [
+  {
+    number: '01',
+    title: 'Collect',
+    body: '社内に散らばった PDF、CSV、メモ、テンプレートを目的ごとに集める。',
+  },
+  {
+    number: '02',
+    title: 'Classify',
+    body: 'Curator が文書種別、業務領域、機密度、鮮度、AI 利用方針を判定する。',
+  },
+  {
+    number: '03',
+    title: 'Mask',
+    body: 'Masker が個人情報や顧客情報の残存リスクを見て、必要なら人間確認へ回す。',
+  },
+  {
+    number: '04',
+    title: 'Package',
+    body: '目的に合う情報、除外情報、不足情報、確認質問を Context Package にまとめる。',
+  },
 ];
 
-/**
- * デモで強調表示する文書のファイル名。
- * R5 enum と独立した「ストーリーテリング都合の選択」なのでファイル名で指定する。
- */
-const highlightedFileNames = new Set<string>([
-  '給与計算チェックリスト.md',
-  '顧問契約書_実案件サンプル.txt',
-  '古い料金表_2023.csv',
-]);
+const implementationStatus = [
+  {
+    label: 'Curator flow',
+    status: 'available',
+    detail: 'Genkit + Vertex AI の structured output と Zod 検証を実装済み。',
+  },
+  {
+    label: 'Masker residual risk',
+    status: 'available',
+    detail: 'マスク後テキストの再識別リスク判定を flow として実装済み。',
+  },
+  {
+    label: 'Runtime API',
+    status: 'available',
+    detail: 'POST /api/curator で Curator flow を呼び出せる。',
+  },
+  {
+    label: 'Knowledge Inventory UI',
+    status: 'next',
+    detail: 'W2 で Cloud Storage / Firestore 接続後に実データ表示へ切り替える。',
+  },
+  {
+    label: 'Strategist',
+    status: 'next',
+    detail: '目的別の採用・除外・不足知識の判断は実 agent として実装する。',
+  },
+];
 
-function countByDomainAndSensitivity(
-  domain: BusinessDomain,
-  sensitivity: Sensitivity
-): number {
-  return accountingOfficeInventory.filter(
-    (entry) =>
-      entry.businessDomain === domain &&
-      effectiveSensitivity(entry) === sensitivity
-  ).length;
-}
-
-function heatClass(count: number): string {
-  if (count >= 3) return 'heat-cell heat-cell-high';
-  if (count === 2) return 'heat-cell heat-cell-mid';
-  if (count === 1) return 'heat-cell heat-cell-low';
-  return 'heat-cell';
-}
-
-const sensitivityLabels: Record<Sensitivity, string> = {
-  Public: '公開可',
-  Internal: '社内向け',
-  Confidential: '機密',
-  Restricted: '要制限',
-};
-
-function sensitivityLabel(sensitivity: Sensitivity): string {
-  return sensitivityLabels[sensitivity];
-}
-
-const freshnessLabels: Record<Freshness, string> = {
-  current: '現行',
-  superseded_candidate: '旧版候補',
-};
-
-function freshnessLabel(freshness: Freshness): string {
-  return freshnessLabels[freshness];
-}
-
-const aiPolicyLabels: Record<AiUsePolicy, string> = {
-  direct: 'そのままAI参照可',
-  requires_masking: 'マスク後にAI参照可',
-  blocked: 'AI参照不可',
-};
-
-function aiPolicyLabel(policy: AiUsePolicy): string {
-  return aiPolicyLabels[policy];
-}
+const curatorFields = [
+  'documentType',
+  'businessDomain',
+  'sensitivity',
+  'freshness',
+  'isAuthoritativeCandidate',
+  'aiUsePolicy',
+  'rationale',
+];
 
 export default function Home() {
-  const markdown = exportContextPackageMarkdown(
-    payrollTrainingStrategistFixture
-  );
-  const promotedDocuments = accountingOfficeInventory.filter(
-    (entry) => entry.maskerEvaluation?.recommendedSensitivity === 'Restricted'
-  );
-  const canonicalDocuments = accountingOfficeInventory.filter(
-    (entry) => entry.isAuthoritativeCandidate
-  ).length;
-  const highlightedDocuments = accountingOfficeInventory.filter((entry) =>
-    highlightedFileNames.has(entry.fileName)
-  );
-
   return (
     <main className="page-shell">
       <section className="hero">
         <div>
           <p className="eyebrow">AI-Ready Knowledge Hub</p>
-          <h1>散らばった社内文書を、AIに渡せる文脈へ。</h1>
+          <h1>社内文書を、AIに渡せる文脈へ整える。</h1>
           <p className="lead">
-            社内に散らばった文書を分類し、安全判定を加え、NotebookLM /
-            Gemini / RAG に渡せる Context Package へ整えます。
+            NotebookLM、Gemini、RAG の前段で、散らばった社内情報を分類し、
+            機密情報の扱いを判断し、目的別の Context Package に変換するための
+            SME 向けプラットフォームです。
           </p>
         </div>
-        <div className="status-panel" aria-label="デモの到達点">
-          <span>今回の対象</span>
-          <strong>社労士事務所の10文書</strong>
-          <small>給与計算AIに渡すべき情報を選別する</small>
+        <div className="status-panel" aria-label="実装ステータス">
+          <span>Current build</span>
+          <strong>実データ接続準備</strong>
+          <small>
+            W1 の固定デモ表示を外し、実データ接続へ進むための画面に整理済み。
+          </small>
         </div>
       </section>
 
-      <section className="flow-strip" aria-label="Demo flow">
-        <div>
-          <span>01</span>
-          散らばった社内文書
-        </div>
-        <div>
-          <span>02</span>
-          AIが分類・安全判定
-        </div>
-        <div>
-          <span>03</span>
-          使える情報 / 除外情報 / 足りない情報
-        </div>
-        <div>
-          <span>04</span>
-          Context Package 出力
-        </div>
+      <section className="flow-strip" aria-label="Context package pipeline">
+        {pipelineSteps.map((step) => (
+          <div key={step.number}>
+            <span>{step.number}</span>
+            <strong>{step.title}</strong>
+            <small>{step.body}</small>
+          </div>
+        ))}
       </section>
 
-      <section className="metric-grid" aria-label="Inventory metrics">
+      <section className="metric-grid" aria-label="Implementation metrics">
         <div className="metric-card">
-          <span>原本文書</span>
-          <strong>{accountingOfficeInventory.length}</strong>
-          <p>PDF、CSV、メモ、テンプレート相当の混在資料</p>
+          <span>implemented</span>
+          <strong>3</strong>
+          <p>Curator、Masker、Curator API の実行経路</p>
         </div>
         <div className="metric-card">
-          <span>正本候補</span>
-          <strong>{canonicalDocuments}</strong>
-          <p>Curator が公式・標準として参照しうると判定</p>
+          <span>schema fields</span>
+          <strong>{curatorFields.length}</strong>
+          <p>Curator が返す分類・安全判定フィールド</p>
+        </div>
+        <div className="metric-card">
+          <span>archived</span>
+          <strong>W1</strong>
+          <p>固定サンプル出力は docs/w1-artifacts に退避</p>
         </div>
         <div className="metric-card warning">
-          <span>Maskerが格上げ</span>
-          <strong>{promotedDocuments.length}</strong>
-          <p>マスク後も再識別リスクが残るため Restricted</p>
-        </div>
-        <div className="metric-card">
-          <span>目的別に採用</span>
-          <strong>
-            {payrollTrainingStrategistFixture.includedDocuments.length}
-          </strong>
-          <p>給与計算AI向けに Strategist が採用した文書</p>
+          <span>next</span>
+          <strong>W2</strong>
+          <p>Upload UI、Storage、Firestore、実 Inventory 表示</p>
         </div>
       </section>
 
-      <section className="chapter-block" aria-labelledby="scattered-heading">
-        <div className="chapter-kicker">1. Scattered files</div>
-        <div className="before-after-grid">
-          <div className="file-stack-panel">
-            <h2 id="scattered-heading">整理前: ファイル名だけでは判断できない</h2>
-            <div className="file-stack">
-              {rawFileExamples.map((fileName) => (
-                <div className="file-chip" key={fileName}>
-                  <span>{fileName.split('.').pop()}</span>
-                  {fileName}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="file-stack-panel after-panel">
-            <h2>整理後: 目的と安全性で意味づけされる</h2>
-            <div className="meaning-list">
-              <div>
-                <strong>使える</strong>
-                <span>給与計算チェックリスト、匿名化済み相談メモ</span>
-              </div>
-              <div>
-                <strong>除外する</strong>
-                <span>旧料金表、目的外の案内文</span>
-              </div>
-              <div>
-                <strong>人間確認</strong>
-                <span>実案件契約書、顧問先ごとの例外ルール</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="section-block" aria-labelledby="inventory-heading">
+      <section className="section-block" aria-labelledby="runtime-heading">
         <div className="section-heading">
           <div>
-            <p className="chapter-kicker">2. Structured Inventory</p>
-            <h2 id="inventory-heading">文書カード</h2>
+            <p className="chapter-kicker">Runtime Path</p>
+            <h2 id="runtime-heading">固定デモではなく、実行経路を中心にする</h2>
           </div>
           <p>
-            Curator (Genkit + Vertex AI) が R5 enum で出力した分類結果。
-            <code> npm run inventory:snapshot </code>
-            で実LLMの出力に上書きできます。
+            この画面は固定サンプル出力を読みません。現在は
+            実装済み flow と次に接続するデータ経路を見せるだけにしています。
           </p>
         </div>
 
-        <div className="document-card-grid">
-          {highlightedDocuments.map((entry) => (
-            <DocumentCard key={entry.fileName} entry={entry} />
+        <div className="status-grid">
+          {implementationStatus.map((item) => (
+            <article className="status-card" key={item.label}>
+              <div className="card-topline">
+                <span className={`state-pill state-${item.status}`}>
+                  {item.status}
+                </span>
+              </div>
+              <h3>{item.label}</h3>
+              <p>{item.detail}</p>
+            </article>
           ))}
         </div>
-
-        <div className="inventory-table-wrap">
-          <table className="inventory-table">
-            <thead>
-              <tr>
-                <th>文書</th>
-                <th>種別</th>
-                <th>業務領域</th>
-                <th>機密度</th>
-                <th>鮮度</th>
-                <th>正本候補</th>
-                <th>AI利用方針</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accountingOfficeInventory.map((entry) => {
-                const promoted =
-                  entry.maskerEvaluation?.recommendedSensitivity ===
-                  'Restricted';
-                const sensitivity = effectiveSensitivity(entry);
-                return (
-                  <tr
-                    key={entry.fileName}
-                    className={promoted ? 'promoted-row' : undefined}
-                  >
-                    <td>
-                      <strong>{entry.fileName}</strong>
-                      <span>{entry.rationale}</span>
-                    </td>
-                    <td>{entry.documentType}</td>
-                    <td>{entry.businessDomain}</td>
-                    <td>
-                      <span
-                        className={`badge sensitivity-${sensitivity.toLowerCase()}`}
-                      >
-                        {sensitivityLabel(sensitivity)}
-                      </span>
-                    </td>
-                    <td>{freshnessLabel(entry.freshness)}</td>
-                    <td>{entry.isAuthoritativeCandidate ? '候補' : '-'}</td>
-                    <td>
-                      <span className="policy-text">
-                        {aiPolicyLabel(entry.aiUsePolicy)}
-                      </span>
-                      {promoted ? (
-                        <span className="promotion-note">Maskerが格上げ</span>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
       </section>
 
-      <section className="insight-grid" aria-label="Inventory insights">
-        <div className="summary-panel heatmap-panel">
-          <div className="chapter-kicker">3. Safety decision</div>
-          <h2>機密度の分布</h2>
-          <div className="heatmap">
-            <div className="heat-corner" />
-            {inventorySensitivityLevels.map((sensitivity) => (
-              <div className="heat-label" key={sensitivity}>
-                {sensitivityLabel(sensitivity)}
-              </div>
-            ))}
-            {inventoryDomains.map((domain) => (
-              <div className="heat-row" key={domain}>
-                <div className="heat-domain">{domain}</div>
-                {inventorySensitivityLevels.map((sensitivity) => {
-                  const count = countByDomainAndSensitivity(
-                    domain,
-                    sensitivity
-                  );
-                  return (
-                    <div className={heatClass(count)} key={sensitivity}>
-                      {count}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-
+      <section className="preview-grid" aria-label="Developer handoff">
         <div className="summary-panel">
-          <div className="chapter-kicker">A8 residual risk</div>
-          <h2>マスクしても渡せない情報</h2>
-          {promotedDocuments.length === 0 ? (
-            <p>このスナップショットでは Masker による格上げはありません。</p>
-          ) : (
-            promotedDocuments.map((entry) => (
-              <div className="risk-callout" key={entry.fileName}>
-                <span>Maskerが格上げ</span>
-                <strong>{entry.fileName}</strong>
-                <p>{entry.maskerEvaluation?.rationale}</p>
-                <small>
-                  {sensitivityLabel(entry.sensitivity)} {'->'}{' '}
-                  {sensitivityLabel('Restricted')}
-                </small>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="preview-grid" aria-label="Export preview">
-        <div className="summary-panel">
-          <div className="chapter-kicker">4. Purpose Package</div>
-          <h2>目的別パッケージ</h2>
+          <div className="chapter-kicker">API Seed</div>
+          <h2>Curator request</h2>
           <dl>
             <div>
-              <dt>目的</dt>
-              <dd>{payrollTrainingStrategistFixture.purpose}</dd>
+              <dt>Endpoint</dt>
+              <dd>POST /api/curator</dd>
             </div>
             <div>
-              <dt>確認した文書</dt>
-              <dd>{payrollTrainingStrategistFixture.sourceDocumentsReviewed}</dd>
+              <dt>Runtime</dt>
+              <dd>Node.js on Next.js Route Handler</dd>
             </div>
             <div>
-              <dt>使える情報</dt>
-              <dd>{payrollTrainingStrategistFixture.includedDocuments.length}</dd>
+              <dt>Input</dt>
+              <dd>fileName と content</dd>
             </div>
             <div>
-              <dt>除外情報</dt>
-              <dd>{payrollTrainingStrategistFixture.excludedDocuments.length}</dd>
-            </div>
-            <div>
-              <dt>人間確認</dt>
-              <dd>
-                {payrollTrainingStrategistFixture.humanReviewDocuments?.length ??
-                  0}
-              </dd>
+              <dt>Output</dt>
+              <dd>Curator schema の structured JSON</dd>
             </div>
           </dl>
         </div>
 
         <div className="markdown-panel">
-          <h2>Context Package Markdown</h2>
-          <pre>{markdown}</pre>
+          <h2>Curator output fields</h2>
+          <div className="field-list">
+            {curatorFields.map((field) => (
+              <code key={field}>{field}</code>
+            ))}
+          </div>
         </div>
       </section>
     </main>
-  );
-}
-
-function DocumentCard({ entry }: { entry: InventorySnapshotEntry }) {
-  const promoted =
-    entry.maskerEvaluation?.recommendedSensitivity === 'Restricted';
-  const sensitivity = effectiveSensitivity(entry);
-  return (
-    <article className={`document-card ${promoted ? 'danger-card' : ''}`}>
-      <div className="card-topline">
-        <span>{entry.documentType}</span>
-        <span>{entry.businessDomain}</span>
-      </div>
-      <h3>{entry.fileName}</h3>
-      <p>{entry.rationale}</p>
-      <div className="card-badges">
-        <span
-          className={`badge sensitivity-${sensitivity.toLowerCase()}`}
-        >
-          {sensitivityLabel(sensitivity)}
-        </span>
-        <span className="plain-badge">{freshnessLabel(entry.freshness)}</span>
-        <span className="plain-badge">{aiPolicyLabel(entry.aiUsePolicy)}</span>
-      </div>
-    </article>
   );
 }
