@@ -13,37 +13,27 @@
 - SMEの「うちの情報、こんなに偏ってたんだ」体験が一番出る
 - x軸/y軸ラベルがそのままCurator分類体系になる
 
-**次のアクション:** Curator分類体系 (R5) の enum を確定。
+**次のアクション:** Week 6 eval 用に `eval/expected-labels.json` を作成し、分類品質の期待値を固定する。
 
 ---
 
 ## R5: Curator 分類体系の最終確定
 
-**仮置き**: 以下の6項目
-- 文書種別 (契約書、テンプレ、案内文、メモ、表 etc)
-- 業務領域 (給与計算、年末調整、就業規則、契約 etc)
-- 機密度 (Public / Internal / Confidential / Restricted)
-- 鮮度 (現行 / 旧版候補)
-- 正本候補 (重複候補のフラグ)
-- AI参照可否 (機密度から自動派生)
+**決定**: W1-1 PoC では以下の6項目で確定。
+- 文書種別: 契約書 / テンプレート / 案内文 / メモ / チェックリスト / 表 / 規程 / その他
+- 業務領域: 顧問契約管理 / 給与計算 / 年末調整 / 就業規則 / 助成金相談 / 顧客対応 / 法改正対応 / 社内手順 / 教育・研修 / 料金管理 / その他
+- 機密度: Public / Internal / Confidential / Restricted
+- 鮮度: current / superseded_candidate
+- 正本候補: boolean (`isAuthoritativeCandidate`)
+- AI利用方針: direct / requires_masking / blocked
 
-**未確定の理由:**
-- 各カテゴリの enum 値の最終リストが未定
-- Inventoryヒートマップに表示する単位として、業務領域と文書種別の粒度を決める必要がある
+**補足:**
+- AI利用方針は機密度から派生し、Zod refine で整合性を検証する。
+- Public/Internal → `direct`
+- Confidential → `requires_masking`
+- Restricted → `blocked`
 
-**例: 業務領域の enum 候補 (初期デモ向け)**
-- 顧問契約管理
-- 給与計算
-- 年末調整
-- 就業規則
-- 助成金相談
-- 顧客対応
-- 法改正対応
-- 社内手順
-- 教育・研修
-- その他
-
-**次のアクション:** enum を確定。
+**次のアクション:** Week 6 eval 用に `eval/expected-labels.json` を作成し、分類品質の期待値を固定する。
 
 ---
 
@@ -65,10 +55,10 @@
 
 | # | 検証項目 | 成果物 |
 |---|---|---|
-| W1-1 | Genkit + Vertex AI で structured output が返る | Genkit flow が JSON schema 準拠の出力を返すミニ実装 |
-| W1-2 | A8 residualRisk 判定が動く | mock maskedContent を入力に、Vertex AI が `{detected, recommendedSensitivity, reason}` JSON を返す |
-| W1-3 | A9 Markdown export が動く | mock Context Package を入力に、`exportContextPackage.ts` が Package Manifest + Instructions + AI-Ready Sources の Markdown を生成 |
-| W1-4 | Next.js 最小アプリが Cloud Run にデプロイできる | "Hello" レベルの Next.js が Cloud Run URL でアクセス可能 |
+| W1-1 | Genkit + Vertex AI で structured output が返る | 完了: `poc/w1` の Curator flow で sample-data 10/10 Zod parse 通過 |
+| W1-2 | A8 residualRisk 判定が動く | 完了: `maskerRiskFlow` が `Restricted` 格上げ / `Confidential` 維持を structured JSON で返す |
+| W1-3 | A9 Markdown export が動く | 完了: mock Context Package を入力に、`src/lib/exportContextPackage.ts` が Package Manifest + Instructions + AI-Ready Sources の Markdown を生成 |
+| W1-4 | Next.js 最小アプリが Cloud Run にデプロイできる | 完了: `ai-ready-knowledge-hub-w1` を `asia-northeast1` にデプロイし、認証付きHTTP 200を確認 |
 
 **Week 1 で意図的にやらないこと:**
 - Cloud Storage バケット作成・接続

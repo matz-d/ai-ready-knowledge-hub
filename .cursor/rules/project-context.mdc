@@ -1,0 +1,10 @@
+---
+description: Canonical product context — CLAUDE.md is single source of truth
+alwaysApply: true
+---
+
+# Project context
+
+Authoritative product purpose, scope, and one-liner live **only** in repository root [`CLAUDE.md`](CLAUDE.md). Follow it for prioritization, terminology, and what this product is.
+
+Skills under [`.claude/skills/`](.claude/skills/) add platform and procedural guidance. They must **not** contradict `CLAUDE.md` on product intent. When in doubt on *what we build*, use `CLAUDE.md`; on *how to call an API or deploy*, use the relevant skill.

@@ -3,3 +3,9 @@
 .env.*
 !.env.example
 *.log
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo

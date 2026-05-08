@@ -22,6 +22,9 @@
 **撤退条件 (保険プラン):**
 Genkit初期PoC (構造化出力 + Cloud Runデプロイ + 簡易eval) が **数日で通らない場合**、Gemini API直ではなく (b) Vertex AI API hand-roll に切替。
 
+**W1-1 検証結果 (2026-05-08):**
+`poc/w1` で Genkit + Vertex AI + Gemini 2.5 Flash + Zod structured output を実装し、`sample-data/accounting-office` 10件すべてで Zod parse 通過を確認。D1 は継続採用で進める。
+
 **やらない判断:**
 ADKは本採用しない。ただしREADMEで「将来拡張として ADK / Agent Engine に載せ替え可能な構成」と言及してよい。
 

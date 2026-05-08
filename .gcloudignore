@@ -1,0 +1,14 @@
+.git
+.gitignore
+.gcloudignore
+.DS_Store
+.env
+.env.*
+node_modules/
+.next/
+out/
+dist/
+coverage/
+poc/w1/node_modules/
+poc/w1/.env.local
+poc/w1/.genkit/
