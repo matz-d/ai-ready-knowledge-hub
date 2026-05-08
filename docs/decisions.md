@@ -549,9 +549,91 @@ sample-data/
 
 ---
 
+## D-W2-Task1: Upload Walking Skeleton は GCS + Firestore 直結で作る (2026-05-08)
+
+**決定**: `/upload` の単票アップロード UI と `POST /api/documents` を追加し、Next.js Route Handler が multipart file を受けて、Cloud Storage 保存、Firestore metadata 作成、`curatorFlow` 実行、Firestore 更新、結果返却までを 1 リクエストで行う。
+
+**採用した設計:**
+- Storage backend は GCS + Firestore 直結のみ。ローカル fallback は作らない。
+- Upload 方式は server passthrough。Signed URL は MVP では採用しない。
+- GCS object path は `raw/{docId}/{safeOriginalFileName}`。
+- Firestore metadata は `documents/{docId}`。
+- 既存 `POST /api/curator` は classify-only seed として温存し、新 route は `curatorFlow` を直接呼ぶ。
+- 対象ファイルは `.txt` / `.md` / `.csv`、最大 1MB、UTF-8。
+
+**検証結果:**
+実 GCP 接続で `/upload` 表示、`POST /api/documents` `HTTP 200`、GCS object 作成、Firestore `status='curated'` と Curator 結果保存を確認済み。異常系 `400` / `415` / `413` も確認済み。
+
+---
+
+## D-W2-Task2: MVP Masker は SimpleMasker + residual risk pipeline で通す (2026-05-08)
+
+**決定**: Cloud DLP 本格統合の前に、決定的な `SimpleMasker` で原本をマスクし、既存 `maskerRiskFlow` に渡す `maskerPipelineFlow` を実装する。pipeline は `aiUsePolicy === 'requires_masking'` の文書だけを受け付ける。
+
+**採用した設計:**
+- 既存 `src/agents/masker/{flow,schema,prompt}.ts` は変更しない。
+- `SimpleMasker` は email / phone / postal / 12桁番号 / bank account / amount / label-based name/company hints を対象にする。
+- 出力 decision は `ai_safe_ready` と `restricted_promoted` の 2 値。
+- `restricted_promoted` の場合は `aiSafeVersion: null` とし、`curatorFeedback` に `Restricted` / `blocked` を返す。
+- Firestore / API / UI への接続は後続に回す。
+
+**検証結果:**
+実 Vertex 接続で `npm run masker:risk` と `npm run masker:pipeline` を確認済み。契約書実案件サンプルは `restricted_promoted`、顧客対応メモは `ai_safe_ready` になった。
+
+---
+
+## D-W2-Task3: Restricted 昇格は実効 `sensitivity` に反映し、Package 入力で除外する (2026-05-08)
+
+**決定**: Masker が `recommendedSensitivity === 'Restricted'` を返した場合、文書 metadata の実効値として `sensitivity: 'Restricted'` / `aiUsePolicy: 'blocked'` を使う。由来は `sensitivitySource: 'masker'`、`originalCuratorSensitivity`、`sensitivityReason` に残し、`restrictedByMasker` のような重複 boolean は作らない。
+
+**採用した設計:**
+- Restricted 昇格ルールは `src/agents/masker/upgrade.ts` の pure function に置く。
+- W1 snapshot JSON は変更せず、`src/lib/inventory.ts` の adapter で読み取り時に `InventoryDocument` へ変換する。
+- Context Package へ渡す直前に `src/lib/contextPackageInput.ts` で Restricted / blocked / 未マスク機密を除外または human review に回す。
+- `exportContextPackageMarkdown()` 本体は変更しない。
+- Strategist は型境界だけ先に置き、LLM 実装は後続に回す。
+
+**検証結果:**
+`npm run context:demo` で `included=8` / `humanReview=2` を確認。Restricted 昇格された顧問契約書実案件の本文は `Full AI-Ready Sources` に含まれない。
+
+---
+
+## D-W2-Schema: Firestore document shape と lifecycle (2026-05-08)
+
+**決定**: `documents/{docId}` を「effective top-level + audit block 分離」型で定義し、status state machine は `uploaded → curating → curated | masking → masked | failed` の 6 状態とする。詳細は [docs/firestore-schema.md](firestore-schema.md) を正本とする。本決定は Step 2（`/api/documents` への Masker 接続）以降の前提となる設計境界。
+
+**採用した設計:**
+- Effective fields (`sensitivity` / `aiUsePolicy` / `sensitivitySource` / `originalCuratorSensitivity` / `sensitivityReason`) は document の top-level に置き、Inventory クエリ (`where sensitivity == 'Restricted'`) を可能にする。
+- Curator が出した生の判定値は `curator: {...}` ブロックに不変記録として保持する。Masker 昇格があっても `curator.sensitivity` は書き換えない。
+- Masker の評価結果（生データ）は `masker: {...}` ブロックに集約する。`masker.maskedSpansCount` と `masker.ruleHits` は UI 集計表示用に block 内に置く。
+- マスク済み本文 (`maskedContent`) は **Firestore に直書きせず**、GCS `masked/{docId}/{safeOriginalFileName}` に保存する。Firestore document には `aiSafeStoragePath` パスのみ持つ。
+- 原本コンテンツの SHA-256 (`contentSha256`) は `uploaded` 時に書く。Masker 側の `sourceContentHash` と照合できる足場とする。
+- Masker pipeline 失敗時は `status='failed'` 一本化。`curator` ブロックの成功記録は保持され、`maskerError` ブロックに失敗詳細を残す。UI 側で「Curator 成功・Masker 失敗」を組み立てる。
+- **Masker による Restricted 昇格は不可逆**。一度 `sensitivitySource: 'masker'` になった document を Curator 値に戻す経路は持たない（A8 と整合）。
+- Firestore document 自体に `schemaVersion: 1` を持たせる。マイグレーション時にインクリメント。
+
+**やらない判断:**
+- `maskedSpans` の詳細位置を Firestore に書かない（件数集計のみ）。詳細は GCS masked オブジェクト側に置くか、必要になったら subcollection 化する。
+- `ai_safe_ready` 時の冗長キャッシュ（GCS と Firestore 両方持つ）はやらない。GCS が正本。
+- Masker の `recommendedSensitivity` を Curator が拒否する逆権限は持たせない（A8 を継承）。
+- `masking_failed` のような中間 status は導入しない。`failed` 一本化で UI 側に組み立て責任を寄せる。
+
+**この決定が解消する論点（W2 レビュー指摘との対応）:**
+- 3.c (Firestore Masker shape 未定義)
+- 3.e (sensitivitySource 一方通行の規約明示)
+- 1.f (重複検出の足場確保)
+- 4.a (Inventory adapter の正本型固定で重複防止)
+
+**撤退条件:**
+- Firestore document が 1 MiB 上限に張り付くケースが MVP 範囲（最大 1 MB のテキスト原本 + Curator block + Masker block）で頻発した場合、`masker.ruleHits` を subcollection 化、または `masker` ブロックを別 document に分離する。
+- `status='failed'` 一本化が UI で「成功成分の表示」を作りづらくし、デモ表現を阻害する場合は `masking_failed` を後追いで追加する。
+
+---
+
 ## 関連ドキュメント
 
 - [docs/concept.md](concept.md) — プロダクトコンセプト
 - [docs/architecture.md](architecture.md) — 技術構成
+- [docs/firestore-schema.md](firestore-schema.md) — Firestore document shape の正本
 - [docs/open-questions.md](open-questions.md) — 未決定事項
 - [docs/week1-retrospective.md](week1-retrospective.md) — W1 振り返り

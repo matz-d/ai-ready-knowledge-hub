@@ -16,7 +16,7 @@
 
 ## 現在のステータス (2026-05-08)
 
-**フェーズ**: Week 1 クローズ。MVP に進行中 (Walking Skeleton 着手前)。
+**フェーズ**: W2 Walking Skeleton 初期縦串完了。MVP に進行中。
 
 ### 完了済み
 - ハッカソン要件の調査・整理 / 作品コンセプト・技術スタック・4エージェント構成・MVPスコープ確定
@@ -25,9 +25,12 @@
 - W1-3: A9 Markdown export 純関数 (`src/lib/exportContextPackage.ts`)
 - W1-4: Next.js 最小アプリを Cloud Run (`ai-ready-knowledge-hub-w1`, `asia-northeast1`) にデプロイ済み (組織ポリシーで `allUsers` 不可、認証付きで HTTP 200)
 - **W1 統合 (5/8 PM)**: `poc/w1/` を削除し、Curator/Masker の schema・prompt・Genkit flow を `src/agents/{curator,masker,_shared}/` の正本へ昇格。固定デモ用 fixture は通常 UI から外し、W1 の実 LLM snapshot は `docs/w1-artifacts/` に回顧用 artifact として退避。
+- **Task1 (W2 Walking Skeleton)**: `/upload` → `POST /api/documents` → Cloud Storage (`raw/{docId}/{safeOriginalFileName}`) → Firestore (`documents/{docId}`) → `curatorFlow` → 単票結果表示まで実装。実 GCP 接続で `HTTP 200`、GCS object、Firestore `status=curated` を確認済み。
+- **Task2 (Masker Pipeline MVP)**: `SimpleMasker` → 既存 `maskerRiskFlow` → `ai_safe_ready` / `restricted_promoted` の pipeline と CLI (`npm run masker:pipeline`) を実装。実 Vertex 接続で契約書サンプルは `restricted_promoted`、顧客対応メモは `ai_safe_ready` を確認済み。
+- **Task3 (Restricted 除外の受け皿)**: `applyMaskerUpgrade`、W1 snapshot adapter、Context Package input builder、`context:demo` を実装。Restricted 文書は `Full AI-Ready Sources` から除外され、human review として出力されることを確認済み。
 - 詳細振り返り: [docs/week1-retrospective.md](docs/week1-retrospective.md)
 
-### コードの位置 (W2 着手前)
+### コードの位置 (Task1/2/3 完了時点)
 
 ```
 src/
@@ -35,10 +38,20 @@ src/
     _shared/genkitClient.ts
     curator/{schema,prompt,flow}.ts   # R5 確定 enum + 4段フォールバック
     masker/{schema,prompt,flow}.ts    # A8 residualRisk + 3段フォールバック
-  lib/exportContextPackage.ts         # A9 Markdown export 純関数
-  app/page.tsx                        # fixture なしの実データ接続待ち UI
+    masker/{maskingSchema,simpleMasker,pipelineSchema,pipelineFlow,upgrade}.ts
+    strategist/types.ts               # Strategist の型境界（LLM本体は未実装）
+  lib/
+    exportContextPackage.ts           # A9 Markdown export 純関数
+    storage.ts / firestore.ts / documents.ts
+    inventory.ts / contextPackageInput.ts
+  app/
+    api/curator/route.ts
+    api/documents/route.ts            # Upload → GCS → Firestore → Curator
+    upload/                           # 単票アップロード UI
+    page.tsx                          # W1 snapshot 適用デモ + /upload CTA
 scripts/
   runCurator.ts / runCuratorAll.ts / runMaskerRisk.ts
+  runMaskerPipeline.ts / runContextPackageDemo.ts
   generateInventorySnapshot.ts        # W1 回顧用 snapshot artifact を更新
 docs/
   w1-artifacts/inventory.snapshot.json # W1 実 LLM 出力の退避先
@@ -56,14 +69,16 @@ sample-data/
 | `npm run curator [path]` | Curator flow を 1 ファイルに対し実行 |
 | `npm run curator:all [dir]` | sample-data 全件で smoke 実行 |
 | `npm run masker:risk [path]` | A8 residualRisk 評価 |
+| `npm run masker:pipeline [path]` | 原本 → SimpleMasker → A8 residualRisk → `ai_safe_ready` / `restricted_promoted` |
 | `npm run inventory:snapshot` | 実 LLM 出力で `docs/w1-artifacts/inventory.snapshot.json` を再生成 |
+| `npm run context:demo` | W1 snapshot を適用し、Restricted 除外済み Context Package Markdown を出力 |
 | `npm run curator:ui` | Genkit dev UI で flow を観察 |
 
-### 次にやること (W2)
-- Walking Skeleton (Cloud Storage + Firestore + Upload UI + Curator Route Handler 接続)
-- Masker + Cloud DLP 統合
-- Strategist / Interviewer と A9 export の実 Context Package 接続
+### 次にやること
+- Task1/2/3 の接続: `/api/documents` の Curator 後に Masker pipeline を呼び、`ai_safe_version` / Restricted 昇格を Firestore に反映する
 - Knowledge Inventory UI を実 Firestore 接続で実装
+- Purpose Query UI + Strategist / Interviewer flow を実装し、A9 export を実 Context Package に接続する
+- Cloud DLP を `SimpleMasker` provider 境界へ差し替える
 - Curator / Masker eval パイプライン (W6 マイルストーン)
 
 ---
@@ -87,10 +102,10 @@ sample-data/
 ## 次に再開するとき、最初に読むべきもの
 
 1. このREADMEの「現在のステータス」
-2. [docs/open-questions.md](docs/open-questions.md) — Week 1到達点と次の論点
+2. [docs/architecture.md](docs/architecture.md) — Task1/2/3 後の実装状態とデータフロー
 3. [docs/decisions.md](docs/decisions.md) — 何を決めたか、なぜか
 
-その後、実装再開なら [docs/architecture.md](docs/architecture.md) と [docs/tech-stack.md](docs/tech-stack.md)。
+その後、実装再開なら [docs/open-questions.md](docs/open-questions.md) と [docs/tech-stack.md](docs/tech-stack.md)。
 
 ---
 

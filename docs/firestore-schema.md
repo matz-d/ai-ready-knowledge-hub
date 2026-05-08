@@ -1,0 +1,275 @@
+# Firestore document schema (`documents/{docId}`)
+
+W2 MVP で `/upload` から始まる Walking Skeleton が書き込む Firestore document の正本仕様。
+本ファイルは `src/lib/firestoreSchema.ts`（実 TS 型）と一対一で対応させる。スキーマを変更したら必ず両方を同時に更新する。
+
+関連: [docs/architecture.md](architecture.md) / [docs/decisions.md](decisions.md) (D-W2-Schema)
+
+---
+
+## 設計原則
+
+1. **effective top + audit block 分離**: 「現在 AI に渡してよいか」の判断材料は document トップレベルに置き、Curator / Masker の生データは `curator` / `masker` ブロックに不変記録として保持する。Inventory クエリ (`where sensitivity == 'Restricted'`) と監査トレース (「Curator が当初どう判定したか」) の責務を分離する。
+2. **maskedContent は GCS が正本**: Firestore document には保存せず、`masked/{docId}/{safeOriginalFileName}` のパスのみ持つ。Firestore document の 1 MiB 上限に張り付くリスクを避ける。
+3. **Masker 昇格は不可逆**: 一度 `sensitivitySource: 'masker'` になった document を Curator 値に戻す経路は持たない（A8 と整合）。
+4. **status='failed' は一本化**: Masker pipeline 失敗時も `status='failed'` に倒す。`curator` ブロックは成功記録として保持され、`maskerError` ブロックに失敗詳細が残る。UI 側で「Curator 成功・Masker 失敗」を組み立てる。
+
+---
+
+## TypeScript 型（正本）
+
+```ts
+import type { Timestamp } from '@google-cloud/firestore';
+import type {
+  AiUsePolicy,
+  BusinessDomain,
+  DocumentType,
+  Freshness,
+  Sensitivity,
+} from '../agents/curator/schema';
+
+export const FIRESTORE_DOCUMENT_SCHEMA_VERSION = 1 as const;
+
+export type FirestoreDocumentStatus =
+  | 'uploaded'   // GCS 保存・Firestore set 直後
+  | 'curating'   // Curator flow 実行中
+  | 'curated'    // Curator 成功・Masker 不要 (direct/blocked) の終端
+  | 'masking'    // Curator 成功・Masker pipeline 実行中
+  | 'masked'     // Masker 完了 (ai_safe_ready / restricted_promoted) の終端
+  | 'failed';    // どこかで失敗。詳細は curatorError / maskerError ブロック
+
+export type FirestoreDocument = {
+  // ── identity ───────────────────────────
+  id: string;
+  schemaVersion: typeof FIRESTORE_DOCUMENT_SCHEMA_VERSION;
+  fileName: string;
+  contentType: string;
+  byteSize: number;
+  contentSha256: string;
+  storagePath: string;                // raw/{docId}/{safeOriginalFileName}
+  aiSafeStoragePath: string | null;   // masked/{docId}/{safeOriginalFileName}（ai_safe_ready のみ）
+
+  // ── lifecycle ──────────────────────────
+  status: FirestoreDocumentStatus;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+
+  // ── effective evaluation (top-level, クエリ対象) ─
+  // Curator 完了時に Curator 値で初期化され、Masker Restricted 昇格時に Masker 値で上書きされる。
+  // どちらが書いたかは sensitivitySource で識別する。
+  documentType: DocumentType | null;
+  businessDomain: BusinessDomain | null;
+  sensitivity: Sensitivity | null;
+  freshness: Freshness | null;
+  isAuthoritativeCandidate: boolean | null;
+  aiUsePolicy: AiUsePolicy | null;
+  sensitivitySource: 'curator' | 'masker' | null;
+  originalCuratorSensitivity: Sensitivity | null;  // Masker 昇格時のみ非 null
+  sensitivityReason: string | null;                // Masker 昇格理由
+
+  // ── audit blocks (生データ・追跡用) ────
+  curator: {
+    documentType: DocumentType;
+    businessDomain: BusinessDomain;
+    sensitivity: Sensitivity;        // Curator が出した生の判定（Masker が上書きしても残る）
+    freshness: Freshness;
+    isAuthoritativeCandidate: boolean;
+    aiUsePolicy: AiUsePolicy;
+    rationale: string;
+    completedAt: Timestamp;
+    modelId: string;
+  } | null;
+  curatorError: { message: string; occurredAt: Timestamp } | null;
+
+  masker: {
+    decision: 'ai_safe_ready' | 'restricted_promoted';
+    provider: 'simple-rule';                       // 将来 'cloud-dlp' に拡張
+    maskedSpansCount: number;                      // UI 表示用の集計
+    ruleHits: Record<string, number>;              // どのルールが何回当たったか
+    residualRisk: { detected: boolean; reasons: string[] };
+    rationale: string;
+    recommendedSensitivity: 'Confidential' | 'Restricted';
+    sourceContentHash: string;                     // 上の contentSha256 と一致するはず
+    aiSafeSchemaVersion: 1;                        // src/agents/masker/maskingSchema.ts の AiSafeVersion.schemaVersion と整合
+    completedAt: Timestamp;
+    modelId: string;                               // residualRisk 評価に使った Vertex モデル
+  } | null;
+  maskerError: { message: string; occurredAt: Timestamp } | null;
+};
+```
+
+---
+
+## Lifecycle state machine
+
+```
+        uploaded
+            │
+            ▼
+        curating ──── (curator 失敗) ────► failed
+            │
+            ▼
+         curated   ◄── 終端（aiUsePolicy が direct / blocked のとき）
+            │
+            │ aiUsePolicy === 'requires_masking'
+            ▼
+         masking  ──── (masker 失敗) ────► failed
+            │                              ※curator block は保持される
+            ▼
+         masked    ◄── 終端（ai_safe_ready / restricted_promoted いずれも masked）
+```
+
+終端は 3 つ:
+
+- `curated`: Curator が `aiUsePolicy === 'direct' | 'blocked'` を返し、Masker pipeline をスキップ
+- `masked`: Masker pipeline が完走（成果は `masker.decision` で判別）
+- `failed`: Curator または Masker のいずれかが失敗（成功側のブロックは保持）
+
+---
+
+## 終端ごとの具体例
+
+### Case A: aiUsePolicy='direct' / 'blocked'（Masker skip → terminal: `curated`）
+
+```ts
+{
+  id: '...',
+  schemaVersion: 1,
+  fileName: '就業規則テンプレート.md',
+  contentType: 'text/markdown',
+  byteSize: 1234,
+  contentSha256: 'abc...',
+  storagePath: 'raw/<uuid>/就業規則テンプレート.md',
+  aiSafeStoragePath: null,
+  status: 'curated',
+  documentType: '規程',
+  businessDomain: '就業規則',
+  sensitivity: 'Internal',
+  freshness: 'current',
+  isAuthoritativeCandidate: true,
+  aiUsePolicy: 'direct',
+  sensitivitySource: 'curator',
+  originalCuratorSensitivity: null,
+  sensitivityReason: null,
+  curator: { /* 同じ値 + rationale + completedAt + modelId */ },
+  curatorError: null,
+  masker: null,
+  maskerError: null,
+}
+```
+
+### Case B: requires_masking → ai_safe_ready（terminal: `masked`）
+
+```ts
+{
+  // ...
+  aiSafeStoragePath: 'masked/<uuid>/顧客対応メモ_匿名化.txt',
+  status: 'masked',
+  documentType: 'メモ',
+  businessDomain: '顧客対応',
+  sensitivity: 'Confidential',         // top は Confidential のまま
+  aiUsePolicy: 'requires_masking',
+  sensitivitySource: 'curator',        // 昇格なし
+  originalCuratorSensitivity: null,
+  sensitivityReason: null,
+  curator: { sensitivity: 'Confidential', aiUsePolicy: 'requires_masking', /* ... */ },
+  masker: {
+    decision: 'ai_safe_ready',
+    provider: 'simple-rule',
+    maskedSpansCount: 7,
+    ruleHits: { email: 1, phone_like: 2, label_shimei: 4 },
+    residualRisk: { detected: false, reasons: ['氏名・連絡先のみ・取引特定なし'] },
+    rationale: '個別取引や顧客固有条件は出現せず再識別不能',
+    recommendedSensitivity: 'Confidential',
+    sourceContentHash: 'abc...',
+    aiSafeSchemaVersion: 1,
+    completedAt: <Timestamp>,
+    modelId: 'gemini-2.5-flash',
+  },
+  maskerError: null,
+}
+```
+
+### Case C: requires_masking → restricted_promoted（terminal: `masked`）
+
+```ts
+{
+  // ...
+  aiSafeStoragePath: null,             // 作らない
+  status: 'masked',
+  sensitivity: 'Restricted',           // top が Masker 値で上書き
+  aiUsePolicy: 'blocked',
+  sensitivitySource: 'masker',
+  originalCuratorSensitivity: 'Confidential',  // Curator の元判定を保持
+  sensitivityReason: '顧客固有条件と契約金額が再識別可能 (...)',
+  curator: { sensitivity: 'Confidential', aiUsePolicy: 'requires_masking', /* ... */ },
+  masker: {
+    decision: 'restricted_promoted',
+    residualRisk: { detected: true, reasons: ['...', '...'] },
+    recommendedSensitivity: 'Restricted',
+    /* ... */
+  },
+  maskerError: null,
+}
+```
+
+### Case D: Masker 実行中に失敗（terminal: `failed`）
+
+```ts
+{
+  // ...
+  status: 'failed',
+  curator: { /* 成功記録は保持 */ },
+  curatorError: null,
+  masker: null,
+  maskerError: { message: 'Vertex API 呼び出し失敗: ...', occurredAt: <Timestamp> },
+}
+```
+
+---
+
+## GCS レイアウト
+
+```
+gs://{KNOWLEDGE_HUB_BUCKET}/
+  raw/{docId}/{safeOriginalFileName}     # 原本（既存）
+  masked/{docId}/{safeOriginalFileName}  # ai_safe_ready 時のみ
+```
+
+- `restricted_promoted` のときは masked オブジェクトを **作らない**（AI 参照版を渡せない判定）。
+- masked object の object metadata に `sourceContentHash`, `aiSafeSchemaVersion`, `provider` を入れる。再生成判定や integrity 検証に使う。
+
+---
+
+## 想定 Firestore index（Step 4 で必要）
+
+```
+status ASC, updatedAt DESC                             # Inventory 一覧
+sensitivity ASC                                        # Restricted バッジ集計
+status ASC, sensitivitySource ASC                      # 「Masker が昇格した文書」集計
+businessDomain ASC, documentType ASC                   # ヒートマップ
+```
+
+複合インデックスは `firestore.indexes.json` に整備する（Step 4 で実装）。
+
+---
+
+## 不変条件 (invariants)
+
+実装側でアサート可能な制約:
+
+1. `aiSafeStoragePath !== null` ⇔ `status === 'masked'` かつ `masker?.decision === 'ai_safe_ready'`
+2. `sensitivitySource === 'masker'` ⇒ `originalCuratorSensitivity !== null` かつ `sensitivity === 'Restricted'` かつ `aiUsePolicy === 'blocked'`
+3. `originalCuratorSensitivity !== null` ⇒ `sensitivitySource === 'masker'`
+4. `masker !== null` ⇒ `curator !== null` かつ `curator.aiUsePolicy === 'requires_masking'`
+5. `masker.sourceContentHash === contentSha256`（同一原本由来であることの証跡）
+6. `status === 'curated'` の終端 ⇒ `curator.aiUsePolicy ∈ {'direct', 'blocked'}`（`'requires_masking'` なら本来 `masking` か `masked` か `failed` のいずれか）
+
+これらは pure 関数で検証可能（`src/lib/firestoreSchema.ts` に invariant validator として置く想定）。
+
+---
+
+## マイグレーション方針
+
+- `schemaVersion` フィールドを document に持つ。読み取り時に未対応バージョンなら明示エラーにする。
+- 既存 Walking Skeleton で書かれた document（`schemaVersion` フィールドなし、`status: 'uploaded'|'curating'|'curated'|'failed'`）は、Step 2 着手時に手動削除する。MVP では履歴永続化はやらない（A4 と整合）。

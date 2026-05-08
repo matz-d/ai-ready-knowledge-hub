@@ -4,6 +4,14 @@
 
 3分デモで「散らばった機密文書が、AIに渡せるContext Packageへ変換される」ことが伝わる状態を作る。
 
+## 現在の到達点 (2026-05-08 Task1/2/3 後)
+
+- **Walking Skeleton**: `/upload` から 1 ファイルを投入し、Cloud Storage 保存、Firestore metadata 作成、Curator 分類、単票結果表示まで実 GCP 接続で確認済み。
+- **Masker Demo の中核**: `SimpleMasker` で原本をマスクし、既存 `maskerRiskFlow` で residual risk を評価する pipeline を実装済み。契約書サンプルは `restricted_promoted`、顧客対応メモは `ai_safe_ready` を確認済み。
+- **Restricted 除外の受け皿**: Masker の `Restricted` 昇格を文書メタデータの実効値へ反映する pure 関数と、Context Package 入力ビルダを実装済み。`context:demo` で Restricted 文書の本文除外を確認済み。
+
+次のMVP実装は、これら3本を接続して「アップロード後に Masker pipeline まで走り、Firestore 上の AI-safe 版 / Restricted 昇格が Inventory / Package に反映される」状態へ進める。
+
 実装の優先順位は以下:
 
 1. **Walking Skeleton**: ファイル投入 → Curator分類 → 結果表示 → Cloud Run デプロイ

@@ -2,13 +2,91 @@
 
 ## 現在の実装状態 (2026-05-08)
 
-W1 では技術リスク検証として、Curator / Masker の Genkit flow、Curator Route Handler、
-A9 Markdown export 純関数、Cloud Run デプロイ検証まで完了している。通常 UI は固定デモ
-fixture を読まず、W2 の Upload UI / Cloud Storage / Firestore 接続を待つ shell として置く。
-W1 の実 LLM 出力は `docs/w1-artifacts/inventory.snapshot.json` に回顧用 artifact として退避する。
+W1 で Curator / Masker の Genkit flow、Curator Route Handler、A9 Markdown export、Cloud Run
+デプロイ検証まで完了。W2 Walking Skeleton として `/upload` → `POST /api/documents` で
+原本を Cloud Storage (`raw/{docId}/{safeOriginalFileName}`)、メタデータを Firestore
+(`documents/{docId}`) に保存し、同一リクエスト内で `curatorFlow` を実行して結果を UI
+に返す経路を実装済み。
 
-未実装の主要部分は Cloud Storage 保存、Firestore 永続化、Cloud DLP 統合、Strategist /
-Interviewer、Knowledge Inventory の実データ表示、GitHub Actions eval である。
+MVP のマスク処理はルールベースの `SimpleMasker` とし、プロバイダ境界だけを固定しておき、将来 Cloud DLP に差し替え可能にする。
+Task2 で `SimpleMasker` → 既存 `maskerRiskFlow` → `ai_safe_ready` / `restricted_promoted`
+の pipeline を実装し、実 Vertex 接続でサンプル 2 件の期待挙動を確認済み。
+
+Task3 で Masker の `Restricted` 昇格を文書メタデータへ反映する純関数と、Context Package
+入力ビルダを実装済み。W1 snapshot を読み取り時に適用し、Restricted 文書の本文が
+`Full AI-Ready Sources` に入らないことを `npm run context:demo` で確認済み。
+
+未実装の主要部分は Task1/2/3 の接続（Upload 後に Masker pipeline を呼び Firestore に
+AI-safe 版 / Restricted 昇格を保存すること）、Cloud DLP 統合、Strategist / Interviewer、
+Knowledge Inventory の実 Firestore 一覧・詳細 UI、GitHub Actions eval である。
+
+### Task2: Masker Pipeline MVP
+
+`src/agents/masker/pipelineFlow.ts` は、Curator の `aiUsePolicy === 'requires_masking'`
+を入口条件として、原本テキストを `SimpleMasker` でマスクし、その結果を既存
+`maskerRiskFlow` に渡す。
+
+- `src/agents/masker/maskingSchema.ts` … `MaskingInput` / `MaskedSpan` / `MaskingResult` / `AiSafeVersion`
+- `src/agents/masker/simpleMasker.ts` … 決定的なルールベースマスク + SHA-256 hash
+- `src/agents/masker/pipelineSchema.ts` … `ai_safe_ready` / `restricted_promoted` の出力 schema
+- `src/agents/masker/pipelineFlow.ts` … SimpleMasker → residual risk → 分岐
+- `scripts/runMaskerPipeline.ts` … CLI smoke (`npm run masker:pipeline -- <path>`)
+
+Firestore / API / UI にはまだ接続しない。Task1 の upload orchestrator から呼ぶ接続は次ステップ。
+
+### Task3: Restricted 昇格と Context Package 除外（純関数）
+
+Masker の `recommendedSensitivity === 'Restricted'` を文書メタデータへ反映し（`sensitivity` /
+`aiUsePolicy` / `sensitivitySource` / `originalCuratorSensitivity` / `sensitivityReason`）、
+`exportContextPackageMarkdown` に渡す前に Context Package 入力ビルダで必ず除外する。
+
+- `src/agents/masker/upgrade.ts` … `applyMaskerUpgrade` / `isBlockedForAi` / `needsMaskerEvaluation` 等
+- `src/lib/inventory.ts` … W1 `inventory.snapshot.json` を **読み取り時** に `InventoryDocument` へ変換（JSON 改変なし）
+- `src/lib/contextPackageInput.ts` … `ContextPackageExportInput` 組み立て（Restricted・未マスク機密の二重防止）
+- `src/agents/strategist/types.ts` … 将来の Strategist 戻り値の型スタブ
+- 検証: `npm run context:demo`（CLI）、トップ画面の W1 適用デモ（Firestore ライブ同期ではない）
+
+### W2 MVP: Firestore `documents/{docId}` と GCS レイアウト
+
+正本仕様は [docs/firestore-schema.md](firestore-schema.md)。本セクションでは要点だけ示す。
+
+**Document shape の方針 (D-W2-Schema):**
+
+- Effective top-level (`sensitivity` / `aiUsePolicy` / `sensitivitySource` / `originalCuratorSensitivity` / `sensitivityReason`) は Inventory クエリの主役。
+- 生データは `curator` / `masker` ブロックに不変記録として保持。Masker 昇格があっても `curator.sensitivity` は書き換えない。
+- マスク済み本文は GCS `masked/{docId}/{safeOriginalFileName}` が正本。Firestore は `aiSafeStoragePath` パスのみ保持。
+- `contentSha256` を `uploaded` 時に書き、Masker の `sourceContentHash` と照合できるようにする。
+
+**Lifecycle state machine:**
+
+```
+        uploaded
+            │
+            ▼
+        curating ──── (curator 失敗) ────► failed
+            │
+            ▼
+         curated   ◄── 終端（aiUsePolicy が direct / blocked のとき）
+            │
+            │ aiUsePolicy === 'requires_masking'
+            ▼
+         masking  ──── (masker 失敗) ────► failed
+            │                              ※curator block は保持される
+            ▼
+         masked    ◄── 終端（ai_safe_ready / restricted_promoted いずれも masked）
+```
+
+終端は 3 つ: `curated`（Masker skip）/ `masked`（Masker 完走）/ `failed`（Curator か Masker が失敗、成功側のブロックは保持）。
+
+**Cloud Storage レイアウト:**
+
+```
+gs://{KNOWLEDGE_HUB_BUCKET}/
+  raw/{docId}/{safeOriginalFileName}     # 原本
+  masked/{docId}/{safeOriginalFileName}  # ai_safe_ready 時のみ
+```
+
+`docId` は UUID、`safeOriginalFileName` はパス区切りを除去した表示用ファイル名（最大 200 文字）。`restricted_promoted` のときは masked オブジェクトを作らない。
 
 ## 全体構成図
 
