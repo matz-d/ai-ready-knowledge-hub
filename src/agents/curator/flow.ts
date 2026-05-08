@@ -4,13 +4,20 @@ import {
   CuratorOutput,
   CuratorOutputCore,
   type CuratorOutputResult,
-} from './curatorSchema.js';
-import {
-  CURATOR_SYSTEM_PROMPT,
-  buildCuratorUserPrompt,
-} from './curatorPrompt.js';
-import { ai, modelRef, parseJsonFromModelText } from './genkitClient.js';
+} from './schema';
+import { CURATOR_SYSTEM_PROMPT, buildCuratorUserPrompt } from './prompt';
+import { ai, modelRef, parseJsonFromModelText } from '../_shared/genkitClient';
 
+/**
+ * Curator flow.
+ *
+ * 4 段フォールバック (PoC w1 で確立した構造化出力リカバリ手順):
+ *   1. structured output (responseJsonSchema constrained)
+ *   2. structured output の `text` から JSON.parse
+ *   3. format=json + schema (unconstrained)
+ *   4. format=json (schema 指定なし)
+ * 何れも `CuratorOutput.safeParse` で superRefine まで通った時点で確定。
+ */
 async function generateCuratorValidated(
   input: z.infer<typeof CuratorInput>
 ): Promise<CuratorOutputResult> {

@@ -1,20 +1,21 @@
-import './loadEnv.js';
+import './loadEnv';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { maskerRiskFlow } from './maskerRiskFlow.js';
+import { curatorFlow } from '../src/agents/curator/flow';
 
-const DEFAULT_SAMPLE = path.join(
+const DEFAULT_SAMPLE = path.resolve(
   process.cwd(),
-  'sample',
-  'masked-contract-risk.txt'
+  'sample-data',
+  'accounting-office',
+  '年末調整_案内文.txt'
 );
 
 async function main(): Promise<void> {
   const fileArg = process.argv[2];
   const filePath = fileArg ? path.resolve(fileArg) : DEFAULT_SAMPLE;
-  const maskedContent = await readFile(filePath, 'utf8');
+  const content = await readFile(filePath, 'utf8');
   const fileName = path.basename(filePath);
-  const result = await maskerRiskFlow({ fileName, maskedContent });
+  const result = await curatorFlow({ fileName, content });
   console.log(JSON.stringify(result, null, 2));
 }
 

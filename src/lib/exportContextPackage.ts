@@ -1,4 +1,7 @@
-export type Sensitivity = 'Public' | 'Internal' | 'Confidential' | 'Restricted';
+// `Sensitivity` の値域は正本である curator schema を参照する (R5 確定 enum)。
+// Strategist 出力の都合で AI-safe 変換注記など派生表現も許容するため `| string` を残す。
+import type { Sensitivity } from '../agents/curator/schema';
+export type { Sensitivity };
 
 export type ExportSourceType =
   | 'Text'

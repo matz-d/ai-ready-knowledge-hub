@@ -1,4 +1,4 @@
-import type { CuratorInput } from './curatorSchema.js';
+import type { CuratorInput } from './schema';
 
 export const CURATOR_SYSTEM_PROMPT = `あなたは税理・会計事務所向けナレッジの Curator です。入力テキストだけを根拠に、次の 7 フィールドを判定して JSON オブジェクト 1 つだけを返してください。
 

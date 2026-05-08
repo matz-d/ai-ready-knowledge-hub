@@ -45,20 +45,21 @@
 
 ---
 
-### Week 1 (5/5-5/11) — 確定
+### Week 1 (5/5-5/11) — クローズ (5/8 で実質完了)
 
 **位置付け: 「実装完成」ではなく「技術リスク検証」**
 
-残り3日 (5/9・5/10・5/11) で、Vertex AI / Genkit / Cloud Run / A8 / A9 の **実装可能性を確認** することがゴール。Cloud Storage / Firestore / DLP / Upload UI / Inventory UI / eval は Week 2 以降に回す。
+5/8 中に W1-1〜W1-4 + 統合作業まで完了。詳細振り返りは [docs/week1-retrospective.md](week1-retrospective.md)。
 
 **到達点:**
 
 | # | 検証項目 | 成果物 |
 |---|---|---|
-| W1-1 | Genkit + Vertex AI で structured output が返る | 完了: `poc/w1` の Curator flow で sample-data 10/10 Zod parse 通過 |
-| W1-2 | A8 residualRisk 判定が動く | 完了: `maskerRiskFlow` が `Restricted` 格上げ / `Confidential` 維持を structured JSON で返す |
-| W1-3 | A9 Markdown export が動く | 完了: mock Context Package を入力に、`src/lib/exportContextPackage.ts` が Package Manifest + Instructions + AI-Ready Sources の Markdown を生成 |
-| W1-4 | Next.js 最小アプリが Cloud Run にデプロイできる | 完了: `ai-ready-knowledge-hub-w1` を `asia-northeast1` にデプロイし、認証付きHTTP 200を確認 |
+| W1-1 | Genkit + Vertex AI で structured output が返る | 完了: Curator flow で sample-data 10/10 Zod parse 通過 (`src/agents/curator/`) |
+| W1-2 | A8 residualRisk 判定が動く | 完了: `maskerRiskFlow` が `Restricted` 格上げ / `Confidential` 維持を structured JSON で返す (`src/agents/masker/`) |
+| W1-3 | A9 Markdown export が動く | 完了: `src/lib/exportContextPackage.ts` が Package Manifest + Instructions + AI-Ready Sources の Markdown を生成 |
+| W1-4 | Next.js 最小アプリが Cloud Run にデプロイできる | 完了: `ai-ready-knowledge-hub-w1` を `asia-northeast1` にデプロイ、認証付きHTTP 200確認 |
+| W1-Close | poc/ 削除 + R5 enum 正本化 + UI snapshot を Curator 出力型に統合 | 完了: `docs/decisions.md` D-W1-Close。`poc/` 削除済み |
 
 **Week 1 で意図的にやらないこと:**
 - Cloud Storage バケット作成・接続

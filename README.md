@@ -16,31 +16,56 @@
 
 ## 現在のステータス (2026-05-08)
 
-**フェーズ**: Week 1 技術リスク検証中。Genkit / A8 / A9 / Cloud Run 最小デプロイは通過。
+**フェーズ**: Week 1 クローズ。MVP に進行中 (Walking Skeleton 着手前)。
 
 ### 完了済み
-- ハッカソン要件の調査・整理
-- 作品コンセプトの確定 (機密文書を扱うSME向け、初期デモは士業題材、AI参照可能化までを価値に含める)
-- 技術スタックの確定 (Vertex AI API + Cloud DLP + Genkit TypeScript + Cloud Run + Firestore)
-- 4エージェント構成の設計 (Curator / Masker / Strategist / Interviewer)
-- MVPスコープの確定 (Vector Search / Masker eval / 本格PDF解析は後回し)
-- デモシナリオの確定 (Purpose Query を主役に、3分編集動画前提)
-- Genkit + Vertex AI PoC (`poc/w1`): Curator structured output が sample-data 10/10 件で Zod parse 通過
-- A8 residualRisk PoC (`poc/w1`): `Restricted` 格上げ / `Confidential` 維持の structured JSON 出力を確認
-- A9 Markdown export PoC (`src/lib/exportContextPackage.ts`): Package Manifest、下流AI向けInstructions、Included/Excluded、Missing Knowledge、Full AI-Ready Sources をMarkdown生成
-- Next.js 最小アプリを Cloud Run にデプロイ
-  - Service: `ai-ready-knowledge-hub-w1`
-  - Region: `asia-northeast1`
-  - URL: `https://ai-ready-knowledge-hub-w1-mrvutsz24a-an.a.run.app`
-  - Note: 組織ポリシーにより `allUsers` 公開は不可。認証付きリクエストで HTTP 200 を確認済み。
+- ハッカソン要件の調査・整理 / 作品コンセプト・技術スタック・4エージェント構成・MVPスコープ確定
+- W1-1: Genkit + Vertex AI で Curator 6 項目 structured output が sample-data 10/10 件で Zod parse 通過
+- W1-2: Masker A8 residualRisk 判定 (`Restricted` 格上げ / `Confidential` 維持) を structured JSON で実観測
+- W1-3: A9 Markdown export 純関数 (`src/lib/exportContextPackage.ts`)
+- W1-4: Next.js 最小アプリを Cloud Run (`ai-ready-knowledge-hub-w1`, `asia-northeast1`) にデプロイ済み (組織ポリシーで `allUsers` 不可、認証付きで HTTP 200)
+- **W1 統合 (5/8 PM)**: `poc/w1/` を削除し、Curator/Masker の schema・prompt・Genkit flow を `src/agents/{curator,masker,_shared}/` の正本へ昇格。`src/demo/inventory.ts` は `InventorySnapshotEntry = CuratorOutputResult + fileName + maskerEvaluation` 型として R5 確定 enum を直接参照 (`docs/decisions.md` D-W1-Close)。
+- 詳細振り返り: [docs/week1-retrospective.md](docs/week1-retrospective.md)
 
-### 次にやること
-- Week 2 以降のマイルストーン再調整
-- Walking Skeleton (Cloud Storage + Firestore + Upload UI + Curator)
+### コードの位置 (W2 着手前)
+
+```
+src/
+  agents/
+    _shared/genkitClient.ts
+    curator/{schema,prompt,flow}.ts   # R5 確定 enum + 4段フォールバック
+    masker/{schema,prompt,flow}.ts    # A8 residualRisk + 3段フォールバック
+  demo/
+    inventory.ts                      # Curator 出力スナップショット (snapshot 生成可能)
+    strategistFixture.ts              # Strategist 出力フィクスチャ
+  lib/exportContextPackage.ts         # A9 Markdown export 純関数
+  app/page.tsx                        # 縦長デモページ (静的 snapshot を描画)
+scripts/
+  runCurator.ts / runCuratorAll.ts / runMaskerRisk.ts
+  generateInventorySnapshot.ts        # 実LLM出力で UI スナップショットを更新
+sample-data/
+  accounting-office/                  # 原本 10 件
+  masked/                             # Masker A8 評価のマスク済み入力 2 件
+```
+
+### npm scripts
+
+| コマンド | 用途 |
+|---|---|
+| `npm run dev` / `build` / `start` | Next.js |
+| `npm run typecheck` | tsc --noEmit (src + scripts 全体) |
+| `npm run curator [path]` | Curator flow を 1 ファイルに対し実行 |
+| `npm run curator:all [dir]` | sample-data 全件で smoke 実行 |
+| `npm run masker:risk [path]` | A8 residualRisk 評価 |
+| `npm run inventory:snapshot` | 実 LLM 出力で `src/demo/inventory.snapshot.json` を再生成 |
+| `npm run curator:ui` | Genkit dev UI で flow を観察 |
+
+### 次にやること (W2)
+- Walking Skeleton (Cloud Storage + Firestore + Upload UI + Server Action から Curator flow 呼び出し)
 - Masker + Cloud DLP 統合
-- Strategist / Interviewer と A9 export の実Context Package接続
-- Knowledge Inventory UI
-- Curator / Masker eval パイプライン
+- Strategist / Interviewer と A9 export の実 Context Package 接続
+- Knowledge Inventory UI を snapshot 経由から実 Firestore 接続へ切替
+- Curator / Masker eval パイプライン (W6 マイルストーン)
 
 ---
 

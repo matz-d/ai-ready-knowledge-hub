@@ -1,4 +1,13 @@
 import { z } from 'zod';
+import { SensitivityEnum } from '../curator/schema';
+
+/**
+ * A8 residual risk 判定スキーマ。
+ *
+ * Masker のマスキング後テキストを再評価し、再識別リスクが残るなら
+ * `recommendedSensitivity: "Restricted"` を返して Curator 判定を覆す。
+ * SensitivityEnum は Curator と共有し、表記揺れを発生させない。
+ */
 
 export const ResidualRiskInput = z.object({
   fileName: z.string().describe('元ファイル名または表示用ラベル'),
@@ -7,7 +16,8 @@ export const ResidualRiskInput = z.object({
 
 export type ResidualRiskInput = z.infer<typeof ResidualRiskInput>;
 
-export const RecommendedSensitivityEnum = z.enum([
+/** Masker が返しうる recommendedSensitivity の値域 (Curator 判定を覆す対象のみ) */
+export const RecommendedSensitivityEnum = SensitivityEnum.extract([
   'Confidential',
   'Restricted',
 ]);

@@ -6,17 +6,28 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p ${PORT:-8080}",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "curator": "tsx scripts/runCurator.ts",
+    "curator:all": "tsx scripts/runCuratorAll.ts",
+    "masker:risk": "tsx scripts/runMaskerRisk.ts",
+    "inventory:snapshot": "tsx scripts/generateInventorySnapshot.ts",
+    "curator:ui": "genkit start -- tsx scripts/runCurator.ts"
   },
   "dependencies": {
+    "@genkit-ai/google-genai": "^1.33.0",
+    "genkit": "^1.33.0",
     "next": "^16.0.10",
     "react": "^19.2.1",
-    "react-dom": "^19.2.1"
+    "react-dom": "^19.2.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "dotenv": "^16.6.1",
+    "genkit-cli": "^1.33.0",
+    "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   },
   "overrides": {

@@ -4,13 +4,21 @@ import {
   ResidualRiskOutput,
   ResidualRiskOutputCore,
   type ResidualRiskOutputResult,
-} from './maskerRiskSchema.js';
+} from './schema';
 import {
   MASKER_RISK_SYSTEM_PROMPT,
   buildMaskerRiskUserPrompt,
-} from './maskerRiskPrompt.js';
-import { ai, modelRef, parseJsonFromModelText } from './genkitClient.js';
+} from './prompt';
+import { ai, modelRef, parseJsonFromModelText } from '../_shared/genkitClient';
 
+/**
+ * Masker residual risk flow (A8).
+ *
+ * 3 段フォールバック (Curator と同様の構造化出力リカバリ):
+ *   1. structured output (responseJsonSchema constrained)
+ *   2. structured output の `text` から JSON.parse
+ *   3. format=json + schema (unconstrained)
+ */
 async function generateResidualRiskValidated(
   input: z.infer<typeof ResidualRiskInput>
 ): Promise<ResidualRiskOutputResult> {

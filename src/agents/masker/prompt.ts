@@ -1,4 +1,4 @@
-import type { ResidualRiskInput } from './maskerRiskSchema.js';
+import type { ResidualRiskInput } from './schema';
 
 export const MASKER_RISK_SYSTEM_PROMPT = `あなたは税理・会計事務所向けナレッジの Masker residual risk evaluator です。入力される「マスキング後テキスト」だけを根拠に、AI参照版として保持してよいか、Restricted に格上げすべきかを判定し、JSON オブジェクト 1 つだけを返してください。
 

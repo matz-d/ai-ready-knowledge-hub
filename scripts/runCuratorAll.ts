@@ -1,12 +1,10 @@
-import './loadEnv.js';
+import './loadEnv';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { curatorFlow } from './curatorFlow.js';
+import { curatorFlow } from '../src/agents/curator/flow';
 
 const DEFAULT_SAMPLE_DATA_DIR = path.resolve(
   process.cwd(),
-  '..',
-  '..',
   'sample-data',
   'accounting-office'
 );

@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
-/** PoC 確定 enum（PLAN_w1.md R5） */
+/**
+ * Curator 分類スキーマ。
+ *
+ * R5 で確定した 6 項目 (`docs/open-questions.md` R5)。
+ * このファイルは PoC w1 から移植された「正本」であり、UI 表示・eval・移行スクリプト
+ * すべてここを参照する。enum の表記揺れを増やしてはいけない。
+ */
+
+/** PoC 確定 enum (PLAN_w1.md R5 / docs/open-questions.md R5) */
 export const DocumentTypeEnum = z.enum([
   '契約書',
   'テンプレート',

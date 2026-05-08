@@ -9,6 +9,7 @@ node_modules/
 out/
 dist/
 coverage/
-poc/w1/node_modules/
-poc/w1/.env.local
-poc/w1/.genkit/
+.genkit/
+.env.local
+sample-data/
+scripts/
