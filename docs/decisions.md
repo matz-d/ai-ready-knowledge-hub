@@ -473,6 +473,44 @@ If required information is missing, ask the human owner.
 
 ---
 
+### A10: Next.js の位置付け
+
+**判断:** Next.js は採用を継続する。ただし「本格Webアプリ基盤」ではなく、**薄いデモUI + Cloud Run配信用の器**として使う。
+
+**選定理由:**
+- Cloud Run に載せやすく、ハッカソン必須要件の「とどける」を説明しやすい
+- TypeScript / Genkit と同じ言語で、UI、API Route、Server Action、A9 export をまとめやすい
+- Purpose Query、Knowledge Inventory、Export など、3分デモに必要な画面を素早く作れる
+- 現時点で別基盤に切り替えるより、体験価値の実装へ集中した方が得点に直結する
+
+**Next.js に背負わせること:**
+- デモUI
+- sample-data 固定または最小永続化の画面状態
+- Genkit flow 呼び出しの薄い入口
+- Context Package export
+- Cloud Run 配信
+
+**Next.js に背負わせないこと:**
+- 本格認証
+- 複雑な状態管理
+- 重いアップロード処理
+- DB設計の先行作り込み
+- NotebookLM / Gemini への直接連携
+
+**設計原則:**
+プロダクトの知性は Genkit / Vertex AI 側に置く。Next.js はそれを審査員に伝える舞台装置として薄く保つ。
+
+**代替案:**
+- Vite + Express: 軽いが、Cloud Run上でUI/API統合を自前で作る部分が増える
+- Firebase Hosting + Cloud Run API: 構成は綺麗だが、MVP段階ではサービス分割が早い
+- Streamlit / Gradio: デモは速いが、Google Cloud / DevOps作品としての説明力が弱い
+- React SPA + API: 分割が早く、ハッカソン初期MVPには運用面の重さが出る
+
+**撤退条件:**
+Next.js App Router / build / Cloud Run deploy 起因の詰まりが継続し、エージェント体験の実装速度を阻害する場合は、Vite + Express の単一Nodeサービスへ切り替える。
+
+---
+
 ## 関連ドキュメント
 
 - [docs/concept.md](concept.md) — プロダクトコンセプト

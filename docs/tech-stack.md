@@ -21,6 +21,26 @@
 
 ## なぜこの組み合わせか (主要トレードオフ)
 
+### Next.js を選んだ理由
+
+Next.js は「本格Webアプリ基盤」ではなく、**薄いデモUI + Cloud Run配信用の器**として採用する。
+
+**Next.js に置くもの:**
+- デモUI
+- Genkit flow 呼び出しの薄い入口
+- Context Package export
+- Cloud Run 配信
+
+**Next.js に置かないもの:**
+- 本格認証
+- 複雑な状態管理
+- 重いアップロード処理
+- DB設計の先行作り込み
+
+プロダクトの知性は Genkit / Vertex AI 側に置き、Next.js は審査員に価値を伝える舞台装置として薄く保つ。詳細は [docs/decisions.md](decisions.md) の A10 を参照。
+
+---
+
 ### Genkit を選んだ理由
 
 **候補:**
