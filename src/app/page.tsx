@@ -16,6 +16,9 @@ import type {
 } from '../agents/curator/schema';
 import './styles.css';
 
+// W2 で Server Action から実データを引く前提。snapshot だけの今は no-op だが残す。
+export const dynamic = 'force-dynamic';
+
 const rawFileExamples = [
   '顧問契約書_実案件サンプル.txt',
   '給与計算チェックリスト.md',

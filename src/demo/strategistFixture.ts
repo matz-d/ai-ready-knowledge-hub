@@ -1,3 +1,7 @@
+// TODO(W3-strategist): sensitivity に 'Confidential -> AI-safe' などの
+// enum 外文字列が含まれている。Strategist agent 実装時に
+// src/agents/strategist/schema.ts を切り、専用 enum (例: AiSafetyTransform)
+// で表現し直す。現状は Strategist 未実装のため fixture として暫定許容。
 import type { ContextPackageExportInput } from '../lib/exportContextPackage';
 
 export const payrollTrainingStrategistFixture: ContextPackageExportInput = {

@@ -1,0 +1,135 @@
+[
+  {
+    "documentType": "メモ",
+    "businessDomain": "給与計算",
+    "sensitivity": "Internal",
+    "freshness": "superseded_candidate",
+    "isAuthoritativeCandidate": false,
+    "aiUsePolicy": "direct",
+    "rationale": "給与計算における例外対応に関する社内メモであり、特定の顧問先の機微情報は含まれないためInternalと判断した。ただし、内容が過去の対応に基づき、最新の法改正に未対応の可能性があるため、公式な情報としては不適切と判断した。",
+    "fileName": "給与計算_例外対応メモ.txt",
+    "sourcePath": "sample-data/accounting-office/給与計算_例外対応メモ.txt"
+  },
+  {
+    "documentType": "チェックリスト",
+    "businessDomain": "給与計算",
+    "sensitivity": "Internal",
+    "freshness": "current",
+    "isAuthoritativeCandidate": true,
+    "aiUsePolicy": "direct",
+    "rationale": "文書は給与計算の月次チェックリストであり、社内での標準的な手順を示すものです。特定の顧客情報を含まないため機密性はInternalと判断しました。社内手順として参照されるため、isAuthoritativeCandidateはtrueです。",
+    "fileName": "給与計算チェックリスト.md",
+    "sourcePath": "sample-data/accounting-office/給与計算チェックリスト.md"
+  },
+  {
+    "documentType": "表",
+    "businessDomain": "料金管理",
+    "sensitivity": "Internal",
+    "freshness": "superseded_candidate",
+    "isAuthoritativeCandidate": true,
+    "aiUsePolicy": "direct",
+    "rationale": "ファイル名に「古い料金表」とあり、サービス内容と料金が記載された表形式の文書であるため、料金管理に関する古い表と判断しました。内部情報であり、AIによる直接利用が可能です。",
+    "fileName": "古い料金表_2023.csv",
+    "sourcePath": "sample-data/accounting-office/古い料金表_2023.csv"
+  },
+  {
+    "documentType": "テンプレート",
+    "businessDomain": "顧客対応",
+    "sensitivity": "Internal",
+    "freshness": "current",
+    "isAuthoritativeCandidate": true,
+    "aiUsePolicy": "direct",
+    "rationale": "本ドキュメントは顧客対応の記録に用いるメモの書式であり、テンプレートに該当します。事務所内の標準的な顧客対応手順として利用されるため、社内向けの情報であり、公式な候補と判断しました。",
+    "fileName": "顧客対応メモ_書式.md",
+    "sourcePath": "sample-data/accounting-office/顧客対応メモ_書式.md"
+  },
+  {
+    "documentType": "メモ",
+    "businessDomain": "顧客対応",
+    "sensitivity": "Confidential",
+    "freshness": "current",
+    "isAuthoritativeCandidate": false,
+    "aiUsePolicy": "requires_masking",
+    "rationale": "顧客との具体的な対応記録であり、顧客名や従業員名、相談内容といった機密情報が含まれるため、Confidentialと判断しました。個別の対応メモであるため、公式な文書や規程ではありません。AI利用時には機密情報のマスキングが必要です。",
+    "fileName": "顧客対応メモ_匿名化.txt",
+    "sourcePath": "sample-data/accounting-office/顧客対応メモ_匿名化.txt",
+    "maskerEvaluation": {
+      "residualRisk": {
+        "detected": false,
+        "reasons": [
+          "固有の識別情報（顧客名、従業員名、具体的な金額、固有の契約条件など）がプレースホルダーに置き換えられている。",
+          "相談内容や対応内容が一般的な育児休業給付金申請の手続きとして抽象化されている。",
+          "特定の企業や個人を再識別できるような詳細な文脈が残っていない。"
+        ]
+      },
+      "recommendedSensitivity": "Confidential",
+      "rationale": "固有の識別情報が適切にマスキングされており、一般的な業務プロセスとして参照可能であるため、再識別リスクは低いと判断しました。"
+    }
+  },
+  {
+    "documentType": "契約書",
+    "businessDomain": "顧問契約管理",
+    "sensitivity": "Confidential",
+    "freshness": "current",
+    "isAuthoritativeCandidate": false,
+    "aiUsePolicy": "requires_masking",
+    "rationale": "顧問契約書であり、具体的な企業名、個人名、連絡先、契約内容、報酬額、銀行口座情報が含まれるため機密性が高いと判断しました。契約期間が明記されており、現在有効な内容です。特定の案件の契約書であるため、標準的なテンプレートや規程ではありません。",
+    "fileName": "顧問契約書_実案件サンプル.txt",
+    "sourcePath": "sample-data/accounting-office/顧問契約書_実案件サンプル.txt",
+    "maskerEvaluation": {
+      "residualRisk": {
+        "detected": true,
+        "reasons": [
+          "具体的な契約期間（開始日と終了日）が残っており、他の情報と組み合わせることで特定の契約を再識別できる可能性があるため。",
+          "具体的な顧問料が残っており、他の情報と組み合わせることで特定の契約を再識別できる可能性があるため。"
+        ]
+      },
+      "recommendedSensitivity": "Restricted",
+      "rationale": "契約期間と顧問料という具体的な情報が残っており、これらが組み合わさることで特定の契約を推測できる可能性があるため、Restrictedに格上げすべきと判断しました。AI参照版として利用するには、これらの情報も抽象化または削除が必要です。"
+    }
+  },
+  {
+    "documentType": "テンプレート",
+    "businessDomain": "顧問契約管理",
+    "sensitivity": "Internal",
+    "freshness": "current",
+    "isAuthoritativeCandidate": true,
+    "aiUsePolicy": "direct",
+    "rationale": "顧問契約書のひな形であり、事務所内で標準的に利用されるテンプレートと判断しました。具体的な顧客情報を含まないため機密度はInternalとし、AI利用はdirectとします。",
+    "fileName": "顧問契約書テンプレ.md",
+    "sourcePath": "sample-data/accounting-office/顧問契約書テンプレ.md"
+  },
+  {
+    "documentType": "テンプレート",
+    "businessDomain": "就業規則",
+    "sensitivity": "Public",
+    "freshness": "current",
+    "isAuthoritativeCandidate": true,
+    "aiUsePolicy": "direct",
+    "rationale": "文書は就業規則の汎用テンプレートであり、特定の機密情報を含まないためPublicと判断しました。テンプレートとして、事務所内で標準的なひな形として利用されるため、isAuthoritativeCandidateはtrueとしました。AI利用ポリシーはsensitivityに基づいてdirectとしました。",
+    "fileName": "就業規則テンプレート.md",
+    "sourcePath": "sample-data/accounting-office/就業規則テンプレート.md"
+  },
+  {
+    "documentType": "案内文",
+    "businessDomain": "年末調整",
+    "sensitivity": "Public",
+    "freshness": "current",
+    "isAuthoritativeCandidate": true,
+    "aiUsePolicy": "direct",
+    "rationale": "顧問先向けの年末調整に関する案内文であり、提出書類や期限が具体的に記載されています。2026年の日付が含まれるため、現在有効な情報と判断しました。事務所から顧客への公式な案内であるため、権威性があると判断しました。",
+    "fileName": "年末調整_案内文.txt",
+    "sourcePath": "sample-data/accounting-office/年末調整_案内文.txt"
+  },
+  {
+    "documentType": "表",
+    "businessDomain": "料金管理",
+    "sensitivity": "Internal",
+    "freshness": "current",
+    "isAuthoritativeCandidate": true,
+    "aiUsePolicy": "direct",
+    "rationale": "文書はサービスごとの料金を一覧にした表形式であり、料金管理に関する内容です。社内での料金設定の基準となるため、InternalかつisAuthoritativeCandidateはtrueと判断しました。ファイル名に「2026」とあるため、現時点での有効な情報と推定されます。",
+    "fileName": "料金表_2026.csv",
+    "sourcePath": "sample-data/accounting-office/料金表_2026.csv"
+  }
+]
