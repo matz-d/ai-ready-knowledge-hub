@@ -29,6 +29,11 @@ export type MaskingInput = z.infer<typeof MaskingInput>;
 export const MaskedSpanTypeEnum = z.enum([
   'EMAIL',
   'PHONE',
+  'PERSON_NAME',
+  'LOCATION',
+  'STREET_ADDRESS',
+  'DATE_OF_BIRTH',
+  'CREDIT_CARD_NUMBER',
   'POSTAL_CODE',
   'JP_MYNUMBER',
   'BANK_ACCOUNT',
@@ -49,7 +54,8 @@ export const MaskedSpan = z.object({
 
 export type MaskedSpan = z.infer<typeof MaskedSpan>;
 
-export const MaskingProviderEnum = z.literal('simple-rule');
+export const MaskingProviderEnum = z.enum(['simple-rule', 'cloud-dlp']);
+export type MaskingProvider = z.infer<typeof MaskingProviderEnum>;
 
 export const MaskingResult = z.object({
   provider: MaskingProviderEnum,

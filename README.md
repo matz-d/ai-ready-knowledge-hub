@@ -68,7 +68,9 @@ sample-data/
 |---|---|
 | `npm run dev` / `build` / `start` | Next.js |
 | `npm run typecheck` | tsc --noEmit (src + scripts 全体) |
-| `npm run test` / `test:watch` | Vitest（`src/lib/__tests__` など） |
+| `npm run test` / `test:watch` | Vitest unit（`src/**/*.test.ts`、E2E は除外） |
+| `npm run test:e2e:smoke` | GCP/Vertex なしの安定 E2E。fake Firestore/GCS + stub Curator/Masker で upload → Inventory → Context Package を検証 |
+| `npm run test:e2e:live` | 実 GCP/Firestore/GCS/Vertex 用の live E2E 枠。デフォルト CI には含めない。env 不足時は skip |
 | `npm run curator [path]` | Curator flow を 1 ファイルに対し実行 |
 | `npm run curator:all [dir]` | sample-data 全件で smoke 実行 |
 | `npm run masker:risk [path]` | A8 residualRisk 評価 |

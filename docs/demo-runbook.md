@@ -101,7 +101,54 @@ npm run dev
 - `context:demo:live`: Firestore/GCS 正本のみを読む。失敗時は fallback せず non-zero で終了。
 - `context:demo:w1`: `docs/w1-artifacts/inventory.snapshot.json` を使う完全オフライン実行。
 
-## 7. よくある失敗
+## 7. E2E test policy
+
+E2E は 2 層に分けます。
+
+- `e2e:smoke`: GCP / Vertex / 認証に依存しない安定テスト。fake Firestore / fake GCS と stub Curator / Masker を使い、library/API 境界で `Upload → Firestore/GCS → Inventory → Context Package export` を通します。CI とローカルの通常確認はこちらを使います。
+- `e2e:live`: 実 GCP / Firestore / GCS / Vertex を使う手動テスト枠。課金、外部リソース、認証が必要なため、デフォルト CI では走らせません。破壊的 cleanup は自動実行せず、作成した docId / object path をログで確認して手動整理します。
+
+smoke E2E:
+
+```bash
+npm run test:e2e:smoke
+```
+
+現在の smoke E2E は次を検証します。
+
+- Curator が `requires_masking` を返す upload 相当入力を流す
+- Masker が `ai_safe_ready` を返す経路で raw / masked 相当の保存内容を確認する
+- Firestore 相当の終端 metadata が `ai_safe` になることを確認する
+- Inventory adapter が該当 document を `ai_safe` として読めることを確認する
+- Context Package export が masked body を `Full AI-Ready Sources` に含め、raw body を含めないことを確認する
+- Masker が `restricted_promoted` を返す経路で masked object が作られず、Inventory は `restricted`、Context Package では included ではなく human review 側になることを確認する
+
+live E2E:
+
+```bash
+npm run test:e2e:live
+```
+
+必須 env:
+
+```dotenv
+GOOGLE_CLOUD_PROJECT=your-project-id
+KNOWLEDGE_HUB_BUCKET=your-bucket-name
+# Either GOOGLE_APPLICATION_CREDENTIALS or ADC:
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+# GEMINI_MODEL is optional
+GEMINI_MODEL=gemini-...
+```
+
+ADC を使う場合:
+
+```bash
+gcloud auth application-default login
+```
+
+env が不足している場合、live E2E は skip します。live E2E を実装拡張する場合も、自動削除は入れず、作成した `documents/{docId}` と `raw/` / `masked/` object path をログに出してください。
+
+## 8. よくある失敗
 
 - `KNOWLEDGE_HUB_BUCKET` 未設定
   - `.env.local` を確認
@@ -115,7 +162,7 @@ npm run dev
 - Vertex/Gemini auth failure
   - `GOOGLE_CLOUD_PROJECT` / IAM 権限 / ADC を再確認
 
-## 8. Reset / cleanup（手動のみ）
+## 9. Reset / cleanup（手動のみ）
 
 - Firestore `documents` collection と `gs://$KNOWLEDGE_HUB_BUCKET/raw/`, `gs://$KNOWLEDGE_HUB_BUCKET/masked/` を手動で整理する
 - 破壊的操作のため、本リポジトリでは **自動削除スクリプトは提供しない**

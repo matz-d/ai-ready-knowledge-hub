@@ -1,5 +1,6 @@
 import { maskerRiskFlow } from './flow';
-import { applySimpleMask, hashSourceContent } from './simpleMasker';
+import { applyMask, type ApplyMaskOptions } from './provider';
+import { hashSourceContent } from './simpleMasker';
 import type { MaskingInput } from './maskingSchema';
 import type { PipelineOutput } from './pipelineSchema';
 
@@ -8,7 +9,8 @@ import type { PipelineOutput } from './pipelineSchema';
  * Firestore / API は接続しない（Task 後続）。
  */
 export async function maskerPipelineFlow(
-  input: MaskingInput
+  input: MaskingInput,
+  options: ApplyMaskOptions = {}
 ): Promise<PipelineOutput> {
   const policy = input.curatorContext.aiUsePolicy;
   if (policy !== 'requires_masking') {
@@ -17,7 +19,7 @@ export async function maskerPipelineFlow(
     );
   }
 
-  const maskingResult = applySimpleMask(input);
+  const maskingResult = await applyMask(input, options);
 
   const rawRiskOutput = await maskerRiskFlow({
     fileName: input.fileName,

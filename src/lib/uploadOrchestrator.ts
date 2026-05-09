@@ -109,7 +109,7 @@ export type OrchestrateInput = {
 
 export type MaskerSummary = {
   decision: 'ai_safe_ready' | 'restricted_promoted';
-  provider: 'simple-rule';
+  provider: 'simple-rule' | 'cloud-dlp';
   maskedSpansCount: number;
   ruleHits: Record<string, number>;
   residualRisk: { detected: boolean; reasons: string[] };

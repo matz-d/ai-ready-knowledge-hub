@@ -36,7 +36,7 @@ export type FirestoreCuratorBlock = {
 
 export type FirestoreMaskerBlock = {
   decision: 'ai_safe_ready' | 'restricted_promoted';
-  provider: 'simple-rule';
+  provider: 'simple-rule' | 'cloud-dlp';
   maskedSpansCount: number;
   ruleHits: Record<string, number>;
   residualRisk: { detected: boolean; reasons: string[] };
