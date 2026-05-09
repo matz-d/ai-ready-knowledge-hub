@@ -142,14 +142,20 @@ export async function POST(request: Request) {
         modelId,
         result.curatorCompletedAt
       ),
+      ...(result.kind === 'ai_safe'
+        ? {
+            aiSafeStoragePath: result.aiSafeStoragePath,
+            masker: toSerializableMasker(result.masker),
+          }
+        : {}),
+      ...(result.kind === 'restricted'
+        ? {
+            masker: toSerializableMasker(result.masker),
+            sensitivityReason: result.sensitivityReason,
+            originalCuratorSensitivity: result.originalCuratorSensitivity,
+          }
+        : {}),
     };
-
-    if (result.kind === 'ai_safe') {
-      body.aiSafeStoragePath = result.aiSafeStoragePath;
-      body.masker = toSerializableMasker(result.masker);
-    } else if (result.kind === 'restricted') {
-      body.masker = toSerializableMasker(result.masker);
-    }
 
     return NextResponse.json(body);
   } catch (e) {

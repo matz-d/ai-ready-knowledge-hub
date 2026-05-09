@@ -21,13 +21,78 @@ function sensitivityClass(s: string): string {
   }
 }
 
+const DOCUMENT_FLOW_STATUS_LABEL: Record<
+  DocumentUploadSuccessResponse['status'],
+  string
+> = {
+  curated: 'キュレート済',
+  blocked: 'ブロック',
+  ai_safe: 'AI 利用可',
+  restricted: '制限付き',
+};
+
+function documentFlowStatusBadgeClass(
+  status: DocumentUploadSuccessResponse['status']
+): string {
+  const base = 'document-flow-status-badge';
+  switch (status) {
+    case 'curated':
+      return `${base} ${base}--curated`;
+    case 'blocked':
+      return `${base} ${base}--blocked`;
+    case 'ai_safe':
+      return `${base} ${base}--ai-safe`;
+    case 'restricted':
+      return `${base} ${base}--restricted`;
+    default:
+      return `${base} ${base}--curated`;
+  }
+}
+
+function formatCuratorCompletedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('ja-JP', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(d);
+}
+
 export function CuratorResultCard({ result }: Props) {
-  const { curator, fileName } = result;
+  const { docId, status, curator, fileName } = result;
+  const completedAtDisplay = formatCuratorCompletedAt(curator.completedAt);
+
   return (
     <article className="curator-result-card" aria-label="Curator 分類結果">
       <header className="curator-result-card__header">
-        <h2>分類結果</h2>
+        <div className="curator-result-card__title-row">
+          <h2>分類結果</h2>
+          <span
+            className={documentFlowStatusBadgeClass(status)}
+            title={status}
+          >
+            {DOCUMENT_FLOW_STATUS_LABEL[status]}
+          </span>
+        </div>
         <p className="curator-result-card__file">{fileName}</p>
+        <dl className="curator-result-card__meta">
+          <div>
+            <dt>docId</dt>
+            <dd>
+              <code className="curator-result-card__code">{docId}</code>
+            </dd>
+          </div>
+          <div>
+            <dt>Curator モデル</dt>
+            <dd>{curator.modelId}</dd>
+          </div>
+          <div>
+            <dt>Curator 完了時刻</dt>
+            <dd>
+              <time dateTime={curator.completedAt}>{completedAtDisplay}</time>
+            </dd>
+          </div>
+        </dl>
       </header>
       <dl className="curator-result-grid">
         <div>
@@ -58,6 +123,18 @@ export function CuratorResultCard({ result }: Props) {
           <dt>AI 利用方針</dt>
           <dd>{curator.aiUsePolicy}</dd>
         </div>
+        {status === 'restricted' && result.sensitivityReason ? (
+          <div className="curator-result-restricted">
+            <dt>制限理由</dt>
+            <dd>{result.sensitivityReason}</dd>
+          </div>
+        ) : null}
+        {status === 'restricted' && result.originalCuratorSensitivity ? (
+          <div className="curator-result-restricted">
+            <dt>Curator 当初の機密度</dt>
+            <dd>{result.originalCuratorSensitivity}</dd>
+          </div>
+        ) : null}
         <div className="curator-result-rationale">
           <dt>根拠</dt>
           <dd>{curator.rationale}</dd>

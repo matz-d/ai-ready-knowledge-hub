@@ -45,6 +45,8 @@ export type DocumentUploadSuccessResponse = {
   status: 'curated' | 'blocked' | 'ai_safe' | 'restricted';
   curator: SerializableCuratorBlock;
   masker?: SerializableMaskerBlock;
+  sensitivityReason?: string;
+  originalCuratorSensitivity?: string;
 };
 
 export type DocumentUploadCuratorErrorResponse = {

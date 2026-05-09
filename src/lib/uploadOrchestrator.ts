@@ -145,6 +145,7 @@ export async function orchestrateUploadProcessing(
       aiUsePolicy: null,
       sensitivitySource: null,
       originalCuratorSensitivity: null,
+      sensitivityReason: null,
       curator: null,
       masker: null,
     });
@@ -261,6 +262,7 @@ async function runCuratorPhase(args: {
       aiUsePolicy: result.aiUsePolicy,
       sensitivitySource: 'curator',
       originalCuratorSensitivity: null,
+      sensitivityReason: null,
       curator: {
         documentType: result.documentType,
         businessDomain: result.businessDomain,
@@ -415,6 +417,7 @@ export async function runMaskerPhase(
             args.curatorEffectiveSnapshot.sensitivitySource ?? null,
           originalCuratorSensitivity:
             args.curatorEffectiveSnapshot.originalCuratorSensitivity ?? null,
+          sensitivityReason: null,
           curator: { aiUsePolicy: 'requires_masking' } as never,
           masker: update.masker as never,
         });
@@ -440,6 +443,7 @@ export async function runMaskerPhase(
       aiUsePolicy: upgraded.aiUsePolicy,
       sensitivitySource: upgraded.sensitivitySource ?? null,
       originalCuratorSensitivity: upgraded.originalCuratorSensitivity ?? null,
+      sensitivityReason: upgraded.sensitivityReason ?? null,
       curator: { aiUsePolicy: 'requires_masking' } as never,
       masker: update.masker as never,
     });
@@ -617,6 +621,7 @@ function buildInitialDocumentBody(args: {
     aiUsePolicy: null,
     sensitivitySource: null,
     originalCuratorSensitivity: null,
+    sensitivityReason: null,
     curator: null,
     masker: null,
   });

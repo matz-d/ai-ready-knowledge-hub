@@ -373,6 +373,36 @@ describe('orchestrateUploadProcessing', () => {
     );
   });
 
+  it('keeps the original masker error when failed-status recording also fails', async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      randomUUIDMock.mockReturnValue('doc-11');
+      curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+      maskerPipelineFlowMock.mockRejectedValue(new Error('pipeline timeout'));
+      updateMock.mockImplementation(async (payload: Record<string, unknown>) => {
+        if (payload.status === 'failed') {
+          throw new Error('failed status update failed');
+        }
+      });
+
+      await expect(orchestrateUploadProcessing(baseInput)).rejects.toMatchObject({
+        name: 'MaskerPhaseError',
+        message: 'pipeline timeout',
+        docId: 'doc-11',
+      });
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[orchestrator] masker failed status update',
+        expect.any(Error)
+      );
+      expect(deleteMaskedObjectMock).not.toHaveBeenCalled();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   it('fails masker phase when ai_safe decision has no aiSafeVersion and records maskerError', async () => {
     randomUUIDMock.mockReturnValue('doc-9');
     curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);

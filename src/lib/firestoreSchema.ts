@@ -132,6 +132,7 @@ export function validateFirestoreDocumentInvariants(
     | 'aiUsePolicy'
     | 'sensitivitySource'
     | 'originalCuratorSensitivity'
+    | 'sensitivityReason'
     | 'curator'
     | 'masker'
   >
@@ -176,6 +177,30 @@ export function validateFirestoreDocumentInvariants(
   }
 
   if (
+    (doc.status === 'curated' ||
+      doc.status === 'blocked' ||
+      doc.status === 'ai_safe' ||
+      doc.status === 'restricted') &&
+    doc.curator === null
+  ) {
+    violations.push({
+      path: 'curator',
+      message:
+        'curator block is required for terminal status curated/blocked/ai_safe/restricted.',
+    });
+  }
+
+  if (
+    (doc.status === 'ai_safe' || doc.status === 'restricted') &&
+    doc.masker === null
+  ) {
+    violations.push({
+      path: 'masker',
+      message: 'masker block is required when status is ai_safe or restricted.',
+    });
+  }
+
+  if (
     doc.masker !== null &&
     (doc.curator === null || doc.curator.aiUsePolicy !== 'requires_masking')
   ) {
@@ -216,6 +241,16 @@ export function validateFirestoreDocumentInvariants(
       path: 'status',
       message:
         'status restricted requires masker.decision restricted_promoted and sensitivitySource masker.',
+    });
+  }
+
+  if (
+    doc.status === 'restricted' &&
+    (doc.sensitivityReason === null || doc.sensitivityReason.trim() === '')
+  ) {
+    violations.push({
+      path: 'sensitivityReason',
+      message: 'status restricted requires non-empty sensitivityReason.',
     });
   }
 

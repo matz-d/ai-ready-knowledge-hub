@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import type { DocumentUploadSuccessResponse } from '../../lib/documents';
 import { CuratorResultCard } from './CuratorResultCard';
+import { MaskerResultCard } from './MaskerResultCard';
 
 type UiStatus = 'idle' | 'uploading' | 'curating' | 'done' | 'error';
 
@@ -11,6 +12,9 @@ type ErrorBody = {
   docId?: string;
 };
 
+/** アップロード送信直後は短い応答でも「処理中」がチラつくのを避ける UI 遅延（ms）。 */
+const PROCESSING_INDICATOR_DELAY_MS = 400;
+
 export function UploadForm() {
   const [status, setStatus] = useState<UiStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -18,18 +22,21 @@ export function UploadForm() {
   const [success, setSuccess] = useState<DocumentUploadSuccessResponse | null>(
     null
   );
-  const curatingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** `PROCESSING_INDICATOR_DELAY_MS` 経過後に `curating` 表示へ切り替えるタイマー ID。 */
+  const processingIndicatorDelayTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
-  const clearCuratingTimer = useCallback(() => {
-    if (curatingTimer.current) {
-      clearTimeout(curatingTimer.current);
-      curatingTimer.current = null;
+  const clearProcessingIndicatorDelay = useCallback(() => {
+    if (processingIndicatorDelayTimeoutRef.current) {
+      clearTimeout(processingIndicatorDelayTimeoutRef.current);
+      processingIndicatorDelayTimeoutRef.current = null;
     }
   }, []);
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    clearCuratingTimer();
+    clearProcessingIndicatorDelay();
     setErrorMessage(null);
     setErrorDocId(null);
     setSuccess(null);
@@ -47,16 +54,16 @@ export function UploadForm() {
     formData.append('file', selected);
 
     setStatus('uploading');
-    curatingTimer.current = setTimeout(() => {
+    processingIndicatorDelayTimeoutRef.current = setTimeout(() => {
       setStatus('curating');
-    }, 400);
+    }, PROCESSING_INDICATOR_DELAY_MS);
 
     try {
       const res = await fetch('/api/documents', {
         method: 'POST',
         body: formData,
       });
-      clearCuratingTimer();
+      clearProcessingIndicatorDelay();
 
       if (res.ok) {
         const data = (await res.json()) as DocumentUploadSuccessResponse;
@@ -78,7 +85,7 @@ export function UploadForm() {
       setErrorDocId(docId);
       setStatus('error');
     } catch {
-      clearCuratingTimer();
+      clearProcessingIndicatorDelay();
       setErrorMessage('ネットワークエラーが発生しました。');
       setErrorDocId(null);
       setStatus('error');
@@ -89,7 +96,7 @@ export function UploadForm() {
     status === 'uploading'
       ? 'アップロード中…'
       : status === 'curating'
-        ? 'Curator が分類中…'
+        ? 'Curator / Masker が処理中…'
         : null;
 
   return (
@@ -134,7 +141,10 @@ export function UploadForm() {
       ) : null}
 
       {status === 'done' && success ? (
-        <CuratorResultCard result={success} />
+        <>
+          <CuratorResultCard result={success} />
+          <MaskerResultCard result={success} />
+        </>
       ) : null}
     </div>
   );

@@ -4,19 +4,47 @@ import { join } from 'node:path';
 import './styles.css';
 import { wasPromotedByMasker } from '../agents/masker/upgrade';
 import { adaptW1SnapshotEntries, type InventoryDocument } from '../lib/inventory';
+import { listInventoryDocumentsFromFirestore } from '../lib/inventoryFirestoreAdapter';
 import { buildContextPackageExportInput } from '../lib/contextPackageInput';
 import { exportContextPackageMarkdown } from '../lib/exportContextPackage';
 import type { Sensitivity } from '../agents/curator/schema';
 
 export const dynamic = 'force-dynamic';
 
-function readW1InventoryDemo():
-  | {
-      documents: InventoryDocument[];
-      exportInput: ReturnType<typeof buildContextPackageExportInput>;
-      previewMd: string;
-    }
-  | null {
+type InventorySectionState = {
+  source: 'firestore' | 'w1-fallback';
+  documents: InventoryDocument[];
+  exportInput: ReturnType<typeof buildContextPackageExportInput>;
+  previewMd: string;
+  heading: string;
+  kicker: string;
+  note: string;
+  reviewedLabel: string;
+  fallbackReason?: string;
+};
+
+function buildInventoryState(args: {
+  source: InventorySectionState['source'];
+  documents: InventoryDocument[];
+  purpose: string;
+  heading: string;
+  kicker: string;
+  note: string;
+  reviewedLabel: string;
+  fallbackReason?: string;
+}): InventorySectionState {
+  const exportInput = buildContextPackageExportInput({
+    purpose: args.purpose,
+    documents: args.documents,
+  });
+  const fullMd = exportContextPackageMarkdown(exportInput);
+  const previewMd = fullMd.split('\n').slice(0, 36).join('\n');
+  return { ...args, exportInput, previewMd };
+}
+
+function readW1InventoryFallback(
+  fallbackReason: string
+): InventorySectionState | null {
   try {
     const snapshotPath = join(
       process.cwd(),
@@ -24,16 +52,40 @@ function readW1InventoryDemo():
     );
     const raw = JSON.parse(readFileSync(snapshotPath, 'utf-8'));
     const documents = adaptW1SnapshotEntries(raw);
-    const exportInput = buildContextPackageExportInput({
-      purpose:
-        'W1 snapshot demo — adapted from docs/w1-artifacts (not live Firestore)',
+    return buildInventoryState({
+      source: 'w1-fallback',
       documents,
+      purpose:
+        'Fallback demo: W1 snapshot adapted from docs/w1-artifacts because Firestore inventory was unavailable',
+      heading: 'Knowledge Inventory（W1 snapshot fallback）',
+      kicker: 'Demo fallback',
+      note:
+        'Firestore documents collection を正本として読もうとしましたが失敗したため、退避済み W1 snapshot を fallback 表示しています。実データとは同期していません。',
+      reviewedLabel: 'inventory.snapshot の行数',
+      fallbackReason,
     });
-    const fullMd = exportContextPackageMarkdown(exportInput);
-    const previewMd = fullMd.split('\n').slice(0, 36).join('\n');
-    return { documents, exportInput, previewMd };
   } catch {
     return null;
+  }
+}
+
+async function readInventorySection(): Promise<InventorySectionState | null> {
+  try {
+    const documents = await listInventoryDocumentsFromFirestore();
+    return buildInventoryState({
+      source: 'firestore',
+      documents,
+      purpose: 'Firestore documents inventory - effective metadata for AI-ready review',
+      heading: 'Knowledge Inventory（Firestore documents）',
+      kicker: 'Live Inventory',
+      note:
+        'Firestore documents collection の effective fields を読み、Curator / Masker の判定結果を Inventory と Context Package 入力へ変換しています。',
+      reviewedLabel: 'Firestore terminal document count',
+    });
+  } catch (e) {
+    const fallbackReason = e instanceof Error ? e.message : String(e);
+    console.error('[inventory] Firestore inventory read failed', e);
+    return readW1InventoryFallback(fallbackReason);
   }
 }
 
@@ -48,6 +100,11 @@ function sensitivityPillClass(sensitivity: Sensitivity): string {
     case 'Public':
       return 'sensitivity-pill sensitivity-public';
   }
+}
+
+function statusBadgeClass(status: InventoryDocument['status']): string {
+  const suffix = status.replace('_', '-');
+  return `document-flow-status-badge document-flow-status-badge--${suffix}`;
 }
 
 const pipelineSteps = [
@@ -96,9 +153,9 @@ const implementationStatus = [
   },
   {
     label: 'Knowledge Inventory UI',
-    status: 'demo',
+    status: 'available',
     detail:
-      'トップでは W1 snapshot を読み取り時に適用した一覧と Package 件数のみ（Firestore 一覧は今後）。',
+      'Firestore documents collection を正本として一覧と Package 件数を表示する。',
   },
   {
     label: 'Strategist',
@@ -117,8 +174,8 @@ const curatorFields = [
   'rationale',
 ];
 
-export default function Home() {
-  const inventoryDemo = readW1InventoryDemo();
+export default async function Home() {
+  const inventoryState = await readInventorySection();
 
   return (
     <main className="page-shell">
@@ -178,83 +235,107 @@ export default function Home() {
         </div>
       </section>
 
-      {inventoryDemo ? (
+      {inventoryState ? (
         <section
           className="section-block inventory-demo-section"
           aria-labelledby="inventory-demo-heading"
         >
           <div className="section-heading">
             <div>
-              <p className="chapter-kicker">Task3 demo</p>
-              <h2 id="inventory-demo-heading">
-                Knowledge Inventory（W1 snapshot 適用）
-              </h2>
+              <p className="chapter-kicker">{inventoryState.kicker}</p>
+              <h2 id="inventory-demo-heading">{inventoryState.heading}</h2>
             </div>
             <p className="inventory-demo-note">
-              退避した LLM 出力 JSON をサーバーで読み取り、Masker の Restricted
-              昇格と Context Package 除外ルールを適用しています。Firestore
-              とは同期していません。
+              {inventoryState.note}
+              {inventoryState.fallbackReason ? (
+                <>
+                  <br />
+                  <span>Firestore error: {inventoryState.fallbackReason}</span>
+                </>
+              ) : null}
             </p>
           </div>
 
           <div className="package-summary-grid" aria-label="Context Package summary">
             <div className="package-summary-card">
               <span>Included in export</span>
-              <strong>{inventoryDemo.exportInput.includedDocuments.length}</strong>
+              <strong>{inventoryState.exportInput.includedDocuments.length}</strong>
               <p>Full AI-Ready Sources に本文が載る想定</p>
             </div>
             <div className="package-summary-card package-summary-card--warn">
               <span>Human review</span>
               <strong>
-                {inventoryDemo.exportInput.humanReviewDocuments?.length ?? 0}
+                {inventoryState.exportInput.humanReviewDocuments?.length ?? 0}
               </strong>
               <p>Restricted、未マスク機密、など</p>
             </div>
             <div className="package-summary-card">
               <span>Reviewed count</span>
-              <strong>{inventoryDemo.exportInput.sourceDocumentsReviewed}</strong>
-              <p>inventory.snapshot の行数</p>
+              <strong>{inventoryState.exportInput.sourceDocumentsReviewed}</strong>
+              <p>{inventoryState.reviewedLabel}</p>
             </div>
           </div>
 
-          <div className="inventory-card-grid">
-            {inventoryDemo.documents.map((doc) => (
-              <article className="inventory-card" key={doc.id}>
-                <header className="inventory-card-header">
-                  <h3 className="inventory-card-title">{doc.fileName}</h3>
-                  <span
-                    className={sensitivityPillClass(doc.sensitivity)}
-                    title="effective sensitivity"
-                  >
-                    {doc.sensitivity}
-                  </span>
-                </header>
-                <p className="inventory-card-meta">
-                  {doc.documentType} · {doc.businessDomain}
-                </p>
-                <dl className="inventory-card-dl">
-                  <div>
-                    <dt>AI policy</dt>
-                    <dd>{doc.aiUsePolicy}</dd>
-                  </div>
-                  <div>
-                    <dt>Source</dt>
-                    <dd>{doc.sensitivitySource}</dd>
-                  </div>
-                </dl>
-                {wasPromotedByMasker(doc) ? (
-                  <p className="inventory-masker-promo" role="status">
-                    Masker により Restricted へ格上げ（原本 Curator:{' '}
-                    {doc.originalCuratorSensitivity ?? '—'}）
+          {inventoryState.documents.length > 0 ? (
+            <div className="inventory-card-grid">
+              {inventoryState.documents.map((doc) => (
+                <article className="inventory-card" key={doc.id}>
+                  <header className="inventory-card-header">
+                    <h3 className="inventory-card-title">{doc.fileName}</h3>
+                    <span
+                      className={sensitivityPillClass(doc.sensitivity)}
+                      title="effective sensitivity"
+                    >
+                      {doc.sensitivity}
+                    </span>
+                  </header>
+                  <p className="inventory-card-meta">
+                    {doc.documentType} · {doc.businessDomain}
                   </p>
-                ) : null}
-              </article>
-            ))}
-          </div>
+                  <dl className="inventory-card-dl">
+                    <div>
+                      <dt>Status</dt>
+                      <dd>
+                        <span className={statusBadgeClass(doc.status)}>
+                          {doc.status}
+                        </span>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>AI policy</dt>
+                      <dd>{doc.aiUsePolicy}</dd>
+                    </div>
+                    <div>
+                      <dt>Source</dt>
+                      <dd>{doc.sensitivitySource}</dd>
+                    </div>
+                    <div>
+                      <dt>AI-safe path</dt>
+                      <dd>{doc.aiSafeStoragePath ?? '—'}</dd>
+                    </div>
+                  </dl>
+                  {wasPromotedByMasker(doc) ? (
+                    <p className="inventory-masker-promo" role="status">
+                      Masker により Restricted へ格上げ（原本 Curator:{' '}
+                      {doc.originalCuratorSensitivity ?? '—'}）
+                    </p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="inventory-empty-state">
+              <h3>Firestore の Inventory はまだ空です</h3>
+              <p>
+                terminal status の document が作られるとここに表示されます。まずは{' '}
+                <Link href="/upload">/upload</Link> から文書をアップロードしてください。
+              </p>
+            </div>
+          )}
 
           <div className="package-preview-block">
             <h3 className="package-preview-heading">Context Package 先頭プレビュー</h3>
-            <pre className="package-preview-pre">{inventoryDemo.previewMd}</pre>
+            <pre className="package-preview-pre">{inventoryState.previewMd}</pre>
           </div>
         </section>
       ) : null}
@@ -266,7 +347,8 @@ export default function Home() {
             <h2 id="runtime-heading">固定デモではなく、実行経路を中心にする</h2>
           </div>
           <p>
-            この画面は固定サンプル出力を読みません。文書の実アップロードと分類は{' '}
+            Inventory は Firestore documents collection を正本として読みます。Firestore
+            に接続できない場合だけ、W1 snapshot を fallback 表示します。文書の実アップロードと分類は{' '}
             <Link href="/upload">/upload</Link> から実行できます。
           </p>
         </div>

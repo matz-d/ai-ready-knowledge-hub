@@ -106,6 +106,38 @@ describe('POST /api/documents', () => {
     expect(body).not.toHaveProperty('aiSafeStoragePath');
   });
 
+  it('fills contentType from extension when MIME type is empty', async () => {
+    const payload = new TextEncoder().encode('# hello');
+    const file = {
+      name: 'sample.md',
+      type: '',
+      size: payload.byteLength,
+      arrayBuffer: async () => payload.buffer,
+    };
+
+    const response = await POST({
+      formData: async () => ({
+        getAll: (name: string) => (name === 'file' ? [file] : []),
+      }),
+    } as unknown as Request);
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(200);
+    expect(orchestrateUploadProcessingMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        displayName: 'sample.md',
+        contentType: 'text/markdown',
+        content: '# hello',
+      })
+    );
+    expect(body).toEqual(
+      expect.objectContaining({
+        fileName: 'sample.md',
+        contentType: 'text/markdown',
+      })
+    );
+  });
+
   it('returns blocked success response shape', async () => {
     orchestrateUploadProcessingMock.mockResolvedValue({
       kind: 'blocked',
@@ -231,6 +263,8 @@ describe('POST /api/documents', () => {
         docId: 'doc-restricted',
         status: 'restricted',
         storagePath: 'raw/doc-restricted/sample.txt',
+        sensitivityReason: 'risk remains',
+        originalCuratorSensitivity: 'Confidential',
         masker: expect.objectContaining({
           decision: 'restricted_promoted',
           recommendedSensitivity: 'Restricted',
@@ -272,6 +306,20 @@ describe('POST /api/documents', () => {
         error: 'file フィールドにはファイルを正確に1つ指定してください。',
       })
     );
+  });
+
+  it('returns 400 when file is empty', async () => {
+    const file = new File([], 'empty.txt', { type: 'text/plain' });
+
+    const response = await POST(buildRequestWithFile(file));
+
+    expect(response.status).toBe(400);
+    await expect(parseJson(response)).resolves.toEqual(
+      expect.objectContaining({
+        error: '空のファイルはアップロードできません。',
+      })
+    );
+    expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
   });
 
   it('returns 413 when file size exceeds 1MB', async () => {
