@@ -83,6 +83,47 @@ export type FirestoreDocument = {
   maskerError: FirestoreErrorBlock | null;
 };
 
+/**
+ * Curator 入力として不変条件検証で実際に読まれるフィールドだけを満たせばよい。
+ * - 終端更新前の検証では `Date` の completedAt を許容（Firestore 書き込みは serverTimestamp）
+ * - Masker 終端の検証では文書に既存の curator ブロックがあるため `aiUsePolicy` のみのスタブ可
+ */
+export type FirestoreCuratorInvariantInput =
+  | null
+  | Pick<FirestoreCuratorBlock, 'aiUsePolicy'>
+  | (Omit<FirestoreCuratorBlock, 'completedAt'> & {
+      completedAt: Timestamp | Date;
+    });
+
+/** Masker は検証で decision / sourceContentHash が必須。completedAt などは参照しない。 */
+export type FirestoreMaskerInvariantInput =
+  | null
+  | (Pick<FirestoreMaskerBlock, 'decision' | 'sourceContentHash'> &
+      Partial<Omit<FirestoreMaskerBlock, 'decision' | 'sourceContentHash'>>);
+
+export type FirestoreDocumentInvariantInput = Pick<
+  FirestoreDocument,
+  | 'status'
+  | 'contentSha256'
+  | 'aiSafeStoragePath'
+  | 'sensitivity'
+  | 'aiUsePolicy'
+  | 'sensitivitySource'
+  | 'originalCuratorSensitivity'
+  | 'sensitivityReason'
+> & {
+  curator: FirestoreCuratorInvariantInput;
+  masker: FirestoreMaskerInvariantInput;
+};
+
+/** Masker 終端状態の invariant 検証用（実ドキュメントにはフル curator が既に存在する）。 */
+export function maskerTerminalCuratorInvariantStub(): Pick<
+  FirestoreCuratorBlock,
+  'aiUsePolicy'
+> {
+  return { aiUsePolicy: 'requires_masking' };
+}
+
 export type FirestoreDocumentTerminalStatus =
   | 'curated'
   | 'blocked'
@@ -123,19 +164,7 @@ export function terminalStatusForMaskerDecision(
 }
 
 export function validateFirestoreDocumentInvariants(
-  doc: Pick<
-    FirestoreDocument,
-    | 'status'
-    | 'contentSha256'
-    | 'aiSafeStoragePath'
-    | 'sensitivity'
-    | 'aiUsePolicy'
-    | 'sensitivitySource'
-    | 'originalCuratorSensitivity'
-    | 'sensitivityReason'
-    | 'curator'
-    | 'masker'
-  >
+  doc: FirestoreDocumentInvariantInput
 ): FirestoreSchemaViolation[] {
   const violations: FirestoreSchemaViolation[] = [];
 
@@ -263,7 +292,7 @@ export function validateFirestoreDocumentInvariants(
  * orchestrator や test から差し込むことを想定。
  */
 export function assertFirestoreInvariants(
-  doc: Parameters<typeof validateFirestoreDocumentInvariants>[0]
+  doc: FirestoreDocumentInvariantInput
 ): void {
   const violations = validateFirestoreDocumentInvariants(doc);
   if (violations.length > 0) {

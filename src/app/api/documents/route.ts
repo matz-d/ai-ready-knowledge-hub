@@ -20,10 +20,8 @@ import {
   decodeUtf8Strict,
   getAllowedExtension,
   isAllowedMimeType,
-  toSerializableCurator,
-  toSerializableMasker,
-  type DocumentUploadSuccessResponse,
 } from '../../../lib/documents';
+import { documentUploadSuccessBodyFromOrchestrate } from '../../../lib/documentUploadResponseMapper';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -130,32 +128,13 @@ export async function POST(request: Request) {
       content,
     });
 
-    const body: DocumentUploadSuccessResponse = {
-      docId: result.docId,
-      fileName: displayName,
+    const body = documentUploadSuccessBodyFromOrchestrate({
+      displayName,
       contentType,
       byteSize: buffer.length,
-      storagePath: result.storagePath,
-      status: result.kind,
-      curator: toSerializableCurator(
-        result.curator,
-        modelId,
-        result.curatorCompletedAt
-      ),
-      ...(result.kind === 'ai_safe'
-        ? {
-            aiSafeStoragePath: result.aiSafeStoragePath,
-            masker: toSerializableMasker(result.masker),
-          }
-        : {}),
-      ...(result.kind === 'restricted'
-        ? {
-            masker: toSerializableMasker(result.masker),
-            sensitivityReason: result.sensitivityReason,
-            originalCuratorSensitivity: result.originalCuratorSensitivity,
-          }
-        : {}),
-    };
+      modelId,
+      result,
+    });
 
     return NextResponse.json(body);
   } catch (e) {

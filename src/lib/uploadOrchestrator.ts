@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { DocumentReference, FieldValue as FieldValueType } from '@google-cloud/firestore';
+import type { CuratorOutputResult, AiUsePolicy, Sensitivity } from '../agents/curator/schema';
 import { curatorFlow } from '../agents/curator/flow';
 import { modelId as curatorModelId } from '../agents/_shared/genkitClient';
-import type { CuratorOutputResult } from '../agents/curator/schema';
 import { maskerPipelineFlow } from '../agents/masker/pipelineFlow';
 import type { PipelineOutput } from '../agents/masker/pipelineSchema';
 import { applyMaskerUpgrade } from '../agents/masker/upgrade';
@@ -16,8 +16,12 @@ import {
   FIRESTORE_DOCUMENT_SCHEMA_VERSION,
   assertFirestoreInvariants,
   hashContentSha256,
+  maskerTerminalCuratorInvariantStub,
   terminalStatusForCuratorPolicy,
   terminalStatusForMaskerDecision,
+  type FirestoreMaskerBlock,
+  type FirestoreMaskerInvariantInput,
+  type SensitivitySource,
 } from './firestoreSchema';
 import {
   deleteMaskedObject,
@@ -25,6 +29,72 @@ import {
   uploadMaskedObject,
   uploadRawObject,
 } from './storage';
+
+type FirestoreServerTimestamp = ReturnType<typeof FieldValue.serverTimestamp>;
+
+/** Firestore `update` に渡す masker ブロック（completedAt は serverTimestamp）。 */
+export type FirestoreMaskerWriteBlockDraft = {
+  decision: FirestoreMaskerBlock['decision'];
+  provider: FirestoreMaskerBlock['provider'];
+  maskedSpansCount: number;
+  ruleHits: FirestoreMaskerBlock['ruleHits'];
+  residualRisk: FirestoreMaskerBlock['residualRisk'];
+  rationale: FirestoreMaskerBlock['rationale'];
+  recommendedSensitivity: FirestoreMaskerBlock['recommendedSensitivity'];
+  sourceContentHash: string;
+  aiSafeSchemaVersion: FirestoreMaskerBlock['aiSafeSchemaVersion'];
+  completedAt: FirestoreServerTimestamp;
+  modelId: string;
+};
+
+export type AiSafeTerminalFirestoreUpdateDraft = {
+  status: 'ai_safe';
+  updatedAt: FirestoreServerTimestamp;
+  aiSafeStoragePath: string;
+  masker: FirestoreMaskerWriteBlockDraft;
+  maskerError: null;
+};
+
+export type RestrictedTerminalFirestoreUpdateDraft = {
+  status: 'restricted';
+  updatedAt: FirestoreServerTimestamp;
+  aiSafeStoragePath: null;
+  sensitivity: Sensitivity;
+  aiUsePolicy: AiUsePolicy;
+  sensitivitySource: SensitivitySource | null;
+  originalCuratorSensitivity: Sensitivity | null;
+  sensitivityReason: string | null;
+  masker: FirestoreMaskerWriteBlockDraft;
+  maskerError: null;
+};
+
+/** Firestore 初回 `set` 用の合成ドキュメント（serverTimestamp を createdAt/updatedAt に共有）。 */
+export type FirestoreInitialDocumentDraft = {
+  id: string;
+  schemaVersion: typeof FIRESTORE_DOCUMENT_SCHEMA_VERSION;
+  fileName: string;
+  contentType: string;
+  byteSize: number;
+  contentSha256: string;
+  storagePath: string;
+  aiSafeStoragePath: null;
+  status: 'uploaded';
+  createdAt: FieldValueType;
+  updatedAt: FieldValueType;
+  documentType: null;
+  businessDomain: null;
+  sensitivity: null;
+  freshness: null;
+  isAuthoritativeCandidate: null;
+  aiUsePolicy: null;
+  sensitivitySource: null;
+  originalCuratorSensitivity: null;
+  sensitivityReason: null;
+  curator: null;
+  curatorError: null;
+  masker: null;
+  maskerError: null;
+};
 
 // ─────────────────────────────────────────────────────────────────────
 // 公開 API
@@ -271,7 +341,7 @@ async function runCuratorPhase(args: {
         isAuthoritativeCandidate: result.isAuthoritativeCandidate,
         aiUsePolicy: result.aiUsePolicy,
         rationale: result.rationale,
-        completedAt: completedAt as never,
+        completedAt: completedAt,
         modelId: curatorModelId,
       },
       masker: null,
@@ -418,8 +488,11 @@ export async function runMaskerPhase(
           originalCuratorSensitivity:
             args.curatorEffectiveSnapshot.originalCuratorSensitivity ?? null,
           sensitivityReason: null,
-          curator: { aiUsePolicy: 'requires_masking' } as never,
-          masker: update.masker as never,
+          curator: maskerTerminalCuratorInvariantStub(),
+          masker: buildMaskerInvariantInputFromPipeline(
+            pipeline,
+            args.contentSha256
+          ),
         });
         await args.docRef.update(update);
       } catch (e) {
@@ -444,8 +517,11 @@ export async function runMaskerPhase(
       sensitivitySource: upgraded.sensitivitySource ?? null,
       originalCuratorSensitivity: upgraded.originalCuratorSensitivity ?? null,
       sensitivityReason: upgraded.sensitivityReason ?? null,
-      curator: { aiUsePolicy: 'requires_masking' } as never,
-      masker: update.masker as never,
+      curator: maskerTerminalCuratorInvariantStub(),
+      masker: buildMaskerInvariantInputFromPipeline(
+        pipeline,
+        args.contentSha256
+      ),
     });
     await args.docRef.update(update);
 
@@ -463,6 +539,43 @@ export async function runMaskerPhase(
 // ─────────────────────────────────────────────────────────────────────
 // Firestore update body builders（runMaskerPhase の中から呼ぶヘルパー）
 // ─────────────────────────────────────────────────────────────────────
+
+function buildMaskerInvariantInputFromPipeline(
+  pipeline: PipelineOutput,
+  contentSha256: string
+): Exclude<FirestoreMaskerInvariantInput, null> {
+  return {
+    decision: pipeline.decision,
+    sourceContentHash: contentSha256,
+    provider: pipeline.maskingResult.provider,
+    maskedSpansCount: pipeline.maskingResult.maskedSpans.length,
+    ruleHits: pipeline.maskingResult.ruleHits,
+    residualRisk: pipeline.rawRiskOutput.residualRisk,
+    rationale: pipeline.rawRiskOutput.rationale,
+    recommendedSensitivity: pipeline.rawRiskOutput.recommendedSensitivity,
+    aiSafeSchemaVersion: 1,
+    modelId: curatorModelId,
+  };
+}
+
+function buildMaskerWriteBlockDraft(
+  pipeline: PipelineOutput,
+  contentSha256: string
+): FirestoreMaskerWriteBlockDraft {
+  return {
+    decision: pipeline.decision,
+    provider: pipeline.maskingResult.provider,
+    maskedSpansCount: pipeline.maskingResult.maskedSpans.length,
+    ruleHits: pipeline.maskingResult.ruleHits,
+    residualRisk: pipeline.rawRiskOutput.residualRisk,
+    rationale: pipeline.rawRiskOutput.rationale,
+    recommendedSensitivity: pipeline.rawRiskOutput.recommendedSensitivity,
+    sourceContentHash: contentSha256,
+    aiSafeSchemaVersion: 1,
+    completedAt: FieldValue.serverTimestamp(),
+    modelId: curatorModelId,
+  };
+}
 
 export function maskerSummaryFromPipeline(pipeline: PipelineOutput): MaskerSummary {
   return {
@@ -485,7 +598,7 @@ export function maskerSummaryFromPipeline(pipeline: PipelineOutput): MaskerSumma
 export function buildAiSafeFirestoreUpdate(
   args: Pick<RunMaskerArgs, 'aiSafeStoragePath' | 'contentSha256'>,
   pipeline: PipelineOutput
-): Record<string, unknown> {
+): AiSafeTerminalFirestoreUpdateDraft {
   if (pipeline.decision !== 'ai_safe_ready') {
     throw new Error('buildAiSafeFirestoreUpdate requires decision=ai_safe_ready');
   }
@@ -493,19 +606,7 @@ export function buildAiSafeFirestoreUpdate(
     status: 'ai_safe',
     updatedAt: FieldValue.serverTimestamp(),
     aiSafeStoragePath: args.aiSafeStoragePath,
-    masker: {
-      decision: pipeline.decision,
-      provider: pipeline.maskingResult.provider,
-      maskedSpansCount: pipeline.maskingResult.maskedSpans.length,
-      ruleHits: pipeline.maskingResult.ruleHits,
-      residualRisk: pipeline.rawRiskOutput.residualRisk,
-      rationale: pipeline.rawRiskOutput.rationale,
-      recommendedSensitivity: pipeline.rawRiskOutput.recommendedSensitivity,
-      sourceContentHash: args.contentSha256,
-      aiSafeSchemaVersion: 1,
-      completedAt: FieldValue.serverTimestamp(),
-      modelId: curatorModelId,
-    },
+    masker: buildMaskerWriteBlockDraft(pipeline, args.contentSha256),
     maskerError: null,
   };
 }
@@ -519,7 +620,7 @@ export function buildRestrictedFirestoreUpdate(
   args: Pick<RunMaskerArgs, 'contentSha256'>,
   pipeline: PipelineOutput,
   upgraded: EffectiveSnapshotForUpgrade
-): Record<string, unknown> {
+): RestrictedTerminalFirestoreUpdateDraft {
   if (pipeline.decision !== 'restricted_promoted') {
     throw new Error(
       'buildRestrictedFirestoreUpdate requires decision=restricted_promoted'
@@ -531,22 +632,10 @@ export function buildRestrictedFirestoreUpdate(
     aiSafeStoragePath: null,
     sensitivity: upgraded.sensitivity,
     aiUsePolicy: upgraded.aiUsePolicy,
-    sensitivitySource: upgraded.sensitivitySource,
+    sensitivitySource: upgraded.sensitivitySource ?? null,
     originalCuratorSensitivity: upgraded.originalCuratorSensitivity ?? null,
     sensitivityReason: upgraded.sensitivityReason ?? null,
-    masker: {
-      decision: pipeline.decision,
-      provider: pipeline.maskingResult.provider,
-      maskedSpansCount: pipeline.maskingResult.maskedSpans.length,
-      ruleHits: pipeline.maskingResult.ruleHits,
-      residualRisk: pipeline.rawRiskOutput.residualRisk,
-      rationale: pipeline.rawRiskOutput.rationale,
-      recommendedSensitivity: pipeline.rawRiskOutput.recommendedSensitivity,
-      sourceContentHash: args.contentSha256,
-      aiSafeSchemaVersion: 1,
-      completedAt: FieldValue.serverTimestamp(),
-      modelId: curatorModelId,
-    },
+    masker: buildMaskerWriteBlockDraft(pipeline, args.contentSha256),
     maskerError: null,
   };
 }
@@ -611,7 +700,7 @@ function buildInitialDocumentBody(args: {
   byteSize: number;
   contentSha256: string;
   storagePath: string;
-}): Record<string, unknown> {
+}): FirestoreInitialDocumentDraft {
   const now: FieldValueType = FieldValue.serverTimestamp();
   assertFirestoreInvariants({
     status: 'uploaded',

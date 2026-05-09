@@ -19,6 +19,15 @@ function bucketFile(objectPath: string) {
 }
 
 /**
+ * Context Package export 用に GCS object を UTF-8 text として読む。
+ * 本文の正本は Firestore metadata ではなく GCS にあるため、export adapter から使う。
+ */
+export async function readTextObject(objectPath: string): Promise<string> {
+  const [body] = await bucketFile(objectPath).download();
+  return body.toString('utf-8');
+}
+
+/**
  * 原本バイナリを GCS に保存する。パスは `raw/{docId}/{safeOriginalFileName}` 形式。
  */
 export async function uploadRawObject(

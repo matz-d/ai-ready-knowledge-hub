@@ -14,7 +14,9 @@
     "masker:risk": "tsx scripts/runMaskerRisk.ts",
     "masker:pipeline": "tsx scripts/runMaskerPipeline.ts",
     "inventory:snapshot": "tsx scripts/generateInventorySnapshot.ts",
-    "context:demo": "tsx scripts/runContextPackageDemo.ts",
+    "context:demo": "npm run context:demo:live",
+    "context:demo:live": "tsx scripts/runContextPackageDemo.ts --live",
+    "context:demo:w1": "tsx scripts/runContextPackageDemo.ts --w1",
     "curator:ui": "genkit start -- tsx scripts/runCurator.ts"
   },
   "dependencies": {

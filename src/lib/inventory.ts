@@ -37,6 +37,8 @@ export type InventoryDocument = {
   masker?: SerializableMaskerBlock;
   maskerEvaluation?: ResidualRiskOutputResult;
   aiSafeContent?: string;
+  /** GCS read failed during Context Package assembly; row must not join included bodies. */
+  contextPackageBodyLoadError?: string;
 };
 
 /** One row from `docs/w1-artifacts/inventory.snapshot.json` (historical artifact; do not mutate file). */

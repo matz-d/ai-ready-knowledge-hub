@@ -32,10 +32,13 @@ function buildInventoryState(args: {
   note: string;
   reviewedLabel: string;
   fallbackReason?: string;
+  /** W1 snapshot fallback only — real exports omit placeholder bodies by default. */
+  allowPlaceholderBodies?: boolean;
 }): InventorySectionState {
   const exportInput = buildContextPackageExportInput({
     purpose: args.purpose,
     documents: args.documents,
+    allowPlaceholderBodies: args.allowPlaceholderBodies,
   });
   const fullMd = exportContextPackageMarkdown(exportInput);
   const previewMd = fullMd.split('\n').slice(0, 36).join('\n');
@@ -63,6 +66,7 @@ function readW1InventoryFallback(
         'Firestore documents collection を正本として読もうとしましたが失敗したため、退避済み W1 snapshot を fallback 表示しています。実データとは同期していません。',
       reviewedLabel: 'inventory.snapshot の行数',
       fallbackReason,
+      allowPlaceholderBodies: true,
     });
   } catch {
     return null;
