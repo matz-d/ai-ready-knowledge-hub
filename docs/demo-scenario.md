@@ -1,5 +1,7 @@
 # 3分デモシナリオ
 
+> この文書は動画デモのストーリーボードです。実行手順は [docs/demo-runbook.md](demo-runbook.md) を参照してください。
+
 ## 主役
 
 **Purpose Query** (Strategist Agent の知性)

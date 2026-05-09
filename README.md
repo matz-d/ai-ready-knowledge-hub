@@ -27,7 +27,7 @@
 - **W1 統合 (5/8 PM)**: `poc/w1/` を削除し、Curator/Masker の schema・prompt・Genkit flow を `src/agents/{curator,masker,_shared}/` の正本へ昇格。固定デモ用 fixture は通常 UI から外し、W1 の実 LLM snapshot は `docs/w1-artifacts/` に回顧用 artifact として退避。
 - **Task1 (W2 Walking Skeleton)**: `/upload` → `POST /api/documents` → Cloud Storage (`raw/{docId}/{safeOriginalFileName}`) → Firestore (`documents/{docId}`) → `curatorFlow` → 単票結果表示まで実装。実 GCP 接続で `HTTP 200`、GCS object、Firestore `status=curated` を確認済み。
 - **Task2 (Masker Pipeline MVP)**: `SimpleMasker` → 既存 `maskerRiskFlow` → `ai_safe_ready` / `restricted_promoted` の pipeline と CLI (`npm run masker:pipeline`) を実装。実 Vertex 接続で契約書サンプルは `restricted_promoted`、顧客対応メモは `ai_safe_ready` を確認済み。
-- **Task3 (Restricted 除外の受け皿)**: `applyMaskerUpgrade`、W1 snapshot adapter、Context Package input builder を実装。Restricted 文書は `Full AI-Ready Sources` から除外され、human review として出力される。`npm run context:demo` は `context:demo:live` の alias。live は Firestore の terminal メタデータに加え、`ai_safe` は `aiSafeStoragePath`、`curated` は `storagePath` から GCS 本文を読み込んで export する（`src/lib/contextPackageFirestoreAdapter.ts` / `readTextObject`）。バケット名は `KNOWLEDGE_HUB_BUCKET`、GCP 認証は ADC（例: `gcloud auth application-default login`）。オフライン検証は `npm run context:demo:w1`。トップページの Inventory は Firestore 正本を優先し、読み取り失敗時のみ W1 snapshot にフォールバック（フォールバック時のみプレースホルダ本文を許可）。
+- **Task3 (Restricted 除外の受け皿)**: `applyMaskerUpgrade`、W1 snapshot adapter、Context Package input builder を実装。Restricted 文書は `Full AI-Ready Sources` から除外され、human review として出力される。`npm run context:demo` は **live default**（引数なしで live、`--w1` 指定で fixture）として動作する。`context:demo:live` は Firestore terminal metadata に加え、`ai_safe` は `aiSafeStoragePath`、`curated` は `storagePath` から GCS 本文を読み込んで export する（`src/lib/contextPackageFirestoreAdapter.ts` / `readTextObject`）。バケット名は `KNOWLEDGE_HUB_BUCKET`、GCP 認証は ADC（例: `gcloud auth application-default login`）。`context:demo:live` は fallback せず、Firestore/GCS 条件不備時は non-zero で終了する。オフライン検証は `npm run context:demo:w1`。トップページの Inventory は Firestore 正本を優先し、読み取り失敗時のみ W1 snapshot にフォールバック（フォールバック時のみプレースホルダ本文を許可）。
 - 詳細振り返り: [docs/week1-retrospective.md](docs/week1-retrospective.md)
 
 ### コードの位置 (Task1/2/3 完了時点)
@@ -74,10 +74,16 @@ sample-data/
 | `npm run masker:risk [path]` | A8 residualRisk 評価 |
 | `npm run masker:pipeline [path]` | 原本 → SimpleMasker → A8 residualRisk → `ai_safe_ready` / `restricted_promoted` |
 | `npm run inventory:snapshot` | 実 LLM 出力で `docs/w1-artifacts/inventory.snapshot.json` を再生成 |
-| `npm run context:demo` | `context:demo:live` の alias（Firestore/GCS 正本のみ） |
-| `npm run context:demo:live` | Firestore/GCS 正本から Context Package Markdown を出力（fallback なし。`documents` が空、または export 対象が 0 件なら終了コード 1） |
-| `npm run context:demo:w1` | offline W1 fixture から Context Package Markdown を出力（Firestore/GCS 非接続） |
+| `npm run context:demo` | Context Package demo の統一エントリ。デフォルトは live、`--w1` 指定で fixture (`npm run context:demo -- --w1`) |
+| `npm run context:demo:live` | Firestore documents + GCS bodies から Context Package Markdown を出力（fallback なし。Firestore/GCS 条件不備時は終了コード 1） |
+| `npm run context:demo:w1` | W1 snapshot fixture から Context Package Markdown を出力する offline demo（Firestore/GCS 非接続） |
 | `npm run curator:ui` | Genkit dev UI で flow を観察 |
+
+### セキュリティ境界の現状 (MVP)
+
+- Cloud DLP / Document AI / Drive 連携は**未導入**（次ステップ）。
+- 現在のマスキングは `SimpleMasker` + Gemini residual risk 判定 (`maskerRiskFlow`)。
+- `context:demo:live` では、GCS 本文取得に失敗した文書は export 全体を落とさず human review に回し、読めた文書のみ `Full AI-Ready Sources` に含める。
 
 ### HTTP API（upload と Curator 単体）
 
@@ -100,6 +106,7 @@ sample-data/
 |---|---|
 | [docs/concept.md](docs/concept.md) | プロダクトコンセプト、提供価値、物語の核 |
 | [docs/scope.md](docs/scope.md) | MVPでやること・やらないこと |
+| [docs/demo-runbook.md](docs/demo-runbook.md) | Upload → Firestore/GCS → Inventory → Context Package の live demo 実行手順 |
 | [docs/demo-scenario.md](docs/demo-scenario.md) | 3分デモのストーリーボード |
 | [docs/hackathon.md](docs/hackathon.md) | ハッカソン要件、スケジュール、審査基準 |
 | [docs/architecture.md](docs/architecture.md) | システム構成、4エージェント、データフロー |
