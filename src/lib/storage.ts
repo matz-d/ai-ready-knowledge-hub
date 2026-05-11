@@ -28,6 +28,14 @@ export async function readTextObject(objectPath: string): Promise<string> {
 }
 
 /**
+ * GCS object を raw bytes として読む。binary extractor 用。
+ */
+export async function readRawObject(objectPath: string): Promise<Buffer> {
+  const [body] = await bucketFile(objectPath).download();
+  return body;
+}
+
+/**
  * 原本バイナリを GCS に保存する。パスは `raw/{docId}/{safeOriginalFileName}` 形式。
  */
 export async function uploadRawObject(

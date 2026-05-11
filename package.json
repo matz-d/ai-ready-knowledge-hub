@@ -16,6 +16,7 @@
     "masker:risk": "tsx scripts/runMaskerRisk.ts",
     "masker:pipeline": "tsx scripts/runMaskerPipeline.ts",
     "masker:dlp:smoke": "tsx scripts/runDlpMaskerSmoke.ts",
+    "chunks:regenerate": "tsx scripts/regenerateChunks.ts",
     "inventory:snapshot": "tsx scripts/generateInventorySnapshot.ts",
     "context:demo": "tsx scripts/runContextPackageDemo.ts",
     "context:demo:live": "tsx scripts/runContextPackageDemo.ts --live",
@@ -32,6 +33,7 @@
     "next": "^16.0.10",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
+    "xlsx": "^0.18.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {

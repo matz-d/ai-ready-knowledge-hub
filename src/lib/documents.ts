@@ -4,7 +4,7 @@ import type { FirestoreDocumentStatus } from './firestoreSchema';
 
 export const DOCUMENTS_COLLECTION = 'documents';
 
-export const MAX_UPLOAD_BYTES = 1 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 const ALLOWED_EXTENSIONS = ['.txt', '.md', '.csv'] as const;
 

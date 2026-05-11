@@ -322,9 +322,9 @@ describe('POST /api/documents', () => {
     expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
   });
 
-  it('returns 413 when file size exceeds 1MB', async () => {
+  it('returns 413 when file size exceeds 5MB', async () => {
     const oversized = new File(
-      [Buffer.alloc(1 * 1024 * 1024 + 1)],
+      [Buffer.alloc(5 * 1024 * 1024 + 1)],
       'large.txt',
       { type: 'text/plain' }
     );
@@ -334,9 +334,20 @@ describe('POST /api/documents', () => {
     expect(response.status).toBe(413);
     await expect(parseJson(response)).resolves.toEqual(
       expect.objectContaining({
-        error: 'ファイルサイズは 1 MB 以下にしてください。',
+        error: 'ファイルサイズは 5 MB 以下にしてください。',
       })
     );
+  });
+
+  it('accepts file size at 5MB limit', async () => {
+    const atLimit = new File([Buffer.alloc(5 * 1024 * 1024)], 'limit.txt', {
+      type: 'text/plain',
+    });
+
+    const response = await POST(buildRequestWithFile(atLimit));
+
+    expect(response.status).toBe(200);
+    expect(orchestrateUploadProcessingMock).toHaveBeenCalledTimes(1);
   });
 
   it('returns 415 when extension is unsupported', async () => {

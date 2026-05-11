@@ -77,7 +77,7 @@ export async function POST(request: Request) {
 
   if (file.size > MAX_UPLOAD_BYTES) {
     return NextResponse.json(
-      { error: 'ファイルサイズは 1 MB 以下にしてください。' },
+      { error: 'ファイルサイズは 5 MB 以下にしてください。' },
       { status: 413 }
     );
   }

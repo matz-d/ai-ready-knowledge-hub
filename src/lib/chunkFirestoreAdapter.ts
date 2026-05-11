@@ -137,6 +137,12 @@ export function createChunkFirestoreAdapter(db?: Firestore): ChunkFirestoreAdapt
       .doc(docId)
       .get();
 
+    if (!parentSnapshot.exists) {
+      throw new Error(
+        `Parent document not found: ${DOCUMENTS_COLLECTION}/${docId}`
+      );
+    }
+
     const parentData = parentSnapshot.data() as
       | { id?: string; status?: string }
       | undefined;

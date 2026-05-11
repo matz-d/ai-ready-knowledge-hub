@@ -339,6 +339,18 @@ describe('chunkFirestoreAdapter (fake Firestore)', () => {
     expect(result).toEqual([]);
   });
 
+  it('replaceChunksForDocument throws when the parent document does not exist', async () => {
+    const fakeDb = new FakeFirestore();
+    const adapter = createChunkFirestoreAdapter(fakeDb as unknown as Firestore);
+    const ctx: ChunkReplaceContext = { extractorInput: EXTRACTOR_INPUT };
+
+    await expect(
+      adapter.replaceChunksForDocument('missing-doc-id', [makeChunk()], ctx)
+    ).rejects.toThrow(
+      'Parent document not found: documents/missing-doc-id'
+    );
+  });
+
   // ── Invariant violation ────────────────────────────────────────────────────
 
   it('throws on invariant violation: Restricted sensitivity requires aiUsePolicy blocked', async () => {

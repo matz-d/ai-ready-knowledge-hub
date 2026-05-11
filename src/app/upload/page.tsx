@@ -14,7 +14,7 @@ export default function UploadPage() {
         <p className="eyebrow">Upload</p>
         <h1>文書を1件アップロードして分類する</h1>
         <p className="lead upload-lead">
-          .txt / .md / .csv（最大 1 MB）を送信すると、原本を Cloud Storage に保存し、
+          .txt / .md / .csv（最大 5 MB）を送信すると、原本を Cloud Storage に保存し、
           Firestore にメタデータを記録したうえで Curator が即時に分類します。
         </p>
       </header>
