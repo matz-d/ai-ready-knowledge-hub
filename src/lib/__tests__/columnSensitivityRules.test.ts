@@ -114,6 +114,41 @@ describe('upgradeChunkSensitivityFromColumnHeader', () => {
     expect(upgraded.sensitivityReason).toBe('PII column requires Restricted');
   });
 
+  it('picks the highest sensitivity rank among multiple matching rules, not array order', () => {
+    const confidentialFirst: ColumnSensitivityRule[] = [
+      {
+        matchExact: ['顧客名'],
+        sensitivity: 'Confidential',
+        aiUsePolicy: 'requires_masking',
+        reason: 'Confidential customer column',
+      },
+      {
+        matchExact: ['顧客名'],
+        sensitivity: 'Restricted',
+        aiUsePolicy: 'blocked',
+        reason: 'Restricted customer column',
+      },
+    ];
+    const restrictedFirst: ColumnSensitivityRule[] = [
+      confidentialFirst[1],
+      confidentialFirst[0],
+    ];
+
+    const chunk = buildChunk(markdownTable('顧客名'), {
+      sensitivity: 'Internal',
+      aiUsePolicy: 'direct',
+      sensitivitySource: 'inherited',
+    });
+
+    for (const rules of [confidentialFirst, restrictedFirst]) {
+      const upgraded = upgradeChunkSensitivityFromColumnHeader(chunk, rules);
+      expect(upgraded.sensitivity).toBe('Restricted');
+      expect(upgraded.aiUsePolicy).toBe('blocked');
+      expect(upgraded.sensitivitySource).toBe('columnRule');
+      expect(upgraded.sensitivityReason).toBe('Restricted customer column');
+    }
+  });
+
   it('ignores markdown tables whose separator column count does not match header', () => {
     const text = '| 顧客名 | メモ |\n| --- |\n| value | note |';
     const chunk = buildChunk(text);

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as XLSX from 'xlsx';
 
 const {
   orchestrateUploadProcessingMock,
@@ -47,6 +48,27 @@ vi.mock('../../../../lib/uploadOrchestrator', () => ({
 }));
 
 import { POST } from '../route';
+
+function createWorkbookBuffer(): Buffer {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.aoa_to_sheet([
+      ['顧客名', '数量'],
+      ['Acme', 10],
+    ]),
+    '顧客一覧'
+  );
+
+  return XLSX.write(workbook, {
+    type: 'buffer',
+    bookType: 'xlsx',
+  }) as Buffer;
+}
+
+function toBlobPart(buffer: Buffer): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(buffer);
+}
 
 function buildRequestWithFile(file: File): Request {
   const formData = new FormData();
@@ -136,6 +158,70 @@ describe('POST /api/documents', () => {
         contentType: 'text/markdown',
       })
     );
+  });
+
+  it('accepts .xlsx upload and passes raw bytes plus normalized markdown content', async () => {
+    const workbookBuffer = createWorkbookBuffer();
+    const file = new File([toBlobPart(workbookBuffer)], 'sales.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    const response = await POST(buildRequestWithFile(file));
+
+    expect(response.status).toBe(200);
+    const uploadInput = orchestrateUploadProcessingMock.mock.calls[0]?.[0];
+    expect(uploadInput).toEqual(
+      expect.objectContaining({
+        displayName: 'sales.xlsx',
+        contentType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        content: expect.stringContaining('## 顧客一覧'),
+      })
+    );
+    expect(Buffer.compare(uploadInput.buffer, workbookBuffer)).toBe(0);
+    expect(uploadInput.content).toContain('| 顧客名 | 数量 |');
+    expect(uploadInput.content).toContain('| Acme | 10 |');
+  });
+
+  it('fills .xlsx contentType from extension when MIME type is empty', async () => {
+    const payload = createWorkbookBuffer();
+    const file = {
+      name: 'sales.xlsx',
+      type: '',
+      size: payload.byteLength,
+      arrayBuffer: async () =>
+        payload.buffer.slice(
+          payload.byteOffset,
+          payload.byteOffset + payload.byteLength
+        ),
+    };
+
+    const response = await POST({
+      formData: async () => ({
+        getAll: (name: string) => (name === 'file' ? [file] : []),
+      }),
+    } as unknown as Request);
+
+    expect(response.status).toBe(200);
+    expect(orchestrateUploadProcessingMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        displayName: 'sales.xlsx',
+        contentType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        content: expect.stringContaining('| 顧客名 | 数量 |'),
+      })
+    );
+  });
+
+  it('allows official .xlsx MIME type', async () => {
+    const file = new File([toBlobPart(createWorkbookBuffer())], 'sales.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    const response = await POST(buildRequestWithFile(file));
+
+    expect(response.status).toBe(200);
+    expect(orchestrateUploadProcessingMock).toHaveBeenCalledTimes(1);
   });
 
   it('returns blocked success response shape', async () => {
@@ -358,7 +444,7 @@ describe('POST /api/documents', () => {
     expect(response.status).toBe(415);
     await expect(parseJson(response)).resolves.toEqual(
       expect.objectContaining({
-        error: '対応している拡張子は .txt / .md / .csv のみです。',
+        error: '対応している拡張子は .txt / .md / .csv / .xlsx のみです。',
       })
     );
   });

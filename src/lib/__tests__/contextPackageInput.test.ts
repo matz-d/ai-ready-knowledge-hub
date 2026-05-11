@@ -169,6 +169,41 @@ describe('buildContextPackageExportInput', () => {
     ]);
   });
 
+  it('falls back to document-only output for documents without chunks in chunk-aware exports', () => {
+    const exportInput = buildContextPackageExportInput({
+      purpose: 'hybrid',
+      documents: [
+        inventoryDoc({
+          id: 'doc-chunked',
+          fileName: 'sales.xlsx',
+          aiSafeContent: 'document body should not be used',
+        }),
+        inventoryDoc({
+          id: 'doc-legacy',
+          fileName: 'legacy.txt',
+          aiSafeContent: 'legacy document body',
+        }),
+      ],
+      chunks: [
+        knowledgeChunk({
+          docId: 'doc-chunked',
+          text: 'Chunk body',
+        }),
+      ],
+    });
+
+    expect(exportInput.includedDocuments).toEqual([
+      expect.objectContaining({
+        fileName: 'legacy.txt',
+        aiSafeContent: 'legacy document body',
+      }),
+      expect.objectContaining({
+        fileName: 'sales.xlsx (sheet=Sheet1, range=A1:B2)',
+        aiSafeContent: 'Chunk body',
+      }),
+    ]);
+  });
+
   it('routes direct-policy chunks with empty or whitespace-only text to human review', () => {
     const base = {
       purpose: 'chunk',

@@ -132,7 +132,20 @@ export function upgradeChunkSensitivityFromColumnHeader(
   }
 
   const normalizedHeaderCells = headerCells.map(normalizeHeaderValue);
-  const matchedRule = rules.find((rule) => matchesRule(normalizedHeaderCells, rule));
+
+  let matchedRule: ColumnSensitivityRule | undefined;
+  for (const rule of rules) {
+    if (!matchesRule(normalizedHeaderCells, rule)) {
+      continue;
+    }
+    if (
+      matchedRule === undefined ||
+      SENSITIVITY_RANK[rule.sensitivity] > SENSITIVITY_RANK[matchedRule.sensitivity]
+    ) {
+      matchedRule = rule;
+    }
+  }
+
   if (matchedRule === undefined) {
     return { ...chunk };
   }

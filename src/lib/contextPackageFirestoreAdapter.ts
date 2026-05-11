@@ -1,17 +1,22 @@
 import type { ContextPackageExportInput } from './exportContextPackage';
 import type { InventoryDocument } from './inventory';
+import { createChunkFirestoreAdapter } from './chunkFirestoreAdapter';
 import { buildContextPackageExportInput } from './contextPackageInput';
+import { getAllowedExtension } from './documents';
+import { xlsxToNormalizedMarkdown } from './extractors/xlsxExtractor';
 import { listInventoryDocumentsFromFirestore } from './inventoryFirestoreAdapter';
-import { readTextObject } from './storage';
+import { readRawObject, readTextObject } from './storage';
 
 /** Human-readable reason when `readBody` fails for an export candidate path. */
 export const CONTEXT_PACKAGE_GCS_BODY_UNAVAILABLE = 'GCS body unavailable';
 
 export type ContextPackageBodyReader = (objectPath: string) => Promise<string>;
+export type ContextPackageRawBodyReader = (objectPath: string) => Promise<Buffer>;
 
 export type AttachContextPackageBodiesOptions = {
   documents: InventoryDocument[];
   readBody?: ContextPackageBodyReader;
+  readRawBody?: ContextPackageRawBodyReader;
 };
 
 export type BuildFirestoreContextPackageExportInputOptions = {
@@ -21,6 +26,7 @@ export type BuildFirestoreContextPackageExportInputOptions = {
   missingKnowledge?: string[];
   questionsForHumanOwner?: string[];
   readBody?: ContextPackageBodyReader;
+  readRawBody?: ContextPackageRawBodyReader;
 };
 
 /**
@@ -50,6 +56,7 @@ export async function attachContextPackageBodies(
   options: AttachContextPackageBodiesOptions
 ): Promise<InventoryDocument[]> {
   const readBody = options.readBody ?? readTextObject;
+  const readRawBody = options.readRawBody ?? readRawObject;
 
   return Promise.all(
     options.documents.map(async (doc) => {
@@ -59,7 +66,10 @@ export async function attachContextPackageBodies(
       }
 
       try {
-        const body = await readBody(objectPath);
+        const body =
+          doc.status === 'curated' && getAllowedExtension(doc.fileName) === '.xlsx'
+            ? xlsxToNormalizedMarkdown(await readRawBody(objectPath))
+            : await readBody(objectPath);
         return {
           ...doc,
           aiSafeContent: body,
@@ -80,14 +90,38 @@ export async function buildFirestoreContextPackageExportInput(
   options: BuildFirestoreContextPackageExportInputOptions
 ): Promise<ContextPackageExportInput> {
   const documents = await listInventoryDocumentsFromFirestore(options.limit);
+  const chunkAdapter = createChunkFirestoreAdapter();
+  const chunkLists = await Promise.all(
+    documents.map((doc) => chunkAdapter.listChunksForDocument(doc.id))
+  );
+  const chunks = chunkLists.flat();
+  const docIdsWithChunks = new Set(chunks.map((chunk) => chunk.docId));
+  const documentsNeedingBodyFallback = documents.filter(
+    (doc) => !docIdsWithChunks.has(doc.id)
+  );
+
+  /*
+   * Export policy:
+   * - documents with chunks use chunk-level text/maskedText as the Full AI-Ready Sources.
+   * - documents with zero chunks keep the legacy document-body path so existing live
+   *   corpora do not become empty just because chunk regeneration has not run yet.
+   */
   const documentsWithBodies = await attachContextPackageBodies({
-    documents,
+    documents: documentsNeedingBodyFallback,
     readBody: options.readBody,
+    readRawBody: options.readRawBody,
   });
+  const bodyFallbackById = new Map(
+    documentsWithBodies.map((doc) => [doc.id, doc])
+  );
+  const documentsForExport = documents.map(
+    (doc) => bodyFallbackById.get(doc.id) ?? doc
+  );
 
   return buildContextPackageExportInput({
     purpose: options.purpose,
-    documents: documentsWithBodies,
+    documents: documentsForExport,
+    chunks,
     generatedAt: options.generatedAt,
     missingKnowledge: options.missingKnowledge,
     questionsForHumanOwner: options.questionsForHumanOwner,

@@ -189,6 +189,29 @@ function buildChunkAwareContextPackageExportInput(
   const excludedDocuments: ExcludedContextDocument[] = [];
   const humanReviewDocuments: ExcludedContextDocument[] = [];
   const parentById = new Map(options.documents.map((doc) => [doc.id, doc]));
+  const chunksByDocId = new Map<string, KnowledgeChunk[]>();
+
+  for (const chunk of options.chunks ?? []) {
+    const chunks = chunksByDocId.get(chunk.docId) ?? [];
+    chunks.push(chunk);
+    chunksByDocId.set(chunk.docId, chunks);
+  }
+
+  for (const doc of options.documents) {
+    const chunks = chunksByDocId.get(doc.id);
+    if (chunks && chunks.length > 0) {
+      continue;
+    }
+
+    const documentOnly = buildDocumentOnlyContextPackageExportInput({
+      ...options,
+      documents: [doc],
+      chunks: undefined,
+    });
+    includedDocuments.push(...documentOnly.includedDocuments);
+    excludedDocuments.push(...documentOnly.excludedDocuments);
+    humanReviewDocuments.push(...(documentOnly.humanReviewDocuments ?? []));
+  }
 
   for (const chunk of options.chunks ?? []) {
     const parent = parentById.get(chunk.docId);
@@ -266,7 +289,9 @@ function buildChunkAwareContextPackageExportInput(
 /**
  * Maps inventory documents/chunks to `exportContextPackageMarkdown` input.
  * - Without chunks: keeps existing document-only behavior.
- * - With chunks: chunk-first export with chunk-level filtering and masking rules.
+ * - With chunks: chunk-first per document when a document has chunks, with document-only
+ *   fallback for documents that still have zero chunks. This keeps older live corpora
+ *   exportable while newly chunked documents use sheet/range-aware sources.
  */
 export function buildContextPackageExportInput(
   options: BuildContextPackageInputOptions

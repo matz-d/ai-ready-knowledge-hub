@@ -16,6 +16,13 @@ export type XlsxExtractionResult = {
   chunks: KnowledgeChunk[];
 };
 
+export type XlsxMarkdownSheet = {
+  sheetName: string;
+  range: string;
+  markdownTable: string;
+  text: string;
+};
+
 const CHUNK_WARNING_THRESHOLD = 200;
 
 function normalizeCellForMarkdown(cell: string): string {
@@ -118,6 +125,44 @@ function stableChunkId(docId: string, sheetName: string, range: string): string 
   return `${docId}:xlsx:${sheetName}:${range}`;
 }
 
+function readWorkbookFromXlsxContent(
+  content: Buffer | Uint8Array
+): XLSX.WorkBook {
+  const binary = toBuffer(content);
+  return XLSX.read(binary, {
+    type: 'buffer',
+    cellDates: false,
+    raw: false,
+  });
+}
+
+export function xlsxToMarkdownSheets(
+  content: Buffer | Uint8Array
+): XlsxMarkdownSheet[] {
+  const workbook = readWorkbookFromXlsxContent(content);
+
+  return workbook.SheetNames.map((sheetName, index) => {
+    const worksheet = workbook.Sheets[sheetName];
+    const effectiveSheetName = sheetName.trim() || `Sheet${index + 1}`;
+    const range = normalizedUsedRangeA1(worksheet);
+    const rows = rowsFromUsedRange(worksheet, range);
+    const markdownTable = rowsToMarkdownTable(rows);
+
+    return {
+      sheetName: effectiveSheetName,
+      range,
+      markdownTable,
+      text: chunkTextForSheet(effectiveSheetName, markdownTable),
+    };
+  });
+}
+
+export function xlsxToNormalizedMarkdown(content: Buffer | Uint8Array): string {
+  return xlsxToMarkdownSheets(content)
+    .map((sheet) => sheet.text)
+    .join('\n\n');
+}
+
 export function extractXlsx(input: {
   docId: string;
   fileName: string;
@@ -127,38 +172,29 @@ export function extractXlsx(input: {
 }): XlsxExtractionResult {
   const now = new Date().toISOString();
   const binary = toBuffer(input.content);
-  const workbook = XLSX.read(binary, {
-    type: 'buffer',
-    cellDates: false,
-    raw: false,
-  });
+  const sheets = xlsxToMarkdownSheets(binary);
   const extractorInput = binary.toString('base64');
   const warnings =
-    workbook.SheetNames.length > CHUNK_WARNING_THRESHOLD
+    sheets.length > CHUNK_WARNING_THRESHOLD
       ? [`sheet count exceeded ${CHUNK_WARNING_THRESHOLD}; evaluate chunk strategy.`]
       : [];
 
-  const chunks = workbook.SheetNames.map((sheetName, index) => {
-    const worksheet = workbook.Sheets[sheetName];
-    const effectiveSheetName = sheetName.trim() || `Sheet${index + 1}`;
-    const range = normalizedUsedRangeA1(worksheet);
-    const rows = rowsFromUsedRange(worksheet, range);
-    const markdownTable = rowsToMarkdownTable(rows);
+  const chunks = sheets.map((sheet) => {
     const locator = {
       kind: 'spreadsheet' as const,
-      sheetName: effectiveSheetName,
-      range,
+      sheetName: sheet.sheetName,
+      range: sheet.range,
     };
 
     const baseChunk: KnowledgeChunk = {
-      id: stableChunkId(input.docId, effectiveSheetName, range),
+      id: stableChunkId(input.docId, sheet.sheetName, sheet.range),
       docId: input.docId,
       schemaVersion: KNOWLEDGE_CHUNK_SCHEMA_VERSION,
       sourceType: 'spreadsheet',
       structureType: 'table',
       locator,
       title: input.fileName,
-      text: chunkTextForSheet(effectiveSheetName, markdownTable),
+      text: sheet.text,
       sensitivity: input.documentSensitivity,
       aiUsePolicy: input.documentAiUsePolicy,
       sensitivitySource: 'inherited',
@@ -179,7 +215,7 @@ export function extractXlsx(input: {
   });
 
   return {
-    normalizedMarkdown: chunks.map((chunk) => chunk.text).join('\n\n'),
+    normalizedMarkdown: sheets.map((sheet) => sheet.text).join('\n\n'),
     chunks,
   };
 }

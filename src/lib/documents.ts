@@ -6,7 +6,7 @@ export const DOCUMENTS_COLLECTION = 'documents';
 
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
-const ALLOWED_EXTENSIONS = ['.txt', '.md', '.csv'] as const;
+const ALLOWED_EXTENSIONS = ['.txt', '.md', '.csv', '.xlsx'] as const;
 
 export type DocumentLifecycleStatus = FirestoreDocumentStatus;
 
@@ -83,6 +83,7 @@ export function isAllowedMimeType(mime: string): boolean {
     m === 'text/markdown' ||
     m === 'text/csv' ||
     m === 'application/vnd.ms-excel' ||
+    m === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
     m === 'application/octet-stream'
   );
 }

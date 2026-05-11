@@ -36,6 +36,8 @@ Upload → Firestore/GCS → Inventory → Context Package を再現するため
    # Optional: MASKER_PROVIDER=cloud-dlp
    ```
 
+   `npm run context:demo` / `context:demo:live` / `context:demo:w1` および `npm run chunks:regenerate` は、エントリの `scripts/runContextPackageDemo.ts` / `scripts/regenerateChunks.ts` が先頭で `import './loadEnv'` するため、**リポジトリルートで実行するとき** `dotenv` 経由で **`.env.local` が自動読み込み**されます（ファイルが無ければ何もしません）。別ディレクトリの cwd から `tsx` を直接叩く場合は `.env.local` が読まれないので、環境変数をシェルで渡すか cwd をルートにしてください。
+
 4. ADC を設定して認証確認
 
    ```bash
@@ -67,6 +69,7 @@ npm run dev
 - `顧客対応メモ_書式.md`（ai_safe 想定）
 - `顧問契約書_実案件サンプル.txt`（restricted になり得る）
 - `古い料金表_2023.csv`（運用条件により blocked / review 寄りになり得る）
+- **`.xlsx`**（Excel）も Phase 2 の upload 対象。料金表・顧客一覧などをシート単位で投入し、`chunks:regenerate` では CSV と同様に spreadsheet chunk 化できる
 
 ## 5. Upload 後に見るポイント
 
@@ -109,6 +112,15 @@ npm run dev
 
 - `context:demo:live`: Firestore/GCS 正本のみを読む。失敗時は fallback せず non-zero で終了。
 - `context:demo:w1`: `docs/w1-artifacts/inventory.snapshot.json` を使う完全オフライン実行。
+
+### `context:demo:live` と chunk（Phase 2）
+
+`buildFirestoreContextPackageExportInput`（`src/lib/contextPackageFirestoreAdapter.ts`）は、inventory の各 document について **`documents/{docId}/chunks` を列挙**し、得られた `KnowledgeChunk[]` を `buildContextPackageExportInput` に渡します。
+
+- **chunk が 1 件以上ある document**: `Full AI-Ready Sources` は **chunk の `text` / `maskedText`** を使い、行タイトルに `fileName (sheet=…, range=…)` 形式のヒントが付く（GCS 本文の document-only 経路は使わない）。
+- **chunk が 0 件の document**: 従来どおり GCS から `aiSafeContent` を読むフォールバック（未再生成の既存 corpus も空にならない）。
+
+確認するときは、§9 の手順で chunk を生成したうえで `npm run context:demo:live` を実行し、該当ファイルのセクションが chunk 由来になっているかを見ます。
 
 ## 7. E2E test policy
 
@@ -189,14 +201,14 @@ Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で
 
 ### 前提
 
-- Firestore に `ai_safe` 状態の document が少なくとも 1 件存在する（§4 の手順で投入済み）
-- 列ヘッダに「顧客名」を含む CSV を 1 件以上投入済みであること（sensitivity 昇格の確認用）
+- Firestore に **chunk 再生成の対象になりうる終端 document** が少なくとも 1 件ある（`curated` / `ai_safe` / `restricted` / `blocked`。`scripts/regenerateChunks.ts` の `TERMINAL_CHUNK_ELIGIBLE_STATUSES` と一致）
+- 列ヘッダに「顧客名」を含む **CSV または .xlsx** を 1 件以上投入済みであること（sensitivity 昇格の確認用。デモしやすいのは通常 `ai_safe` の spreadsheet）
 
 ### 手順
 
 1. **対象 docId を控える**
 
-   Inventory UI (`/`) または `npm run context:demo:live` の出力で `status: ai_safe` の document を 1 件選び、docId を控えます。
+   Inventory UI (`/`) または `npm run context:demo:live` の出力で、chunk 化したい **`.csv` / `.xlsx`** の document を 1 件選び、docId を控えます（上記の終端 status であること）。
 
 2. **chunk 再生成を実行**
 
@@ -204,9 +216,17 @@ Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で
    npm run chunks:regenerate -- <docId>
    ```
 
+   Cloud DLP で chunk masking まで固定して再生成したい場合:
+
+   ```bash
+   npm run chunks:regenerate -- --provider=cloud-dlp <docId>
+   ```
+
    > **設計原則（D-P2-4）: chunk 再生成は document 単位の全置換である。**  
-   > 内部処理は「旧 `chunks/` subcollection を全件 delete → 新 chunk を batch write」の 2 ステップで完結します。  
-   > 何度実行しても同じ結果になる**冪等**な操作なので、デモ中に複数回叩いても問題ありません。途中状態は残りません。
+   > CLI は実行開始時に `maskerProvider=...` を出力します。`--provider` 未指定時は `.env.local` / 環境変数 `MASKER_PROVIDER` / default の解決に従います。  
+   > 実装（`replaceChunksForDocument`）は **(1) 新 chunk を batch write（同一 `chunk.id` は上書き）→ (2) 新セットに含まれない旧 chunk id を batch delete** の順です。write を先にすることで、**write 失敗時に subcollection が空になる**のを避けています。  
+   > **削除フェーズが途中で失敗した場合**、古い chunk が **stale として残りうる**ため、その瞬間は「新しい id と古い id が混在」するなど **一貫した単一世代とは限らない**状態になり得ます。**次回 `chunks:regenerate` が最後まで成功すれば** stale は取り除かれ、収束します。  
+   > 成功パスでは何度実行しても同じ chunk 集合に収束する **冪等** な操作です。
 
 3. **Firestore コンソールで subcollection を確認**
 
@@ -215,9 +235,9 @@ Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で
    - `chunkId` / `docId` / `sourceType` / `structureType` / `locator` が存在する
    - `sensitivity` / `aiUsePolicy` / `sensitivitySource` が設定されている
 
-4. **列ヘッダ昇格の確認（顧客名を含む CSV の場合）**
+4. **列ヘッダ昇格の確認（顧客名を含む CSV / .xlsx の場合）**
 
-   列ヘッダに「顧客名」を含む CSV から生成された chunk は以下になっているはずです:
+   列ヘッダに「顧客名」を含むスプレッドシートから生成された chunk は以下になっているはずです:
 
    | フィールド | 期待値 |
    |---|---|
@@ -234,23 +254,23 @@ Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で
    npm run context:demo:live
    ```
 
-   出力の「Full AI-Ready Sources」セクションに `locator.sheetName` / `locator.range` の hint（例: `[Sheet1 A1:E20]`）が含まれることを確認します。
+   `context:demo:live` は Firestore から chunk を読み込み（§6 参照）、chunk がある document は **chunk 本文**が `Full AI-Ready Sources` に載ります。spreadsheet の場合、見出しに **`fileName (sheet=…, range=…)`** が付くことを確認します（Markdown 内の `[Sheet1 A1:E20]` のような表記は export 実装に依存します）。
 
 ### Phase 2 固有のよくある失敗
 
 | 症状 | 確認ポイント |
 |---|---|
-| `docId not found` | Firestore に `ai_safe` document が存在するか確認 |
-| `chunks/` が空 | CSV / xlsx 以外の document を指定した場合、Phase 2 では extractor 未対応 |
+| `Document not found` / 終端以外で弾かれる | docId の typo、または status が `curated` / `ai_safe` / `restricted` / `blocked` 以外（chunk 非対象） |
+| `chunks/` が空 | `.csv` / `.xlsx` 以外の document を指定した場合、Phase 2 の CLI extractor は未対応 |
 | chunk の `sensitivity` が昇格しない | 列ヘッダが `columnSensitivityRules.ts` のホワイトリストにない。部分一致・表記揺れを確認する |
-| 再実行で chunk が増える | 起こらないはず。全置換なので再実行しても同一 chunk 数になる |
+| 再実行で chunk **件数**が期待とずれる | 成功完了のたびに新 id 集合へ収束する設計。削除フェーズ失敗直後は stale が残り件数が一時的に増えうる → **再実行で成功すれば**収束 |
 
 ---
 
 ## 10. よくある失敗
 
 - `KNOWLEDGE_HUB_BUCKET` 未設定
-  - `.env.local` を確認
+  - リポジトリルートの `.env.local` を確認（`npm run context:demo:live` は `loadEnv` で読み込み）。ルート以外の cwd で `tsx` 直実行している場合は環境変数が未注入のことがある
 - ADC 未設定
   - `gcloud auth application-default login` を再実行
 - ADC reauth (`invalid_rapt`)

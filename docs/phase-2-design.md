@@ -47,7 +47,7 @@ Phase 1 (Cloud DLP 導入) は **実装ほぼ完了、live upload 経由の GCS 
 4. **Curator/Masker の LLM コール数は document 単位 1+1 のまま増やさない**。chunk は extractor の併産物として生成し、curator は document 全体（markdown 正規化テキスト）を見る。
 5. **Chunk sensitivity は document curator 結果を初期値として継承し、列ヘッダ等の純関数ルールで chunk 単位に昇格させる**（`applyMaskerUpgrade` と同じ哲学）。
 6. **Phase 2 の chunk 生成トリガーは CLI script のみ**。upload 時の自動生成、UI からの API トリガーは Phase 2 では入れない。
-7. **chunk subcollection 再生成は document 単位の全置換**。冪等性は de-dup ではなく delete + batch write で担保する。
+7. **chunk subcollection 再生成は document 単位の全置換**。冪等性は de-dup ではなく **新 chunk を batch write（同一 `chunk.id` は上書き）→ 旧セットにあって新セットにない id を削除**で担保する。書き込み失敗時に subcollection が空になるのを避けるため、**delete は write の後**（実装は `chunkFirestoreAdapter.replaceChunksForDocument`）。
 
 ---
 
@@ -93,25 +93,26 @@ Phase 1 (Cloud DLP 導入) は **実装ほぼ完了、live upload 経由の GCS 
 
 **Phase 2:**
 - `npm run chunks:regenerate -- <docId>` で手動再生成
-- 再生成は **document 単位の全置換**（旧 chunk subcollection を delete → 新 chunk を batch write）
+- `--provider=simple-rule|cloud-dlp` で chunk masking provider を明示できる。未指定時は `MASKER_PROVIDER` / default の解決に従い、CLI ログに実際の provider を出す。
+- 再生成は **document 単位の全置換**（**新 chunk を batch write → 新セットに含まれない旧 chunk id を削除**。削除フェーズが write 成功後に失敗した場合は **stale chunk が一時的に残りうる**が、**次回の再生成が成功すれば収束**する）
 - demo runbook に明示
 
 **Phase 2.5 以降の余地:**
 - `POST /api/documents/:docId/chunks` を後で足す
 - Strategist 起動時の on-demand 生成
 
-### D-P2-5: `MAX_UPLOAD_BYTES` = **据え置き 1 MiB**
+### D-P2-5: `MAX_UPLOAD_BYTES` と **`.xlsx` upload**
 
-**Phase 2:**
-- CSV 主軸で進める。料金表・顧客一覧・案件表は 1 MiB に十分収まる。
-- `.xlsx` 対応 PR の中でのみ 5 MiB へ引き上げる（rollback コスト評価とテスト改修込み）。
+**Phase 2（現行実装）:**
+- Upload 許可拡張子に **`.xlsx` を含む**（`src/lib/documents.ts` の `ALLOWED_EXTENSIONS`）。`MAX_UPLOAD_BYTES` はスプレッドシート実務に合わせ **5 MiB**（CSV / xlsx 共通上限）。
+- `chunks:regenerate` は **`.csv` / `.xlsx`** の GCS 正本から extractor を切り替えて chunk 化する。
 
 ### D-P2-6: Curator/Masker 入力 = **document 全体を 1 つの markdown table として渡す（chunk は併産）**
 
 - `curatorFlow({ fileName, content })` のシグネチャは変えない。
 - CSV / xlsx extractor は以下を**同じソースから併産**する:
   1. document 全体を表す**正規化された markdown table テキスト**（curator/masker 入力）
-  2. **chunk 配列**（sheet 単位や used range 単位）
+  2. **chunk 配列**（CSV は 1 file = 1 chunk、xlsx は **1 sheet の used range = 1 chunk**）
 - 「curator が見たテキスト」と「chunk.text を結合したもの」を整合させ、後の Strategist 監査を単純にする。
 
 ### D-P2-7: `KnowledgeChunkLocator` = **Zod discriminated union**
@@ -281,9 +282,9 @@ export type BuildContextPackageInputOptions = {
 2. CSV extractor (`src/lib/extractors/csvExtractor.ts`) — markdown table 正規化 + chunk 配列の併産
 3. CSV extractor unit test (header rule・range・sourceHash 冪等性)
 4. `columnSensitivityRules.ts` + pure `upgradeChunkSensitivityFromColumnHeader` + ユニットテスト
-5. `.xlsx` extractor (`src/lib/extractors/xlsxExtractor.ts`)（dep: `xlsx`） — sheet/used range 単位
+5. `.xlsx` extractor (`src/lib/extractors/xlsxExtractor.ts`)（dep: `xlsx`） — sheet ごとの used range 単位（1 sheet = 1 chunk）
 6. `.xlsx` extractor unit test
-7. Chunk Firestore adapter (`src/lib/chunkFirestoreAdapter.ts`) — `listChunksForDocument(docId)` / `replaceChunksForDocument(docId, chunks)` (delete-then-batch-write)
+7. Chunk Firestore adapter (`src/lib/chunkFirestoreAdapter.ts`) — `listChunksForDocument(docId)` / `replaceChunksForDocument(docId, chunks)`（**batch write 後に stale id を delete**）
 8. Chunk adapter fake Firestore test
 9. Chunk DLP/masker 関数境界 (`maskKnowledgeChunk(chunk)` — chunk.text → maskedText)
 10. `buildContextPackageExportInput` の chunk-aware 化 + 既存テスト維持確認
@@ -291,15 +292,13 @@ export type BuildContextPackageInputOptions = {
 12. demo runbook (`docs/demo-runbook.md`) に Phase 2 smoke 追記
 13. live smoke: 既存 document に対し CLI を叩いて chunk を作り、Firestore に保存・読み戻し・Context Package output に反映するところまで
 
-`MAX_UPLOAD_BYTES` の引き上げは **5 (.xlsx extractor) と同じ PR でのみ** 行う。
-
 ---
 
 ## 8. Phase 2 完了条件
 
 - `KnowledgeChunk` 型と Zod schema が定義され、invariant 検査関数が動く
 - CSV を spreadsheet chunk に変換できる（test 緑）
-- `.xlsx` を sheet / used range chunk に変換できる（test 緑）
+- `.xlsx` を sheet ごとの used range chunk に変換できる（test 緑）
 - chunk が Firestore subcollection に保存・読み戻しできる（fake Firestore test 緑）
 - chunk text に DLP / simple-rule provider を適用する `maskKnowledgeChunk` 関数境界が存在する
 - Context Package input builder が chunk を受け取れる（既存 document-only 経路も壊れていない）
@@ -320,7 +319,7 @@ export type BuildContextPackageInputOptions = {
 - PDF / Slides / Image の本実装（設計メモのみ §10）
 - chunk-aware の新規 UI 画面（dev/debug 表示の必要が出たら最小限のみ）
 - `POST /api/documents/:docId/chunks` API
-- `MAX_UPLOAD_BYTES` の無条件引き上げ
+- 現行の **5 MiB** を超える upload 上限への無計画な拡張
 - chunk から document への invariant feedback (chunk が restricted になったら document も restricted、のような昇格)
 
 ---

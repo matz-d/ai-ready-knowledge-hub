@@ -1,12 +1,7 @@
 // TODO(Phase 3): implement strategistFlow. Phase 2 では型予約のみ。
 
 import type { InventoryDocument } from '../../lib/inventory';
-
-// TODO(Phase 2): import `KnowledgeChunk` from `../../lib/knowledgeChunkSchema` (docs/phase-2-design.md §3).
-type KnowledgeChunk = {
-  id: string;
-  docId: string;
-};
+import type { KnowledgeChunk } from '../../lib/knowledgeChunkSchema';
 
 export type ChunkRef = {
   docId: string;

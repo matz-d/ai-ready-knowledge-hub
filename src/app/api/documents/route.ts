@@ -2,7 +2,7 @@
  * `POST /api/documents` の責務は HTTP 境界に限定する。
  *
  * - multipart formData 解析、`file` フィールド検証
- * - サイズ / 拡張子 / MIME / UTF-8 / バケット設定（`getKnowledgeHubBucketName()`）検証
+ * - サイズ / 拡張子 / MIME / UTF-8 または XLSX 解析 / バケット設定（`getKnowledgeHubBucketName()`）検証
  * - `orchestrateUploadProcessing` への委譲（GCS / Firestore / Curator / Masker の副作用順序は
  *   `src/lib/uploadOrchestrator.ts` 側の単一責務）
  * - 成功・失敗レスポンスの整形（Curator/Masker 段の失敗は `docId` 付き 500、その他基盤は 502）
@@ -22,6 +22,7 @@ import {
   isAllowedMimeType,
 } from '../../../lib/documents';
 import { documentUploadSuccessBodyFromOrchestrate } from '../../../lib/documentUploadResponseMapper';
+import { xlsxToNormalizedMarkdown } from '../../../lib/extractors/xlsxExtractor';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,9 +40,16 @@ function formatBytesAsMB(bytes: number): string {
 
 function defaultContentTypeForExt(
   ext: string
-): 'text/plain' | 'text/markdown' | 'text/csv' {
+):
+  | 'text/plain'
+  | 'text/markdown'
+  | 'text/csv'
+  | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' {
   if (ext === '.md') return 'text/markdown';
   if (ext === '.csv') return 'text/csv';
+  if (ext === '.xlsx') {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
   return 'text/plain';
 }
 
@@ -93,7 +101,7 @@ export async function POST(request: Request) {
   const extCheck = getAllowedExtension(displayName);
   if (!extCheck) {
     return NextResponse.json(
-      { error: '対応している拡張子は .txt / .md / .csv のみです。' },
+      { error: '対応している拡張子は .txt / .md / .csv / .xlsx のみです。' },
       { status: 415 }
     );
   }
@@ -108,12 +116,25 @@ export async function POST(request: Request) {
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  const content = decodeUtf8Strict(arrayBuffer);
-  if (content === null) {
-    return NextResponse.json(
-      { error: 'UTF-8 として解釈できないバイト列です。' },
-      { status: 400 }
-    );
+  let content: string;
+  if (extCheck === '.xlsx') {
+    try {
+      content = xlsxToNormalizedMarkdown(buffer);
+    } catch {
+      return NextResponse.json(
+        { error: '.xlsx ファイルを解析できませんでした。' },
+        { status: 400 }
+      );
+    }
+  } else {
+    const decoded = decodeUtf8Strict(arrayBuffer);
+    if (decoded === null) {
+      return NextResponse.json(
+        { error: 'UTF-8 として解釈できないバイト列です。' },
+        { status: 400 }
+      );
+    }
+    content = decoded;
   }
 
   try {

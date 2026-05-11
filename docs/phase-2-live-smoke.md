@@ -81,7 +81,7 @@ Before running chunk regeneration:
 }
 ```
 
-This confirmed the delete phase in `replaceChunksForDocument` was a no-op for this first smoke run.
+This confirmed the **stale-id delete** step in `replaceChunksForDocument` was a no-op for this first smoke run (no prior chunk documents existed).
 
 ### 4. Chunk regeneration
 
@@ -129,9 +129,9 @@ Firestore console screenshot was not captured in this Codex run; the subcollecti
 
 ### 6. Context Package chunk reflection
 
-Chunk-aware export was run by calling `buildContextPackageExportInput({ documents, chunks })` with the live Firestore document and its chunks.
+`npm run context:demo:live`（`scripts/runContextPackageDemo.ts` → `buildFirestoreContextPackageExportInput`）は Firestore の全 inventory 行に対し `documents/{docId}/chunks` を読み、chunk がある document は **chunk-aware export** になる。
 
-Observed output:
+Observed output (same corpus as steps 2–5):
 
 ```text
 ## Included Documents
@@ -160,13 +160,7 @@ Summary:
 }
 ```
 
-The normal live demo also succeeds when `.env.local` is loaded into the shell:
-
-```bash
-set -a; source .env.local; set +a; npm run context:demo:live
-```
-
-Observation: bare `npm run context:demo:live` does not load `.env.local` and fails with `KNOWLEDGE_HUB_BUCKET` missing. The chunk-aware check above used `scripts/loadEnv.ts` explicitly.
+`runContextPackageDemo.ts` は `import './loadEnv'` により、リポジトリルートから `npm run context:demo:live` した場合に `.env.local` が読み込まれる（`KNOWLEDGE_HUB_BUCKET` などが未設定なら従来どおり失敗する）。
 
 ## Manual Rollback
 
