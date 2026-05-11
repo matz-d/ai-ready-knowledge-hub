@@ -559,7 +559,7 @@ sample-data/
 - GCS object path は `raw/{docId}/{safeOriginalFileName}`。
 - Firestore metadata は `documents/{docId}`。
 - 既存 `POST /api/curator` は classify-only seed として温存し、新 route は `curatorFlow` を直接呼ぶ。
-- 対象ファイルは `.txt` / `.md` / `.csv`、最大 1MB、UTF-8。
+- 対象ファイルは `.txt` / `.md` / `.csv` / `.xlsx`、最大 5MB。`.txt` / `.md` / `.csv` は UTF-8、`.xlsx` は OOXML zip package として解析し、Curator/Masker 入力には normalized markdown を渡す。
 
 **検証結果:**
 実 GCP 接続で `/upload` 表示、`POST /api/documents` `HTTP 200`、GCS object 作成、Firestore `status='curated'` と Curator 結果保存を確認済み。異常系 `400` / `415` / `413` も確認済み。
@@ -626,7 +626,7 @@ sample-data/
 - 4.a (Inventory adapter の正本型固定で重複防止)
 
 **撤退条件:**
-- Firestore document が 1 MiB 上限に張り付くケースが MVP 範囲（最大 1 MB のテキスト原本 + Curator block + Masker block）で頻発した場合、`masker.ruleHits` を subcollection 化、または `masker` ブロックを別 document に分離する。
+- Firestore document が 1 MiB 上限に張り付くケースが MVP 範囲（metadata + Curator block + Masker block）で頻発した場合、`masker.ruleHits` を subcollection 化、または `masker` ブロックを別 document に分離する。原本本文と AI-safe 本文は GCS 正本であり、Phase 2 の chunk inline 本文は `documents/{docId}/chunks/{chunkId}` 側の 500 KiB guard で別管理する。
 - `status='failed'` 一本化が UI で「成功成分の表示」を作りづらくし、デモ表現を阻害する場合は `masking_failed` を後追いで追加する。
 
 ---

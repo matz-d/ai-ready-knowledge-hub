@@ -87,6 +87,13 @@ vi.mock('../../../src/lib/storage', () => ({
     }
     return object.body.toString('utf-8');
   },
+  readRawObject: async (objectPath: string) => {
+    const object = storageObjects.get(objectPath);
+    if (!object) {
+      throw new Error(`Fake GCS object not found: ${objectPath}`);
+    }
+    return object.body;
+  },
 }));
 
 const fakeFirestoreClient = {
@@ -106,6 +113,14 @@ const fakeFirestoreClient = {
         },
         delete: async () => {
           firestoreDocuments.delete(docId);
+        },
+        collection: (subcollectionName: string) => {
+          expect(subcollectionName).toBe('chunks');
+          return {
+            get: async () => ({
+              docs: [] satisfies FakeDocSnapshot[],
+            }),
+          };
         },
       }),
       orderBy: () => ({

@@ -214,6 +214,15 @@ describe('adaptFirestoreDocumentToInventory', () => {
         buildDoc({ status: 'ai_safe', masker: null })
       )
     ).toBeNull();
+    expect(
+      adaptFirestoreDocumentToInventory(
+        'snapshot-id',
+        {
+          ...buildDoc(),
+          sensitivity: undefined,
+        } as unknown as FirestoreDocument
+      )
+    ).toBeNull();
   });
 
   it('keeps W1 snapshot adapter usable as demo fallback with status', () => {

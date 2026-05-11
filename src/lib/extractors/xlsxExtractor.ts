@@ -129,6 +129,9 @@ function readWorkbookFromXlsxContent(
   content: Buffer | Uint8Array
 ): XLSX.WorkBook {
   const binary = toBuffer(content);
+  if (binary[0] !== 0x50 || binary[1] !== 0x4b) {
+    throw new Error('XLSX content must be an OOXML zip package.');
+  }
   return XLSX.read(binary, {
     type: 'buffer',
     cellDates: false,

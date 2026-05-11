@@ -79,19 +79,19 @@ export function adaptFirestoreDocumentToInventory(
   }
 
   if (
-    doc.documentType === null ||
-    doc.businessDomain === null ||
-    doc.sensitivity === null ||
-    doc.freshness === null ||
-    doc.isAuthoritativeCandidate === null ||
-    doc.aiUsePolicy === null ||
-    doc.sensitivitySource === null ||
-    doc.curator === null
+    doc.documentType == null ||
+    doc.businessDomain == null ||
+    doc.sensitivity == null ||
+    doc.freshness == null ||
+    doc.isAuthoritativeCandidate == null ||
+    doc.aiUsePolicy == null ||
+    doc.sensitivitySource == null ||
+    doc.curator == null
   ) {
     return null;
   }
 
-  if ((doc.status === 'ai_safe' || doc.status === 'restricted') && doc.masker === null) {
+  if ((doc.status === 'ai_safe' || doc.status === 'restricted') && doc.masker == null) {
     return null;
   }
 

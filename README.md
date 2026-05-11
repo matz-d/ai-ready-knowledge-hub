@@ -14,9 +14,9 @@
 
 ---
 
-## 現在のステータス (2026-05-09)
+## 現在のステータス (2026-05-11)
 
-**フェーズ**: W2 Walking Skeleton 初期縦串完了。MVP に進行中。
+**フェーズ**: Phase 2（構造化 Ingestion / KnowledgeChunk）完了。Phase 3（目的別 Strategist / Interviewer）に進む準備ができた状態。
 
 ### 完了済み
 - ハッカソン要件の調査・整理 / 作品コンセプト・技術スタック・4エージェント構成・MVPスコープ確定
@@ -27,10 +27,12 @@
 - **W1 統合 (5/8 PM)**: `poc/w1/` を削除し、Curator/Masker の schema・prompt・Genkit flow を `src/agents/{curator,masker,_shared}/` の正本へ昇格。固定デモ用 fixture は通常 UI から外し、W1 の実 LLM snapshot は `docs/w1-artifacts/` に回顧用 artifact として退避。
 - **Task1 (W2 Walking Skeleton)**: `/upload` → `POST /api/documents` → Cloud Storage (`raw/{docId}/{safeOriginalFileName}`) → Firestore (`documents/{docId}`) → `curatorFlow` → 単票結果表示まで実装。実 GCP 接続で `HTTP 200`、GCS object、Firestore `status=curated` を確認済み。
 - **Task2 (Masker Pipeline MVP)**: `SimpleMasker` → 既存 `maskerRiskFlow` → `ai_safe_ready` / `restricted_promoted` の pipeline と CLI (`npm run masker:pipeline`) を実装。実 Vertex 接続で契約書サンプルは `restricted_promoted`、顧客対応メモは `ai_safe_ready` を確認済み。
-- **Task3 (Restricted 除外の受け皿)**: `applyMaskerUpgrade`、W1 snapshot adapter、Context Package input builder を実装。Restricted 文書は `Full AI-Ready Sources` から除外され、human review として出力される。`npm run context:demo` は **live default**（引数なしで live、`--w1` 指定で fixture）として動作する。`context:demo:live` は Firestore terminal metadata に加え、`ai_safe` は `aiSafeStoragePath`、`curated` は `storagePath` から GCS 本文を読み込んで export する（`src/lib/contextPackageFirestoreAdapter.ts` / `readTextObject`）。バケット名は `KNOWLEDGE_HUB_BUCKET`、GCP 認証は ADC（例: `gcloud auth application-default login`）。`context:demo:live` は fallback せず、Firestore/GCS 条件不備時は non-zero で終了する。オフライン検証は `npm run context:demo:w1`。トップページの Inventory は Firestore 正本を優先し、読み取り失敗時のみ W1 snapshot にフォールバック（フォールバック時のみプレースホルダ本文を許可）。
+- **Task3 (Restricted 除外の受け皿)**: `applyMaskerUpgrade`、W1 snapshot adapter、Context Package input builder を実装。Restricted 文書は `Full AI-Ready Sources` から除外され、human review として出力される。`npm run context:demo` は **live default**（引数なしで live、`--w1` 指定で fixture）として動作する。バケット名は `KNOWLEDGE_HUB_BUCKET`、GCP 認証は ADC（例: `gcloud auth application-default login`）。`context:demo:live` は fallback せず、Firestore/GCS 条件不備時は non-zero で終了する。オフライン検証は `npm run context:demo:w1`。トップページの Inventory は Firestore 正本を優先し、読み取り失敗時のみ W1 snapshot にフォールバック（フォールバック時のみプレースホルダ本文を許可）。
+- **Phase 1 follow-up (Cloud DLP)**: Masker provider 境界から `cloud-dlp` を選択可能。`MASKER_PROVIDER=cloud-dlp` または chunk 再生成 CLI の `--provider=cloud-dlp` で provider を固定できる。masked object metadata には provider / hash / schema version を残す。
+- **Phase 2 (KnowledgeChunk)**: CSV / `.xlsx` を spreadsheet chunk に変換し、`documents/{docId}/chunks/{chunkId}` subcollection に保存・読み戻しできる。`.xlsx` upload は raw OOXML を GCS に保存しつつ、Curator/Masker 入力には normalized markdown を渡す。chunk 再生成は `npm run chunks:regenerate -- <docId>` の手動 CLI のみで、write → stale delete の全置換。`context:demo:live` は chunk がある document では chunk `text` / `maskedText` を優先し、chunk がない document は従来の GCS body fallback を使う。
 - 詳細振り返り: [docs/week1-retrospective.md](docs/week1-retrospective.md)
 
-### コードの位置 (Task1/2/3 完了時点)
+### コードの位置 (Phase 2 完了時点)
 
 ```
 src/
@@ -38,7 +40,8 @@ src/
     _shared/genkitClient.ts
     curator/{schema,prompt,flow}.ts   # R5 確定 enum + 4段フォールバック
     masker/{schema,prompt,flow}.ts    # A8 residualRisk + 3段フォールバック
-    masker/{maskingSchema,simpleMasker,pipelineSchema,pipelineFlow,upgrade}.ts
+    masker/{maskingSchema,simpleMasker,cloudDlpMasker,provider,pipelineSchema,pipelineFlow,upgrade}.ts
+    masker/maskKnowledgeChunk.ts       # chunk.text → maskedText
     strategist/types.ts               # Strategist の型境界（LLM本体は未実装）
   lib/
     exportContextPackage.ts           # A9 Markdown export 純関数
@@ -46,6 +49,9 @@ src/
     inventory.ts / inventoryFirestoreAdapter.ts
     contextPackageInput.ts / contextPackageFirestoreAdapter.ts
     documentUploadResponseMapper.ts   # POST /api/documents 成功レスポンス組み立て
+    knowledgeChunkSchema.ts / chunkFirestoreAdapter.ts
+    columnSensitivityRules.ts
+    extractors/{csvExtractor,xlsxExtractor}.ts
   app/
     api/curator/route.ts              # Curator 単体 eval/smoke（UI からは未使用）
     api/documents/route.ts            # multipart 検証 → uploadOrchestrator
@@ -53,7 +59,8 @@ src/
     page.tsx                          # Firestore Inventory（失敗時 W1 fallback）+ Context Package プレビュー + /upload CTA
 scripts/
   runCurator.ts / runCuratorAll.ts / runMaskerRisk.ts
-  runMaskerPipeline.ts / runContextPackageDemo.ts
+  runMaskerPipeline.ts / runDlpMaskerSmoke.ts / runContextPackageDemo.ts
+  regenerateChunks.ts                 # documents/{docId}/chunks 全置換
   generateInventorySnapshot.ts        # W1 回顧用 snapshot artifact を更新
 docs/
   w1-artifacts/inventory.snapshot.json # W1 実 LLM 出力の退避先
@@ -75,17 +82,21 @@ sample-data/
 | `npm run curator:all [dir]` | sample-data 全件で smoke 実行 |
 | `npm run masker:risk [path]` | A8 residualRisk 評価 |
 | `npm run masker:pipeline [path]` | 原本 → SimpleMasker → A8 residualRisk → `ai_safe_ready` / `restricted_promoted` |
+| `npm run masker:dlp:smoke [path]` | Cloud DLP provider 単体の疎通確認 |
+| `npm run chunks:regenerate -- <docId>` | CSV / `.xlsx` の GCS raw object から `documents/{docId}/chunks` を全置換。`--provider=simple-rule\|cloud-dlp` で chunk masking provider を固定可能 |
 | `npm run inventory:snapshot` | 実 LLM 出力で `docs/w1-artifacts/inventory.snapshot.json` を再生成 |
 | `npm run context:demo` | Context Package demo の統一エントリ。デフォルトは live、`--w1` 指定で fixture (`npm run context:demo -- --w1`) |
-| `npm run context:demo:live` | Firestore documents + GCS bodies から Context Package Markdown を出力（fallback なし。Firestore/GCS 条件不備時は終了コード 1） |
+| `npm run context:demo:live` | Firestore documents + chunks/GCS bodies から Context Package Markdown を出力。chunk がある document は chunk 優先、ない document は GCS body fallback（Firestore/GCS 条件不備時は終了コード 1） |
 | `npm run context:demo:w1` | W1 snapshot fixture から Context Package Markdown を出力する offline demo（Firestore/GCS 非接続） |
 | `npm run curator:ui` | Genkit dev UI で flow を観察 |
 
 ### セキュリティ境界の現状 (MVP)
 
-- Cloud DLP / Document AI / Drive 連携は**未導入**（次ステップ）。
-- 現在のマスキングは `SimpleMasker` + Gemini residual risk 判定 (`maskerRiskFlow`)。
-- `context:demo:live` では、GCS 本文取得に失敗した文書は export 全体を落とさず human review に回し、読めた文書のみ `Full AI-Ready Sources` に含める。
+- Cloud DLP は Masker provider として導入済み。未指定時は `simple-rule` fallback、`MASKER_PROVIDER=cloud-dlp` または `chunks:regenerate -- --provider=cloud-dlp` で明示できる。
+- Document AI / Drive 連携は未導入。
+- `.txt` / `.md` / `.csv` は UTF-8、`.xlsx` は OOXML zip package として検証・解析する。raw object は GCS に保存し、Curator/Masker 入力には normalized markdown を渡す。
+- chunk-level `maskedText` は Firestore subcollection に inline 保存する。chunk 単位の GCS masked object は作らない。
+- `context:demo:live` では、GCS 本文取得に失敗した document-only fallback 対象は export 全体を落とさず human review に回し、読めた文書 / chunk のみ `Full AI-Ready Sources` に含める。
 
 ### HTTP API（upload と Curator 単体）
 
@@ -97,7 +108,6 @@ sample-data/
 ### 次にやること
 - Knowledge Inventory の機能拡張（フィルタ、詳細ドリルダウン、エラー時の運用導線など）
 - Purpose Query UI + Strategist / Interviewer flow を実装し、A9 export を実 Context Package に接続する
-- Cloud DLP を `SimpleMasker` provider 境界へ差し替える
 - Curator / Masker eval パイプライン (W6 マイルストーン)
 
 ---
@@ -112,6 +122,8 @@ sample-data/
 | [docs/demo-scenario.md](docs/demo-scenario.md) | 3分デモのストーリーボード |
 | [docs/hackathon.md](docs/hackathon.md) | ハッカソン要件、スケジュール、審査基準 |
 | [docs/architecture.md](docs/architecture.md) | システム構成、4エージェント、データフロー |
+| [docs/phase-2-design.md](docs/phase-2-design.md) | KnowledgeChunk / CSV・xlsx extractor / chunk-aware Context Package の設計正本 |
+| [docs/phase-2-live-smoke.md](docs/phase-2-live-smoke.md) | Phase 2 live smoke の実行証跡 |
 | [docs/tech-stack.md](docs/tech-stack.md) | 技術選定と理由・トレードオフ |
 | [docs/decisions.md](docs/decisions.md) | 意思決定ログ (D1〜D5 + 追加判断) |
 | [docs/open-questions.md](docs/open-questions.md) | 未決定事項と次に決めるべきこと |
@@ -122,8 +134,9 @@ sample-data/
 ## 次に再開するとき、最初に読むべきもの
 
 1. このREADMEの「現在のステータス」
-2. [docs/architecture.md](docs/architecture.md) — Task1/2/3 後の実装状態とデータフロー
-3. [docs/decisions.md](docs/decisions.md) — 何を決めたか、なぜか
+2. [docs/phase-2-design.md](docs/phase-2-design.md) — KnowledgeChunk と spreadsheet ingestion の正本
+3. [docs/architecture.md](docs/architecture.md) — Phase 2 後の実装状態とデータフロー
+4. [docs/decisions.md](docs/decisions.md) — 何を決めたか、なぜか
 
 その後、実装再開なら [docs/open-questions.md](docs/open-questions.md) と [docs/tech-stack.md](docs/tech-stack.md)。
 

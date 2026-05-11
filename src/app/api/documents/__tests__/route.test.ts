@@ -66,8 +66,11 @@ function createWorkbookBuffer(): Buffer {
   }) as Buffer;
 }
 
-function toBlobPart(buffer: Buffer): Uint8Array<ArrayBuffer> {
-  return new Uint8Array(buffer);
+function toBlobPart(buffer: Buffer): BlobPart {
+  const arrayBuffer = new ArrayBuffer(buffer.byteLength);
+  const view = new Uint8Array(arrayBuffer);
+  view.set(buffer);
+  return view;
 }
 
 function buildRequestWithFile(file: File): Request {
@@ -222,6 +225,22 @@ describe('POST /api/documents', () => {
 
     expect(response.status).toBe(200);
     expect(orchestrateUploadProcessingMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 400 for invalid .xlsx bytes before orchestration', async () => {
+    const file = new File([new Uint8Array([0xff, 0xfe, 0xfd])], 'broken.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    const response = await POST(buildRequestWithFile(file));
+
+    expect(response.status).toBe(400);
+    await expect(parseJson(response)).resolves.toEqual(
+      expect.objectContaining({
+        error: '.xlsx ファイルを解析できませんでした。',
+      })
+    );
+    expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
   });
 
   it('returns blocked success response shape', async () => {

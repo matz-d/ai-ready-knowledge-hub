@@ -8,6 +8,7 @@ import {
 import type { FirestoreDocument, FirestoreDocumentStatus } from './firestoreSchema';
 
 export const KNOWLEDGE_CHUNK_SCHEMA_VERSION = 1 as const;
+export const MAX_FIRESTORE_CHUNK_DOCUMENT_BYTES = 500 * 1024;
 
 const SourceTypeSchema = z.enum(['text', 'pdf', 'image', 'spreadsheet', 'slide']);
 
@@ -136,6 +137,12 @@ export function computeChunkSourceHash(input: ChunkSourceHashInput): string {
   return createHash('sha256').update(payload, 'utf8').digest('hex');
 }
 
+export function estimateKnowledgeChunkFirestoreBytes(
+  chunk: KnowledgeChunk
+): number {
+  return Buffer.byteLength(JSON.stringify(chunk), 'utf8');
+}
+
 export function validateKnowledgeChunkInvariants(
   chunk: KnowledgeChunk,
   context: KnowledgeChunkInvariantContext
@@ -187,6 +194,13 @@ export function validateKnowledgeChunkInvariants(
   if (chunk.sourceHash !== expectedHash) {
     errors.push(
       `sourceHash must equal computeChunkSourceHash(extractorInput, locator); expected ${expectedHash}, got ${chunk.sourceHash}.`
+    );
+  }
+
+  const estimatedFirestoreBytes = estimateKnowledgeChunkFirestoreBytes(chunk);
+  if (estimatedFirestoreBytes > MAX_FIRESTORE_CHUNK_DOCUMENT_BYTES) {
+    errors.push(
+      `Estimated chunk Firestore payload must be <= ${MAX_FIRESTORE_CHUNK_DOCUMENT_BYTES} bytes; got ${estimatedFirestoreBytes}. Split the source sheet or move chunk bodies out of inline Firestore storage.`
     );
   }
 

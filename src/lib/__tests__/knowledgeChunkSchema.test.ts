@@ -4,6 +4,7 @@ import {
   computeChunkSourceHash,
   KnowledgeChunkSchema,
   KnowledgeChunkLocatorSchema,
+  MAX_FIRESTORE_CHUNK_DOCUMENT_BYTES,
   validateKnowledgeChunkInvariants,
   type KnowledgeChunk,
   type KnowledgeChunkLocator,
@@ -330,6 +331,23 @@ describe('validateKnowledgeChunkInvariants', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.errors.some((e) => e.includes('sourceHash'))).toBe(true);
+    }
+  });
+
+  it('rule 7: rejects oversized inline Firestore chunk payloads', () => {
+    const chunk = buildChunk({
+      text: 'x'.repeat(MAX_FIRESTORE_CHUNK_DOCUMENT_BYTES + 1),
+    });
+    const result = validateKnowledgeChunkInvariants(chunk, {
+      parentDocument: validParent,
+      extractorInput: EXTRACTOR_INPUT,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.errors.some((e) => e.includes('Estimated chunk Firestore payload'))
+      ).toBe(true);
     }
   });
 

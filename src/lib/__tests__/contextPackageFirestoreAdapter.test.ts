@@ -303,6 +303,62 @@ describe('contextPackageFirestoreAdapter', () => {
     ]);
   });
 
+  it('uses chunk-first sources for chunked documents and body fallback for documents without chunks', async () => {
+    vi.mocked(listInventoryDocumentsFromFirestore).mockResolvedValue([
+      inventoryDoc({
+        id: 'doc-chunked',
+        fileName: 'sales.xlsx',
+        storagePath: 'raw/doc-chunked/sales.xlsx',
+      }),
+      inventoryDoc({
+        id: 'doc-fallback',
+        fileName: 'memo.txt',
+        storagePath: 'raw/doc-fallback/memo.txt',
+      }),
+    ]);
+    listChunksForDocumentMock.mockImplementation(async (docId: string) =>
+      docId === 'doc-chunked'
+        ? [
+            knowledgeChunk({
+              id: 'chunk-sales',
+              docId: 'doc-chunked',
+              text: 'Chunked sales table',
+              locator: {
+                kind: 'spreadsheet',
+                sheetName: 'Forecast',
+                range: 'A1:C3',
+              },
+            }),
+          ]
+        : []
+    );
+    const readBody = vi.fn(async (objectPath: string) => {
+      if (objectPath === 'raw/doc-fallback/memo.txt') {
+        return 'Fallback memo body';
+      }
+      return 'unexpected body';
+    });
+
+    const exportInput = await buildFirestoreContextPackageExportInput({
+      purpose: 'Firestore export',
+      readBody,
+    });
+
+    expect(readBody).toHaveBeenCalledTimes(1);
+    expect(readBody).toHaveBeenCalledWith('raw/doc-fallback/memo.txt');
+    expect(exportInput.sourceDocumentsReviewed).toBe(2);
+    expect(exportInput.includedDocuments).toEqual([
+      expect.objectContaining({
+        fileName: 'memo.txt',
+        aiSafeContent: 'Fallback memo body',
+      }),
+      expect.objectContaining({
+        fileName: 'sales.xlsx (sheet=Forecast, range=A1:C3)',
+        aiSafeContent: 'Chunked sales table',
+      }),
+    ]);
+  });
+
   it('uses maskedText for masked chunks and text for direct chunks', async () => {
     vi.mocked(listInventoryDocumentsFromFirestore).mockResolvedValue([
       inventoryDoc({
