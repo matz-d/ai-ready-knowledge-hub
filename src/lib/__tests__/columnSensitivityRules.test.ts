@@ -81,6 +81,48 @@ describe('upgradeChunkSensitivityFromColumnHeader', () => {
     expect(upgraded).toEqual(chunk);
   });
 
+  it('does not change an already Confidential chunk when header matches same tier rule', () => {
+    const chunk = buildChunk(markdownTable('顧客名'), {
+      sensitivity: 'Confidential',
+      aiUsePolicy: 'requires_masking',
+      sensitivitySource: 'inherited',
+    });
+
+    const upgraded = upgradeChunkSensitivityFromColumnHeader(chunk, rules);
+    expect(upgraded).toEqual(chunk);
+  });
+
+  it('promotes Confidential to Restricted when a stricter rule matches', () => {
+    const stricterRules: ColumnSensitivityRule[] = [
+      {
+        matchExact: ['顧客名'],
+        sensitivity: 'Restricted',
+        aiUsePolicy: 'blocked',
+        reason: 'PII column requires Restricted',
+      },
+    ];
+    const chunk = buildChunk(markdownTable('顧客名'), {
+      sensitivity: 'Confidential',
+      aiUsePolicy: 'requires_masking',
+      sensitivitySource: 'inherited',
+    });
+
+    const upgraded = upgradeChunkSensitivityFromColumnHeader(chunk, stricterRules);
+    expect(upgraded.sensitivity).toBe('Restricted');
+    expect(upgraded.aiUsePolicy).toBe('blocked');
+    expect(upgraded.sensitivitySource).toBe('columnRule');
+    expect(upgraded.sensitivityReason).toBe('PII column requires Restricted');
+  });
+
+  it('ignores markdown tables whose separator column count does not match header', () => {
+    const text = '| 顧客名 | メモ |\n| --- |\n| value | note |';
+    const chunk = buildChunk(text);
+    const upgraded = upgradeChunkSensitivityFromColumnHeader(chunk, rules);
+
+    expect(upgraded.sensitivity).toBe('Internal');
+    expect(upgraded.sensitivitySource).toBe('inherited');
+  });
+
   it('keeps inherited source when no rules match', () => {
     const chunk = buildChunk(markdownTable('部署'));
     const upgraded = upgradeChunkSensitivityFromColumnHeader(chunk, rules);

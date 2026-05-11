@@ -183,7 +183,71 @@ MASKER_PROVIDER=cloud-dlp npm run masker:pipeline -- sample-data/accounting-offi
 
 この結果により、DLP は決定論的 PII、Gemini residual risk は文脈的な再識別リスクを見る分担が live で確認済み。
 
-## 9. よくある失敗
+## 9. Phase 2: Chunk regeneration smoke
+
+Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で確認する手順です。
+
+### 前提
+
+- Firestore に `ai_safe` 状態の document が少なくとも 1 件存在する（§4 の手順で投入済み）
+- 列ヘッダに「顧客名」を含む CSV を 1 件以上投入済みであること（sensitivity 昇格の確認用）
+
+### 手順
+
+1. **対象 docId を控える**
+
+   Inventory UI (`/`) または `npm run context:demo:live` の出力で `status: ai_safe` の document を 1 件選び、docId を控えます。
+
+2. **chunk 再生成を実行**
+
+   ```bash
+   npm run chunks:regenerate -- <docId>
+   ```
+
+   > **設計原則（D-P2-4）: chunk 再生成は document 単位の全置換である。**  
+   > 内部処理は「旧 `chunks/` subcollection を全件 delete → 新 chunk を batch write」の 2 ステップで完結します。  
+   > 何度実行しても同じ結果になる**冪等**な操作なので、デモ中に複数回叩いても問題ありません。途中状態は残りません。
+
+3. **Firestore コンソールで subcollection を確認**
+
+   GCP コンソール → Firestore → `documents/{docId}/chunks/` を開き、以下を確認します:
+
+   - `chunkId` / `docId` / `sourceType` / `structureType` / `locator` が存在する
+   - `sensitivity` / `aiUsePolicy` / `sensitivitySource` が設定されている
+
+4. **列ヘッダ昇格の確認（顧客名を含む CSV の場合）**
+
+   列ヘッダに「顧客名」を含む CSV から生成された chunk は以下になっているはずです:
+
+   | フィールド | 期待値 |
+   |---|---|
+   | `sensitivity` | `Confidential` |
+   | `aiUsePolicy` | `requires_masking` |
+   | `sensitivitySource` | `columnRule` |
+   | `sensitivityReason` | 列ヘッダ昇格の理由（非空） |
+
+   document の curator 結果が `curated` / `ai_safe` であっても、列ヘッダルールにより **chunk 単位で sensitivity が昇格**します（`applyMaskerUpgrade` と同じ哲学: 一度上げたら下げない）。
+
+5. **Context Package を chunk 込みで export**
+
+   ```bash
+   npm run context:demo:live
+   ```
+
+   出力の「Full AI-Ready Sources」セクションに `locator.sheetName` / `locator.range` の hint（例: `[Sheet1 A1:E20]`）が含まれることを確認します。
+
+### Phase 2 固有のよくある失敗
+
+| 症状 | 確認ポイント |
+|---|---|
+| `docId not found` | Firestore に `ai_safe` document が存在するか確認 |
+| `chunks/` が空 | CSV / xlsx 以外の document を指定した場合、Phase 2 では extractor 未対応 |
+| chunk の `sensitivity` が昇格しない | 列ヘッダが `columnSensitivityRules.ts` のホワイトリストにない。部分一致・表記揺れを確認する |
+| 再実行で chunk が増える | 起こらないはず。全置換なので再実行しても同一 chunk 数になる |
+
+---
+
+## 10. よくある失敗
 
 - `KNOWLEDGE_HUB_BUCKET` 未設定
   - `.env.local` を確認
@@ -201,7 +265,7 @@ MASKER_PROVIDER=cloud-dlp npm run masker:pipeline -- sample-data/accounting-offi
 - Vertex/Gemini auth failure
   - `GOOGLE_CLOUD_PROJECT` / IAM 権限 / ADC を再確認
 
-## 10. Reset / cleanup（手動のみ）
+## 11. Reset / cleanup（手動のみ）
 
 - Firestore `documents` collection と `gs://$KNOWLEDGE_HUB_BUCKET/raw/`, `gs://$KNOWLEDGE_HUB_BUCKET/masked/` を手動で整理する
 - 破壊的操作のため、本リポジトリでは **自動削除スクリプトは提供しない**

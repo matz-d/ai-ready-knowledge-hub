@@ -231,12 +231,23 @@ function buildChunkAwareContextPackageExportInput(
       continue;
     }
 
+    const content = chunk.text?.trim();
+    if (!content) {
+      humanReviewDocuments.push({
+        fileName: chunkFileName(parent, chunk),
+        reason: 'Chunk text content is empty or unavailable',
+        status: 'Human review required',
+      });
+      continue;
+    }
+
     includedDocuments.push({
       fileName: chunkFileName(parent, chunk),
       reason: parent.rationale,
       sourceType: parent.documentType,
       sensitivity: chunk.sensitivity,
-      aiSafeContent: chunk.text.trim(),
+      aiSafeViaMasking: false,
+      aiSafeContent: content,
     });
   }
 

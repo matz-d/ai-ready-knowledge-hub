@@ -74,15 +74,33 @@ function rowsToMarkdownTable(rows: string[][]): string {
   return [header, separator, ...body].join('\n');
 }
 
-function parseCsvRecords(content: string): string[][] {
-  const records = parse(content, {
-    bom: true,
-    relax_column_count: true,
-    skip_empty_lines: true,
-    cast: false,
-  }) as string[][];
+type ParseCsvRecordsResult = {
+  rows: string[][];
+  /** Present when csv-parse threw (e.g. unclosed quotes). */
+  parseError?: string;
+};
 
-  return records.map((row) => row.map((cell) => (cell == null ? '' : String(cell))));
+function parseCsvRecords(content: string): ParseCsvRecordsResult {
+  try {
+    const records = parse(content, {
+      bom: true,
+      relax_column_count: true,
+      skip_empty_lines: true,
+      cast: false,
+    }) as string[][];
+
+    return {
+      rows: records.map((row) =>
+        row.map((cell) => (cell == null ? '' : String(cell)))
+      ),
+    };
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      rows: [],
+      parseError: `CSV parse failed: ${detail}`,
+    };
+  }
 }
 
 function stableChunkId(docId: string): string {
@@ -97,7 +115,8 @@ export function extractCsv(input: {
   documentAiUsePolicy: AiUsePolicy;
 }): CsvExtractionResult {
   const now = new Date().toISOString();
-  const rawRows = parseCsvRecords(input.content);
+  const { rows: rawRows, parseError } = parseCsvRecords(input.content);
+  const extractionWarnings = parseError ? [parseError] : [];
 
   const colCount =
     rawRows.length === 0
@@ -138,7 +157,7 @@ export function extractCsv(input: {
     aiUsePolicy: input.documentAiUsePolicy,
     sensitivitySource: 'inherited',
     extractionProvider: 'csv',
-    extractionWarnings: [],
+    extractionWarnings,
     sourceHash: computeChunkSourceHash({
       extractorInput: input.content,
       locator,

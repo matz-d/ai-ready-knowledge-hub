@@ -32,17 +32,21 @@ export type ChunkReplaceContext = {
 export interface ChunkFirestoreAdapter {
   /**
    * Returns all chunks in `documents/{docId}/chunks` as `KnowledgeChunk[]`.
-   * Malformed Firestore documents are silently skipped.
+   * Malformed Firestore documents are skipped; a warning is logged per skipped doc.
    */
   listChunksForDocument(docId: string): Promise<KnowledgeChunk[]>;
 
   /**
-   * Atomically replaces all chunks for a document:
+   * Replaces the full chunk set for a document (not one Firestore transaction):
    * 1. Asserts invariants on every incoming chunk (throws on any violation).
-   * 2. Deletes the entire existing subcollection in batches.
-   * 3. Writes all new chunks in batches.
+   * 2. Writes all new chunks in batches (same doc id as `chunk.id` overwrites in place).
+   * 3. Deletes prior subcollection documents whose ids are not in the new chunk set.
    *
-   * Idempotency is guaranteed by full delete + re-write (design §1 rule 7,
+   * Writes run before deletes so a failed write does not leave the subcollection empty.
+   * If the delete phase fails after writes succeed, stale chunk docs may remain until a
+   * later successful replace.
+   *
+   * Idempotency is guaranteed by overwrite + delete-stale-ids (design §1 rule 7,
    * §2 D-P2-4) — NOT by de-duplication.
    */
   replaceChunksForDocument(
@@ -120,7 +124,11 @@ export function createChunkFirestoreAdapter(db?: Firestore): ChunkFirestoreAdapt
             docSnapshot.data() as Record<string, unknown>
           ),
         ];
-      } catch {
+      } catch (error) {
+        console.warn(
+          `[chunkFirestore] skipping malformed chunk ${docSnapshot.id} in document ${docId}:`,
+          error instanceof Error ? error.message : error
+        );
         return [];
       }
     });
@@ -160,19 +168,12 @@ export function createChunkFirestoreAdapter(db?: Firestore): ChunkFirestoreAdapt
       assertKnowledgeChunkInvariants(chunk, invariantContext);
     }
 
-    // ── 3. Delete existing subcollection in batches ──────────────────────────
+    // ── 3. Snapshot existing ids (write-then-delete avoids empty state on write failure)
     const existingSnapshot = await chunksRef(docId).get();
     const existingDocs = existingSnapshot.docs;
+    const newIds = new Set(chunks.map((c) => c.id));
 
-    for (let i = 0; i < existingDocs.length; i += FIRESTORE_BATCH_LIMIT) {
-      const deleteBatch = firestore.batch();
-      for (const doc of existingDocs.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
-        deleteBatch.delete(doc.ref);
-      }
-      await deleteBatch.commit();
-    }
-
-    // ── 4. Write new chunks in batches ───────────────────────────────────────
+    // ── 4. Write new chunks first (overwrites same-id docs in place) ─────────
     for (let i = 0; i < chunks.length; i += FIRESTORE_BATCH_LIMIT) {
       const writeBatch = firestore.batch();
       for (const chunk of chunks.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
@@ -184,6 +185,16 @@ export function createChunkFirestoreAdapter(db?: Firestore): ChunkFirestoreAdapt
         });
       }
       await writeBatch.commit();
+    }
+
+    // ── 5. Remove chunks that existed before but are not in the new set ───────
+    const staleDocs = existingDocs.filter((doc) => !newIds.has(doc.id));
+    for (let i = 0; i < staleDocs.length; i += FIRESTORE_BATCH_LIMIT) {
+      const deleteBatch = firestore.batch();
+      for (const doc of staleDocs.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
+        deleteBatch.delete(doc.ref);
+      }
+      await deleteBatch.commit();
     }
   }
 

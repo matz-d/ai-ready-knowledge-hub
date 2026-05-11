@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   AiUsePolicyEnum,
+  expectedAiUsePolicy,
   SensitivityEnum,
 } from '../agents/curator/schema';
 import type { FirestoreDocument, FirestoreDocumentStatus } from './firestoreSchema';
@@ -153,21 +154,10 @@ export function validateKnowledgeChunkInvariants(
     );
   }
 
-  if (
-    chunk.sensitivity === 'Restricted' &&
-    chunk.aiUsePolicy !== 'blocked'
-  ) {
+  const expectedPolicy = expectedAiUsePolicy(chunk.sensitivity);
+  if (chunk.aiUsePolicy !== expectedPolicy) {
     errors.push(
-      'When sensitivity is Restricted, aiUsePolicy must be blocked.'
-    );
-  }
-
-  if (
-    chunk.sensitivity === 'Confidential' &&
-    chunk.aiUsePolicy !== 'requires_masking'
-  ) {
-    errors.push(
-      'When sensitivity is Confidential, aiUsePolicy must be requires_masking.'
+      `When sensitivity is ${chunk.sensitivity}, aiUsePolicy must be ${expectedPolicy}.`
     );
   }
 

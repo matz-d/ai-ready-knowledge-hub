@@ -60,4 +60,18 @@ describe('extractCsv', () => {
     expect(joined).toBe(normalizedMarkdown);
     expect(normalizedMarkdown.length).toBeGreaterThan(0);
   });
+
+  it('survives malformed CSV (e.g. unclosed quote) with a warning and empty markdown', () => {
+    const content = 'a,"unclosed\n';
+    const { normalizedMarkdown, chunks } = extractCsv({
+      ...baseInput,
+      content,
+    });
+
+    expect(normalizedMarkdown).toBe('');
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].extractionWarnings).toEqual([
+      expect.stringMatching(/^CSV parse failed:/),
+    ]);
+  });
 });

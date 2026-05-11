@@ -32,6 +32,11 @@ const CURATOR_FAILURE_CLIENT_MESSAGE =
 const MASKER_FAILURE_CLIENT_MESSAGE =
   'マスク処理に失敗しました。設定またはログを確認してください。';
 
+/** Whole mebibytes for client-facing copy (limit is defined in binary units). */
+function formatBytesAsMB(bytes: number): string {
+  return `${Math.floor(bytes / (1024 * 1024))} MB`;
+}
+
 function defaultContentTypeForExt(
   ext: string
 ): 'text/plain' | 'text/markdown' | 'text/csv' {
@@ -77,7 +82,9 @@ export async function POST(request: Request) {
 
   if (file.size > MAX_UPLOAD_BYTES) {
     return NextResponse.json(
-      { error: 'ファイルサイズは 5 MB 以下にしてください。' },
+      {
+        error: `ファイルサイズは ${formatBytesAsMB(MAX_UPLOAD_BYTES)} 以下にしてください。`,
+      },
       { status: 413 }
     );
   }

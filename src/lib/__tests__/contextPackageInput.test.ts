@@ -163,9 +163,39 @@ describe('buildContextPackageExportInput', () => {
     expect(exportInput.includedDocuments).toEqual([
       expect.objectContaining({
         fileName: 'sales.xlsx (sheet=Sheet1, range=A1:B2)',
+        aiSafeViaMasking: false,
         aiSafeContent: 'Revenue table',
       }),
     ]);
+  });
+
+  it('routes direct-policy chunks with empty or whitespace-only text to human review', () => {
+    const base = {
+      purpose: 'chunk',
+      documents: [inventoryDoc({ id: 'doc-1', fileName: 'empty.csv' })],
+    };
+
+    const emptyText = buildContextPackageExportInput({
+      ...base,
+      chunks: [knowledgeChunk({ docId: 'doc-1', text: '' })],
+    });
+    expect(emptyText.includedDocuments).toEqual([]);
+    expect(emptyText.humanReviewDocuments).toEqual([
+      expect.objectContaining({
+        fileName: 'empty.csv (sheet=Sheet1, range=A1:B2)',
+        reason: 'Chunk text content is empty or unavailable',
+        status: 'Human review required',
+      }),
+    ]);
+
+    const whitespace = buildContextPackageExportInput({
+      ...base,
+      chunks: [knowledgeChunk({ docId: 'doc-1', text: '   \n\t  ' })],
+    });
+    expect(whitespace.includedDocuments).toEqual([]);
+    expect(whitespace.humanReviewDocuments?.[0]?.reason).toBe(
+      'Chunk text content is empty or unavailable'
+    );
   });
 
   it('includes maskedText for requires_masking chunks', () => {

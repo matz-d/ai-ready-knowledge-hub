@@ -1,5 +1,7 @@
 import './loadEnv';
 import path from 'node:path';
+import { TextDecoder } from 'node:util';
+import { ZodError } from 'zod';
 import { maskKnowledgeChunk } from '../src/agents/masker/maskKnowledgeChunk';
 import { createChunkFirestoreAdapter } from '../src/lib/chunkFirestoreAdapter';
 import { DOCUMENTS_COLLECTION } from '../src/lib/documents';
@@ -9,6 +11,7 @@ import { getFirestoreClient } from '../src/lib/firestore';
 import type { FirestoreDocument, FirestoreDocumentStatus } from '../src/lib/firestoreSchema';
 import { adaptFirestoreDocumentToInventory } from '../src/lib/inventoryFirestoreAdapter';
 import type { KnowledgeChunk } from '../src/lib/knowledgeChunkSchema';
+import { parseFirestoreDocumentData } from '../src/lib/parseFirestoreDocumentData';
 import { readRawObject } from '../src/lib/storage';
 
 const TERMINAL_CHUNK_ELIGIBLE_STATUSES = new Set<FirestoreDocumentStatus>([
@@ -68,7 +71,24 @@ async function loadDocument(docId: string): Promise<{
     throw new Error(`Document not found: ${docId}`);
   }
 
-  const firestoreDocument = snapshot.data() as FirestoreDocument;
+  const raw = snapshot.data();
+  if (raw == null) {
+    throw new Error(`Document ${docId} exists but has no data payload.`);
+  }
+
+  let firestoreDocument: FirestoreDocument;
+  try {
+    firestoreDocument = parseFirestoreDocumentData(raw);
+  } catch (err: unknown) {
+    if (err instanceof ZodError) {
+      throw new Error(
+        `Firestore document ${docId} does not match the expected schema. ` +
+          `Fix the document or the parser if this is a legitimate shape.`,
+        { cause: err }
+      );
+    }
+    throw err;
+  }
   if (!TERMINAL_CHUNK_ELIGIBLE_STATUSES.has(firestoreDocument.status)) {
     throw new Error(
       `Document status "${firestoreDocument.status}" is not chunk-eligible. ` +
@@ -101,7 +121,15 @@ function extractChunks(args: {
   const extension = path.extname(args.fileName).toLowerCase();
 
   if (extension === '.csv') {
-    const text = args.content.toString('utf-8');
+    let text: string;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(args.content);
+    } catch (cause: unknown) {
+      throw new Error(
+        'CSV object bytes are not valid UTF-8. Re-export the file as UTF-8 or remove invalid sequences.',
+        { cause }
+      );
+    }
     const extracted = extractCsv({
       docId: args.docId,
       fileName: args.fileName,

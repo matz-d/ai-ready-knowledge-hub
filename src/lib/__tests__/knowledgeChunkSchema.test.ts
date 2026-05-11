@@ -8,6 +8,11 @@ import {
   type KnowledgeChunk,
   type KnowledgeChunkLocator,
 } from '../knowledgeChunkSchema';
+import {
+  AiUsePolicyEnum,
+  SensitivityEnum,
+  expectedAiUsePolicy,
+} from '../../agents/curator/schema';
 
 const EXTRACTOR_INPUT = 'fixture-extractor-bytes';
 const DOC_ID = 'doc-parent-1';
@@ -68,6 +73,20 @@ describe('KnowledgeChunkLocatorSchema', () => {
 });
 
 describe('KnowledgeChunkSchema', () => {
+  it('uses the shared sensitivity and aiUsePolicy enum values', () => {
+    expect(SensitivityEnum.options).toEqual([
+      'Public',
+      'Internal',
+      'Confidential',
+      'Restricted',
+    ]);
+    expect(AiUsePolicyEnum.options).toEqual([
+      'direct',
+      'requires_masking',
+      'blocked',
+    ]);
+  });
+
   it('parses a valid chunk for each locator variant', () => {
     const locators: KnowledgeChunkLocator[] = [
       { kind: 'spreadsheet', sheetName: 'S', range: 'A1:B2' },
@@ -119,6 +138,65 @@ describe('computeChunkSourceHash', () => {
 });
 
 describe('validateKnowledgeChunkInvariants', () => {
+  it.each(SensitivityEnum.options)(
+    'accepts the expected aiUsePolicy for sensitivity %s',
+    (sensitivity) => {
+      const locator: KnowledgeChunkLocator = { kind: 'paragraph' };
+      const expectedPolicy = expectedAiUsePolicy(sensitivity);
+      const chunk = buildChunk({
+        locator,
+        sensitivity,
+        aiUsePolicy: expectedPolicy,
+        maskedText:
+          expectedPolicy === 'requires_masking' ? '[REDACTED]' : undefined,
+        sourceHash: hashFor(locator),
+      });
+
+      expect(
+        validateKnowledgeChunkInvariants(chunk, {
+          parentDocument: validParent,
+          extractorInput: EXTRACTOR_INPUT,
+        })
+      ).toEqual({ ok: true });
+    }
+  );
+
+  it.each([
+    ['Public', 'blocked'],
+    ['Internal', 'requires_masking'],
+    ['Confidential', 'direct'],
+    ['Restricted', 'requires_masking'],
+  ] as const)(
+    'rejects mismatched aiUsePolicy %s -> %s',
+    (sensitivity, aiUsePolicy) => {
+      const locator: KnowledgeChunkLocator = { kind: 'paragraph' };
+      const chunk = buildChunk({
+        locator,
+        sensitivity,
+        aiUsePolicy,
+        maskedText:
+          aiUsePolicy === 'requires_masking' ? '[REDACTED]' : undefined,
+        sourceHash: hashFor(locator),
+      });
+
+      const result = validateKnowledgeChunkInvariants(chunk, {
+        parentDocument: validParent,
+        extractorInput: EXTRACTOR_INPUT,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(
+          result.errors.some((e) =>
+            e.includes(
+              `When sensitivity is ${sensitivity}, aiUsePolicy must be ${expectedAiUsePolicy(sensitivity)}`
+            )
+          )
+        ).toBe(true);
+      }
+    }
+  );
+
   it('returns ok when all invariants hold', () => {
     const locator: KnowledgeChunkLocator = { kind: 'paragraph' };
     const chunk = buildChunk({
@@ -206,7 +284,7 @@ describe('validateKnowledgeChunkInvariants', () => {
     const locator: KnowledgeChunkLocator = { kind: 'paragraph' };
     const chunk = buildChunk({
       locator,
-      sensitivity: 'Internal',
+      sensitivity: 'Confidential',
       aiUsePolicy: 'requires_masking',
       maskedText: undefined,
       sourceHash: hashFor(locator),

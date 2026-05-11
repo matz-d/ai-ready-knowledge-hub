@@ -9,6 +9,14 @@ export type ColumnSensitivityRule = {
   reason: string;
 };
 
+/** Higher rank = more restrictive (aligned with {@link SensitivityEnum} ordering intent). */
+const SENSITIVITY_RANK: Record<Sensitivity, number> = {
+  Public: 0,
+  Internal: 1,
+  Confidential: 2,
+  Restricted: 3,
+};
+
 export const DEFAULT_COLUMN_SENSITIVITY_RULES: ColumnSensitivityRule[] = [
   {
     matchExact: ['顧客名', '氏名', '担当者'],
@@ -81,7 +89,14 @@ function extractMarkdownTableHeaderCells(text: string): string[] {
     if (headerCells.length === 0) {
       continue;
     }
-    if (!isMarkdownTableSeparator(lines[i + 1])) {
+    const separatorLine = lines[i + 1];
+    const separatorCells = parseMarkdownRow(separatorLine).filter(
+      (cell) => cell.length > 0
+    );
+    if (
+      separatorCells.length !== headerCells.length ||
+      !isMarkdownTableSeparator(separatorLine)
+    ) {
       continue;
     }
     return headerCells;
@@ -111,10 +126,6 @@ export function upgradeChunkSensitivityFromColumnHeader(
   chunk: KnowledgeChunk,
   rules: ColumnSensitivityRule[]
 ): KnowledgeChunk {
-  if (chunk.sensitivity === 'Restricted' || chunk.sensitivity === 'Confidential') {
-    return { ...chunk };
-  }
-
   const headerCells = extractMarkdownTableHeaderCells(chunk.text);
   if (headerCells.length === 0) {
     return { ...chunk };
@@ -123,6 +134,13 @@ export function upgradeChunkSensitivityFromColumnHeader(
   const normalizedHeaderCells = headerCells.map(normalizeHeaderValue);
   const matchedRule = rules.find((rule) => matchesRule(normalizedHeaderCells, rule));
   if (matchedRule === undefined) {
+    return { ...chunk };
+  }
+
+  // Never lower sensitivity from column rules; only promote when the rule is stricter.
+  if (
+    SENSITIVITY_RANK[chunk.sensitivity] >= SENSITIVITY_RANK[matchedRule.sensitivity]
+  ) {
     return { ...chunk };
   }
 

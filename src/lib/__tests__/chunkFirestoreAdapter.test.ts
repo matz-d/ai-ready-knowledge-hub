@@ -288,7 +288,7 @@ describe('chunkFirestoreAdapter (fake Firestore)', () => {
     expect(result.extractionWarnings).toEqual(['empty cell at B3']);
   });
 
-  it('replaceChunksForDocument (2nd call) deletes old chunks — delete-then-write', async () => {
+  it('replaceChunksForDocument (2nd call) drops prior chunk ids — write-then-delete', async () => {
     const fakeDb = new FakeFirestore();
     seedParentDoc(fakeDb);
     const adapter = createChunkFirestoreAdapter(fakeDb as unknown as Firestore);
