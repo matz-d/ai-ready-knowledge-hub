@@ -4,6 +4,7 @@ import type {
   IncludedContextDocument,
 } from './exportContextPackage';
 import type { InventoryDocument } from './inventory';
+import type { KnowledgeChunk } from './knowledgeChunkSchema';
 import {
   isBlockedForAi,
   needsMaskerEvaluation,
@@ -51,6 +52,7 @@ export function isSafeForContextPackageExport(doc: InventoryDocument): boolean {
 export type BuildContextPackageInputOptions = {
   purpose: string;
   documents: InventoryDocument[];
+  chunks?: KnowledgeChunk[];
   generatedAt?: Date | string;
   missingKnowledge?: string[];
   questionsForHumanOwner?: string[];
@@ -61,12 +63,7 @@ export type BuildContextPackageInputOptions = {
   allowPlaceholderBodies?: boolean;
 };
 
-/**
- * Maps inventory documents to `exportContextPackageMarkdown` input.
- * Restricted / blocked documents never appear in included bodies; Confidential without
- * an AI-safe body or pending Masker evaluation goes to human review.
- */
-export function buildContextPackageExportInput(
+function buildDocumentOnlyContextPackageExportInput(
   options: BuildContextPackageInputOptions
 ): ContextPackageExportInput {
   const allowPlaceholderBodies = options.allowPlaceholderBodies ?? false;
@@ -168,4 +165,103 @@ export function buildContextPackageExportInput(
     missingKnowledge: options.missingKnowledge ?? [],
     questionsForHumanOwner: options.questionsForHumanOwner ?? [],
   };
+}
+
+function chunkSheetRangeHint(chunk: KnowledgeChunk): string | undefined {
+  if (chunk.locator.kind !== 'spreadsheet') {
+    return undefined;
+  }
+  return `sheet=${chunk.locator.sheetName}, range=${chunk.locator.range}`;
+}
+
+function chunkFileName(parent: InventoryDocument, chunk: KnowledgeChunk): string {
+  const hint = chunkSheetRangeHint(chunk);
+  if (!hint) {
+    return parent.fileName;
+  }
+  return `${parent.fileName} (${hint})`;
+}
+
+function buildChunkAwareContextPackageExportInput(
+  options: BuildContextPackageInputOptions
+): ContextPackageExportInput {
+  const includedDocuments: IncludedContextDocument[] = [];
+  const excludedDocuments: ExcludedContextDocument[] = [];
+  const humanReviewDocuments: ExcludedContextDocument[] = [];
+  const parentById = new Map(options.documents.map((doc) => [doc.id, doc]));
+
+  for (const chunk of options.chunks ?? []) {
+    const parent = parentById.get(chunk.docId);
+    if (!parent) {
+      humanReviewDocuments.push({
+        fileName: chunk.id,
+        reason: `Chunk parent document not found for docId=${chunk.docId}`,
+        status: 'Human review required',
+      });
+      continue;
+    }
+
+    if (parent.status === 'blocked' || parent.status === 'restricted') {
+      continue;
+    }
+
+    if (chunk.aiUsePolicy === 'blocked' || chunk.sensitivity === 'Restricted') {
+      continue;
+    }
+
+    if (chunk.aiUsePolicy === 'requires_masking') {
+      const masked = chunk.maskedText?.trim();
+      if (!masked) {
+        humanReviewDocuments.push({
+          fileName: chunkFileName(parent, chunk),
+          reason: 'Chunk requires masking but maskedText is unavailable',
+          status: 'Human review required',
+        });
+        continue;
+      }
+
+      includedDocuments.push({
+        fileName: chunkFileName(parent, chunk),
+        reason: parent.rationale,
+        sourceType: parent.documentType,
+        sensitivity: chunk.sensitivity,
+        aiSafeViaMasking: true,
+        aiSafeContent: masked,
+      });
+      continue;
+    }
+
+    includedDocuments.push({
+      fileName: chunkFileName(parent, chunk),
+      reason: parent.rationale,
+      sourceType: parent.documentType,
+      sensitivity: chunk.sensitivity,
+      aiSafeContent: chunk.text.trim(),
+    });
+  }
+
+  return {
+    purpose: options.purpose,
+    generatedAt: options.generatedAt,
+    sourceDocumentsReviewed: options.documents.length,
+    includedDocuments,
+    excludedDocuments,
+    humanReviewDocuments,
+    missingKnowledge: options.missingKnowledge ?? [],
+    questionsForHumanOwner: options.questionsForHumanOwner ?? [],
+  };
+}
+
+/**
+ * Maps inventory documents/chunks to `exportContextPackageMarkdown` input.
+ * - Without chunks: keeps existing document-only behavior.
+ * - With chunks: chunk-first export with chunk-level filtering and masking rules.
+ */
+export function buildContextPackageExportInput(
+  options: BuildContextPackageInputOptions
+): ContextPackageExportInput {
+  if (options.chunks === undefined) {
+    return buildDocumentOnlyContextPackageExportInput(options);
+  }
+  return buildChunkAwareContextPackageExportInput(options);
 }
