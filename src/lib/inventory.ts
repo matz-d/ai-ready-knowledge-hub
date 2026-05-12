@@ -12,6 +12,7 @@ import type {
   SerializableCuratorBlock,
   SerializableMaskerBlock,
 } from './documents';
+import type { FirestoreSourceKind } from './firestoreSchema';
 
 /** Stable UI / Context Package input shape (aligned with future Firestore metadata). */
 export type InventoryDocument = {
@@ -39,6 +40,12 @@ export type InventoryDocument = {
   aiSafeContent?: string;
   /** GCS read failed during Context Package assembly; row must not join included bodies. */
   contextPackageBodyLoadError?: string;
+  /** Source kind — used to show re-import button only for workspace documents. */
+  sourceKind?: FirestoreSourceKind;
+  /** Drive fileId for workspace documents; used to trigger re-import. */
+  externalSourceFileId?: string;
+  /** Google Drive web-view URL for workspace documents. */
+  externalSourceWebViewLink?: string;
 };
 
 /** One row from `docs/w1-artifacts/inventory.snapshot.json` (historical artifact; do not mutate file). */

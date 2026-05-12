@@ -43,7 +43,7 @@ async function submitWithErrorResponse(
 
   fireEvent.change(
     screen.getByRole('textbox', {
-      name: 'Google Sheets の URL または fileId',
+      name: 'Google Sheets / Google Docs の URL または fileId',
     }),
     {
       target: {

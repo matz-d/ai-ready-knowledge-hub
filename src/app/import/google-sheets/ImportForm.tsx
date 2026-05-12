@@ -250,20 +250,22 @@ export function ImportForm() {
       <form className="upload-form import-sheets-form" onSubmit={onSubmit}>
         <label className="upload-file-label">
           <span className="upload-file-label__text">
-            Google Sheets の URL または fileId
+            Google Sheets / Google Docs の URL または fileId
           </span>
           <input
             className="upload-file-input import-sheets-url-input"
             type="text"
             name="urlOrFileId"
             autoComplete="off"
-            placeholder="https://docs.google.com/spreadsheets/d/… または fileId"
+            placeholder="https://docs.google.com/spreadsheets/d/… または /document/d/… または fileId"
             disabled={status === 'importing' || status === 'curating'}
           />
         </label>
         <p className="import-sheets-note" role="note">
-          特定タブの URL でも<strong>全シート</strong>を取り込みます（URL の{' '}
+          <strong>Sheets</strong>: 特定タブの URL でも<strong>全シート</strong>を取り込みます（URL の{' '}
           <code>gid=</code> は無視されます）。
+          <br />
+          <strong>Docs</strong>: Google ドキュメントの URL（<code>docs.google.com/document/d/…</code>）も取り込めます。
         </p>
         <button
           type="submit"

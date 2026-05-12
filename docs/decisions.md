@@ -667,6 +667,7 @@ sample-data/
 
 ## 関連ドキュメント
 
+- [docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) — Phase 3-B（Drive 再取り込み・schemaVersion 2・鮮度バッジ・完了条件の正本）
 - [docs/concept.md](concept.md) — プロダクトコンセプト
 - [docs/architecture.md](architecture.md) — 技術構成
 - [docs/firestore-schema.md](firestore-schema.md) — Firestore document shape の正本

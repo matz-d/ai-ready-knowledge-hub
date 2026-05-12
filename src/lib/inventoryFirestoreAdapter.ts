@@ -118,6 +118,9 @@ export function adaptFirestoreDocumentToInventory(
     curator: serializeCuratorBlock(doc.curator),
     masker: doc.masker ? serializeMaskerBlock(doc.masker) : undefined,
     maskerEvaluation: maskerEvaluationFromBlock(doc.masker),
+    sourceKind: doc.sourceKind,
+    externalSourceFileId: doc.externalSource?.fileId,
+    externalSourceWebViewLink: doc.externalSource?.webViewLink,
   };
 }
 

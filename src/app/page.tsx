@@ -8,6 +8,7 @@ import { listInventoryDocumentsFromFirestore } from '../lib/inventoryFirestoreAd
 import { buildContextPackageExportInput } from '../lib/contextPackageInput';
 import { exportContextPackageMarkdown } from '../lib/exportContextPackage';
 import type { Sensitivity } from '../agents/curator/schema';
+import { ReimportButton } from './_components/ReimportButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -285,7 +286,14 @@ export default async function Home() {
               {inventoryState.documents.map((doc) => (
                 <article className="inventory-card" key={doc.id}>
                   <header className="inventory-card-header">
-                    <h3 className="inventory-card-title">{doc.fileName}</h3>
+                    <h3 className="inventory-card-title">
+                      <Link
+                        href={`/documents/${doc.id}`}
+                        className="inventory-card-title-link"
+                      >
+                        {doc.fileName}
+                      </Link>
+                    </h3>
                     <span
                       className={sensitivityPillClass(doc.sensitivity)}
                       title="effective sensitivity"
@@ -323,6 +331,18 @@ export default async function Home() {
                       Masker により Restricted へ格上げ（原本 Curator:{' '}
                       {doc.originalCuratorSensitivity ?? '—'}）
                     </p>
+                  ) : null}
+                  {doc.sourceKind === 'google_workspace' &&
+                  (doc.externalSourceWebViewLink ?? doc.externalSourceFileId) ? (
+                    <div className="inventory-card-actions">
+                      <ReimportButton
+                        urlOrFileId={
+                          doc.externalSourceWebViewLink ??
+                          doc.externalSourceFileId!
+                        }
+                        className="inventory-card-reimport"
+                      />
+                    </div>
                   ) : null}
                 </article>
               ))}

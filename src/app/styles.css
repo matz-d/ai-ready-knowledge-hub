@@ -1513,6 +1513,248 @@ pre {
   font-weight: 700;
 }
 
+/* ── Inventory card title link ─────────────────────────────── */
+.inventory-card-title-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.inventory-card-title-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* ── Inventory card re-import action row ───────────────────── */
+.inventory-card-actions {
+  margin-top: 4px;
+}
+
+/* ── Re-import button + toast ──────────────────────────────── */
+.reimport-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.reimport-btn {
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reimport-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.reimport-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.reimport-toast {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  animation: toast-fade-in 0.2s ease;
+}
+
+.reimport-toast--overwritten,
+.reimport-toast--skipped,
+.reimport-toast--created {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.reimport-toast--error {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+@keyframes toast-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Freshness badge ───────────────────────────────────────── */
+.freshness-badge {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.freshness-badge--loading {
+  background: #f0f2f5;
+  color: var(--muted);
+}
+
+.freshness-badge--stale {
+  background: var(--amber-soft);
+  color: var(--amber);
+  border: 1px solid color-mix(in srgb, var(--amber) 30%, transparent);
+}
+
+.freshness-badge--fresh {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.freshness-badge--inaccessible {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.freshness-badge--unknown {
+  background: #f0f2f5;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+/* ── Document detail Drive row ─────────────────────────────── */
+.doc-detail-workspace {
+  margin-bottom: 24px;
+}
+
+.doc-detail-drive-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+/* ── Document detail page layout ───────────────────────────── */
+.doc-detail-breadcrumb {
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.doc-detail-breadcrumb a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.doc-detail-breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.doc-detail-article {
+  max-width: 820px;
+}
+
+.doc-detail-header {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.doc-detail-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.doc-detail-title {
+  margin: 0 0 6px;
+  font-size: clamp(20px, 4vw, 28px);
+  line-height: 1.25;
+}
+
+.doc-detail-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.doc-detail-section {
+  margin-bottom: 28px;
+}
+
+.doc-detail-section h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.doc-detail-dl {
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.doc-detail-dl div {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  align-items: baseline;
+}
+
+.doc-detail-dl div:first-child {
+  border-top: none;
+}
+
+.doc-detail-dl dt {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.doc-detail-dl dd {
+  margin: 0;
+  line-height: 1.55;
+  word-break: break-all;
+}
+
+.doc-detail-rationale {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--foreground);
+  margin: 0;
+}
+
+.doc-detail-drive-link {
+  color: var(--blue);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.doc-detail-drive-link:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 820px) {
   .hero,
   .flow-strip,

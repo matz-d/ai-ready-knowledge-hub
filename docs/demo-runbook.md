@@ -391,3 +391,70 @@ Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で
 - Firestore `documents` collection と `gs://$KNOWLEDGE_HUB_BUCKET/raw/`, `gs://$KNOWLEDGE_HUB_BUCKET/masked/` を手動で整理する
 - 破壊的操作のため、本リポジトリでは **自動削除スクリプトは提供しない**
 - 誤削除防止のため、対象 project / bucket を必ず二重確認してから実施する
+
+---
+
+## 13. Phase 3-B 運用（schemaVersion 2・インデックス・再取り込み・鮮度）
+
+[docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) §6–12 の実装・完了条件に沿ったデモ／運用手順です。Phase 3-A の Sheets 取り込み（§5）に加え、**同じ Drive ファイルの上書き de-dup** と **詳細ページの鮮度バッジ**を見せるときに使います。
+
+### 13.1 schemaVersion 2 への移行（`backfillSourceKind.ts`）
+
+既存の `documents` が `schemaVersion: 1` のまま残っていると、parser が `sourceKind` 必須化したビルドでは読み取りに失敗し得ます。Firestore へ一括で足す手順は **dry-run → confirm の 2 段**に固定されています（設計根拠: [phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) D-P3-B-3・§3「backfill script」）。
+
+前提:
+
+- リポジトリルートで実行し、§2 のとおり `.env.local` と ADC（または `GOOGLE_APPLICATION_CREDENTIALS`）で Firestore に接続できること。
+
+手順:
+
+1. **dry-run**（書き込みなし。対象件数と先頭 5 件の docId を表示）
+
+   ```bash
+   npm run backfill:source-kind -- --dry-run
+   ```
+
+2. 出力の `targetCount` / `previewDocIds` を確認する。
+
+3. **confirm**（`schemaVersion: 1` の document を batch で `schemaVersion: 2`, `sourceKind: 'upload'`, `externalSource: null` に更新）
+
+   ```bash
+   npm run backfill:source-kind -- --confirm
+   ```
+
+`--dry-run` と `--confirm` は **どちらか一方だけ**指定してください（両方・未指定はエラー）。
+
+### 13.2 Firestore 複合インデックス（`gcloud`）
+
+同一 Drive `fileId` の既存 document を検索する de-dup 用に、`externalSource.fileId` + `sourceKind` の複合インデックスが必要です。設計は [phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) §3「Firestore index」。ルートの [`firestore.indexes.json`](../firestore.indexes.json) と同一定義です。
+
+```bash
+gcloud config set project "$GOOGLE_CLOUD_PROJECT"
+gcloud firestore indexes composite create \
+  --collection-group=documents \
+  --query-scope=collection \
+  --field-config=field-path=externalSource.fileId,order=ascending \
+  --field-config=field-path=sourceKind,order=ascending
+```
+
+ビルド完了まで数分かかることがあります。未作成のまま該当クエリを実行すると Firestore が `FAILED_PRECONDITION` とインデックス作成用リンクを返します。Firebase CLI で `firestore.indexes.json` をデプロイする手順は §2 項目 6 も参照してください。
+
+### 13.3 再取り込みデモ動線（同じ URL を 2 度）
+
+**目的**: 同じスプレッドシート（または Doc）を再度取り込んでも **Inventory に行が増えず**、既存 docId が再利用されることを見せる（`kind: 'overwritten'`）。
+
+1. §5 の手順で 1 度目の取り込みを完了し、`/` で document が 1 件増えたことを確認する。
+2. 同じ **スプレッドシート URL**（または fileId）を、もう一度 `http://localhost:3000/import/google-sheets` のフォームに貼り、取り込みを実行する。
+3. 成功レスポンスに `kind: 'overwritten'` が含まれること、Inventory の **件数が増えない**（同一 docId）ことを確認する。
+4. 代替動線: 文書詳細 `http://localhost:3000/documents/{docId}` を開き、**再取り込み**ボタンから同じソースで上書きを実行する（Workspace 由来の document のみ）。
+
+`contentSha256` が Drive 側のバイト列と一致している場合は Vertex 等をスキップし `skipped: true` が返る短絡パスがあります（[phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) §5 上書きマトリクス）。
+
+### 13.4 Drive 上で更新 → 詳細ページの鮮度バッジ
+
+**目的**: Drive の `modifiedTime` が取り込み済みスナップショットより新しいとき、詳細ページで **「Drive 上で更新されています」** が出ることを確認する（read-time で `GET /api/workspace/freshness?docId=...` が走る設計。正本: [phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) D-P3-B-5）。
+
+1. §5 で Workspace 由来の Sheet（または Doc）を 1 件取り込み、Inventory から当該 document の **詳細**へ進む（`http://localhost:3000/documents/{docId}`）。
+2. ブラウザで Google Drive / Sheets を開き、**セルやタイトルなど実際に保存される変更**を加えて保存する（`modifiedTime` が進むこと）。
+3. 文書詳細を **再読み込み**する。鮮度行に **「Drive 上で更新されています」**（stale）が出れば OK。更新していない状態では **「最新」**（fresh）になる。
+4. Drive から共有が外れた・ファイル削除などでは **「Drive 側で参照できなくなりました」** 系の表示や **「鮮度：不明」** になり得る。SA 共有と §5.4 を併せて確認する。
