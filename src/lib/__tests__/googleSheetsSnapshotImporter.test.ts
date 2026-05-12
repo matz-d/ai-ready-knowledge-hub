@@ -8,8 +8,11 @@ vi.mock('../googleWorkspaceClient', () => ({
 }));
 
 import {
+  DriveExportError,
   GoogleSheetShareError,
+  InvalidGoogleSheetsInputError,
   UnsupportedMimeTypeError,
+  exportDataToBuffer,
   fetchSheetsSnapshot,
   parseGoogleSheetsInput,
   xlsxBufferToNormalizedContent,
@@ -82,9 +85,12 @@ describe('parseGoogleSheetsInput', () => {
 
   it('rejects empty input', () => {
     expect(() => parseGoogleSheetsInput('')).toThrow(
-      'Google Sheets URL or file ID is required.'
+      InvalidGoogleSheetsInputError
     );
     expect(() => parseGoogleSheetsInput('   ')).toThrow(
+      InvalidGoogleSheetsInputError
+    );
+    expect(() => parseGoogleSheetsInput('')).toThrow(
       'Google Sheets URL or file ID is required.'
     );
   });
@@ -94,20 +100,46 @@ describe('parseGoogleSheetsInput', () => {
       parseGoogleSheetsInput(
         `https://evil.example/spreadsheets/d/${SAMPLE_FILE_ID}/edit`
       )
-    ).toThrow('Invalid Google Sheets URL or file ID.');
+    ).toThrow(InvalidGoogleSheetsInputError);
   });
 
   it('rejects fileId that is too short', () => {
     expect(() => parseGoogleSheetsInput('aaaaaaaaaaaaaaaaaaa')).toThrow(
-      'Invalid Google Sheets URL or file ID.'
+      InvalidGoogleSheetsInputError
     );
   });
 
   it('rejects invalid characters in bare id', () => {
     const bad = `${'a'.repeat(19)}.`; // dot not allowed
     expect(() => parseGoogleSheetsInput(bad)).toThrow(
-      'Invalid Google Sheets URL or file ID.'
+      InvalidGoogleSheetsInputError
     );
+  });
+});
+
+describe('exportDataToBuffer', () => {
+  it('returns Buffer input unchanged', () => {
+    const buf = Buffer.from([0x50, 0x4b]);
+    expect(exportDataToBuffer(buf)).toBe(buf);
+  });
+
+  it('converts non-empty binary string to Buffer (latin1)', () => {
+    const expected = Buffer.from([0x50, 0x4b, 3, 4]);
+    const asString = expected.toString('binary');
+    const out = exportDataToBuffer(asString);
+    expect(out.equals(expected)).toBe(true);
+  });
+
+  it('throws DriveExportError for empty string body', () => {
+    expect(() => exportDataToBuffer('')).toThrow(DriveExportError);
+    expect(() => exportDataToBuffer('')).toThrow(/empty string/);
+    expect(() => exportDataToBuffer('')).toThrow(/string response/);
+  });
+
+  it('throws DriveExportError for unexpected body types', () => {
+    expect(() => exportDataToBuffer(null)).toThrow(DriveExportError);
+    expect(() => exportDataToBuffer(null)).toThrow(/unexpected body type/);
+    expect(() => exportDataToBuffer(null)).toThrow(/null/);
   });
 });
 
@@ -164,6 +196,22 @@ describe('fetchSheetsSnapshot', () => {
     expect(result.exportedAt).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
     );
+  });
+
+  it('coerces string export body through exportDataToBuffer (integration)', async () => {
+    filesGetMock.mockResolvedValue({
+      data: {
+        id: SAMPLE_FILE_ID,
+        name: 'Q1 Plan',
+        mimeType: 'application/vnd.google-apps.spreadsheet',
+      },
+    });
+    const xlsxBytes = Buffer.from([0x50, 0x4b, 3, 4]);
+    filesExportMock.mockResolvedValue({ data: xlsxBytes.toString('binary') });
+
+    const result = await fetchSheetsSnapshot(SAMPLE_FILE_ID);
+
+    expect(result.xlsxBuffer.equals(xlsxBytes)).toBe(true);
   });
 
   it('throws GoogleSheetShareError when files.get returns 403', async () => {

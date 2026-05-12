@@ -77,7 +77,7 @@ Phase 3-A は **Drive API で `.xlsx` をエクスポート**し、既存の upl
 
 ### 5.0 この節だけで取り込み完了まで（推奨順路）
 
-次を **上から順に** 実行すれば、他節を挟まずに Google Sheets の 1 件取り込みが完了します（chunk 生成や Context Package export まで見る場合は §5.3 の末尾と §10 / §7 を続けてください）。
+次を **上から順に** 実行すれば、他節を挟まずに Google Sheets の 1 件取り込みが完了します（chunk 生成や Context Package export まで見る場合は §5.3 の末尾と §10 / §7 を続けてください）。**アプリをデプロイして URL を配る場合**は、§5.5 の HTTP 到達制御（PoC / 本番）を先に確認してください。
 
 1. §2 まで完了し、`.env.local` に `GOOGLE_CLOUD_PROJECT` と `KNOWLEDGE_HUB_BUCKET` がある。デモでは **`GOOGLE_APPLICATION_CREDENTIALS`** にサービスアカウント（SA）キー JSON のパスを指定する構成を推奨する（ADC がユーザ認証のみだと環境によって Drive が通らないことがある）。
 2. ターミナルで `gcloud services enable drive.googleapis.com --project="$GOOGLE_CLOUD_PROJECT"` を一度実行し、下記 §5.1 の Drive API 前提を満たす。
@@ -139,6 +139,15 @@ Phase 3-A は **Drive API で `.xlsx` をエクスポート**し、既存の upl
 | **Drive API 未使用**のプロジェクト | §5.1 のとおり `drive.googleapis.com` を有効化してから再試行。 |
 
 API が返すエラーメッセージに **共有すべき SA メール**が含まれる場合は、その文字列に従って共有設定を直す。
+
+### 5.5 `POST /api/import/google-sheets` の到達制御（PoC と本番）
+
+UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の実装ではこの API に **アプリ層の認証・認可・レート制限はない**（demo / PoC 前提）。到達できるクライアントからは、SA が共有を受けている Spreadsheet について **Drive export → GCS 書き込み → Curator/Masker（Vertex 等）** までが起動しうる。**Sheet を SA と共有していることは、HTTP 面の匿名アクセスを防がない。**
+
+- **本番やインターネット公開**: **認証・認可・レート制限は必須**。Cloud Run を広く公開する場合は **IAP**、**token 検証**、**限定ネットワーク（VPC / internal ingress）**、**Cloud Armor / LB / アプリの rate limit**、ブラウザ経路では **SameSite / CSRF** など、多層の shield を設計ドキュメントに沿って入れること。
+- **この runbook が想定する PoC**: 主に **`localhost` の `npm run dev`**、または **IAP や VPC で到達が限定された** Cloud Run など、**意図した利用者だけが URL にアクセスできる**前提。パブリック URL を一時的に出す場合は、上記に近い制御と **クォータ監視・事後の無効化** を手順に含める。
+
+未認証エンドポイントのリスクと本番要件の正本は [docs/phase-3-google-sheets-import.md](phase-3-google-sheets-import.md) の **「5. HTTP API と公開運用上のセキュリティ（PoC 制約）」** 節を参照。
 
 ## 6. Upload 後に見るポイント
 

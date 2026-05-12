@@ -166,7 +166,7 @@ export function ImportForm() {
       }
 
       const body = (await res.json()) as ImportApiErrorBody;
-      const errorCode = body.error ?? `http_${res.status}`;
+      const responseErrorCode = body.error ?? `http_${res.status}`;
       const emailFromBody = body.serviceAccountEmail?.trim();
 
       if (res.status === 403 && body.error === 'sheet_not_shared') {
@@ -181,7 +181,7 @@ export function ImportForm() {
       }
 
       setStatus('error');
-      setErrorCode(errorCode);
+      setErrorCode(responseErrorCode);
       setErrorMessage(body.error ?? '取り込みに失敗しました。');
       setErrorDocId(body.docId ?? null);
     } catch {

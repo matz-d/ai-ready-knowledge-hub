@@ -90,7 +90,11 @@ vi.mock('../firestore', () => ({
   getFirestoreClient: getFirestoreClientMock,
 }));
 
-import { orchestrateImportedSnapshotProcessing } from '../importedSnapshotOrchestrator';
+import {
+  ImportTooLargeError,
+  buildSafeXlsxName,
+  orchestrateImportedSnapshotProcessing,
+} from '../importedSnapshotOrchestrator';
 
 const xlsxBuffer = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x01]);
 
@@ -234,6 +238,35 @@ describe('orchestrateImportedSnapshotProcessing', () => {
     );
   });
 
+  it('uses sheet fallback for Drive name that is only an xlsx suffix', async () => {
+    fetchSheetsSnapshotMock.mockResolvedValue({
+      ...snapshot,
+      metadata: {
+        ...snapshot.metadata,
+        name: '  .xlsx  ',
+      },
+    });
+    curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+    await orchestrateImportedSnapshotProcessing({
+      urlOrFileId: 'sheet-file-id',
+    });
+
+    expect(uploadRawObjectMock).toHaveBeenCalledWith(
+      'raw/doc-1/sheet.xlsx',
+      xlsxBuffer,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    expect(setMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileName: 'sheet.xlsx',
+        externalSource: expect.objectContaining({
+          name: '  .xlsx  ',
+        }),
+      })
+    );
+  });
+
   it('does not double-append .xlsx when Drive metadata name already has xlsx suffix', async () => {
     fetchSheetsSnapshotMock.mockResolvedValue({
       ...snapshot,
@@ -350,6 +383,24 @@ describe('orchestrateImportedSnapshotProcessing', () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
+  it('stops before GCS/Firestore when exported snapshot exceeds max size', async () => {
+    fetchSheetsSnapshotMock.mockResolvedValue({
+      ...snapshot,
+      xlsxBuffer: Buffer.alloc(5 * 1024 * 1024 + 1),
+    });
+
+    await expect(
+      orchestrateImportedSnapshotProcessing({ urlOrFileId: 'sheet-file-id' })
+    ).rejects.toBeInstanceOf(ImportTooLargeError);
+
+    expect(xlsxBufferToNormalizedContentMock).not.toHaveBeenCalled();
+    expect(uploadRawObjectMock).not.toHaveBeenCalled();
+    expect(setMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(curatorFlowMock).not.toHaveBeenCalled();
+    expect(maskerPipelineFlowMock).not.toHaveBeenCalled();
+  });
+
   it('stops before Firestore when raw upload fails', async () => {
     uploadRawObjectMock.mockRejectedValue(new Error('gcs failed'));
 
@@ -362,31 +413,87 @@ describe('orchestrateImportedSnapshotProcessing', () => {
     expect(deleteRawObjectMock).not.toHaveBeenCalled();
   });
 
-  it('rolls back raw object when Firestore initial set fails', async () => {
-    randomUUIDMock.mockReturnValue('doc-4');
-    setMock.mockRejectedValue(new Error('set failed'));
+  describe('rollback paths (§5 failure matrix)', () => {
+    /**
+     * `safeDeleteRawObject` は `deleteRawObject` を try/catch で包むだけなので、
+     * storage の mock で rollback 呼び出しを固定する。
+     */
+    it('after GCS [B] succeeds: Firestore initial set [C] fails → raw object rollback only', async () => {
+      randomUUIDMock.mockReturnValue('doc-4');
+      setMock.mockRejectedValue(new Error('set failed'));
 
-    await expect(
-      orchestrateImportedSnapshotProcessing({ urlOrFileId: 'sheet-file-id' })
-    ).rejects.toThrow('set failed');
+      await expect(
+        orchestrateImportedSnapshotProcessing({ urlOrFileId: 'sheet-file-id' })
+      ).rejects.toThrow('set failed');
 
-    expect(deleteRawObjectMock).toHaveBeenCalledWith('raw/doc-4/料金表.xlsx');
-    expect(deleteMock).not.toHaveBeenCalled();
-  });
-
-  it('rolls back raw object and Firestore doc when curating update fails', async () => {
-    randomUUIDMock.mockReturnValue('doc-5');
-    updateMock.mockImplementation(async (payload: Record<string, unknown>) => {
-      if (payload.status === 'curating') {
-        throw new Error('curating failed');
-      }
+      expect(uploadRawObjectMock).toHaveBeenCalledTimes(1);
+      expect(deleteRawObjectMock).toHaveBeenCalledTimes(1);
+      expect(deleteRawObjectMock).toHaveBeenCalledWith('raw/doc-4/料金表.xlsx');
+      expect(deleteMock).not.toHaveBeenCalled();
+      expect(updateMock).not.toHaveBeenCalled();
+      expect(curatorFlowMock).not.toHaveBeenCalled();
+      expect(maskerPipelineFlowMock).not.toHaveBeenCalled();
     });
 
-    await expect(
-      orchestrateImportedSnapshotProcessing({ urlOrFileId: 'sheet-file-id' })
-    ).rejects.toThrow('curating failed');
+    it('after [B][C] succeed: curating update [D] fails → raw then Firestore rollback (reverse partial order)', async () => {
+      randomUUIDMock.mockReturnValue('doc-5');
+      updateMock.mockImplementation(async (payload: Record<string, unknown>) => {
+        if (payload.status === 'curating') {
+          throw new Error('curating failed');
+        }
+      });
 
-    expect(deleteRawObjectMock).toHaveBeenCalledWith('raw/doc-5/料金表.xlsx');
-    expect(deleteMock).toHaveBeenCalledTimes(1);
+      await expect(
+        orchestrateImportedSnapshotProcessing({ urlOrFileId: 'sheet-file-id' })
+      ).rejects.toThrow('curating failed');
+
+      expect(uploadRawObjectMock).toHaveBeenCalledTimes(1);
+      expect(setMock).toHaveBeenCalledTimes(1);
+      expect(deleteRawObjectMock).toHaveBeenCalledTimes(1);
+      expect(deleteRawObjectMock).toHaveBeenCalledWith('raw/doc-5/料金表.xlsx');
+      expect(deleteMock).toHaveBeenCalledTimes(1);
+      const rawOrder = deleteRawObjectMock.mock.invocationCallOrder[0];
+      const firestoreOrder = deleteMock.mock.invocationCallOrder[0];
+      expect(rawOrder).toBeDefined();
+      expect(firestoreOrder).toBeDefined();
+      expect(rawOrder).toBeLessThan(firestoreOrder);
+      expect(curatorFlowMock).not.toHaveBeenCalled();
+      expect(maskerPipelineFlowMock).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('buildSafeXlsxName', () => {
+  it('uses sheet fallback for empty or whitespace-only input', () => {
+    expect(buildSafeXlsxName('')).toBe('sheet.xlsx');
+    expect(buildSafeXlsxName('   ')).toBe('sheet.xlsx');
+    expect(buildSafeXlsxName('\t\n')).toBe('sheet.xlsx');
+  });
+
+  it('uses sheet fallback when name is only an xlsx suffix (any case)', () => {
+    expect(buildSafeXlsxName('.xlsx')).toBe('sheet.xlsx');
+    expect(buildSafeXlsxName('.XLSX')).toBe('sheet.xlsx');
+    expect(buildSafeXlsxName('  .xlsx  ')).toBe('sheet.xlsx');
+  });
+
+  it('keeps symbol-only bases and does not double-append .xlsx', () => {
+    expect(buildSafeXlsxName('@@@')).toBe('@@@.xlsx');
+    expect(buildSafeXlsxName('###')).toBe('###.xlsx');
+  });
+
+  it('strips a single .xlsx suffix without doubling', () => {
+    expect(buildSafeXlsxName('report.xlsx')).toBe('report.xlsx');
+    expect(buildSafeXlsxName('report.XLSX')).toBe('report.xlsx');
+    expect(buildSafeXlsxName('Q1 Data.xlsx')).toBe('Q1 Data.xlsx');
+  });
+
+  it('strips trailing dots from base before adding .xlsx', () => {
+    expect(buildSafeXlsxName('report.')).toBe('report.xlsx');
+    expect(buildSafeXlsxName('report...')).toBe('report.xlsx');
+    expect(buildSafeXlsxName('report..xlsx')).toBe('report.xlsx');
+  });
+
+  it('sanitizes path separators then applies xlsx rules', () => {
+    expect(buildSafeXlsxName('a/b\\c.xlsx')).toBe('a_b_c.xlsx');
   });
 });

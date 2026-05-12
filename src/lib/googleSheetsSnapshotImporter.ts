@@ -21,6 +21,17 @@ export class UnsupportedMimeTypeError extends Error {
   }
 }
 
+/** Thrown when `urlOrFileId` is empty or not a Sheets URL / valid Drive file id (maps to HTTP 400). */
+export class InvalidGoogleSheetsInputError extends Error {
+  constructor(
+    message = 'Invalid Google Sheets URL or file ID. Use a https://docs.google.com/spreadsheets/d/{id}/… link or a valid Drive file ID.',
+    options?: ErrorOptions
+  ) {
+    super(message, options);
+    this.name = 'InvalidGoogleSheetsInputError';
+  }
+}
+
 /** Thrown when Drive returns 403 (share with service account; maps to HTTP 403). */
 export class GoogleSheetShareError extends Error {
   constructor(
@@ -70,7 +81,9 @@ const DOCS_SHEETS_URL_PREFIX =
 export function parseGoogleSheetsInput(urlOrFileId: string): { fileId: string } {
   const trimmed = urlOrFileId.trim();
   if (!trimmed) {
-    throw new Error('Google Sheets URL or file ID is required.');
+    throw new InvalidGoogleSheetsInputError(
+      'Google Sheets URL or file ID is required.'
+    );
   }
 
   const urlMatch = trimmed.match(DOCS_SHEETS_URL_PREFIX);
@@ -79,9 +92,7 @@ export function parseGoogleSheetsInput(urlOrFileId: string): { fileId: string } 
     : trimmed;
 
   if (!FILE_ID_PATTERN.test(candidate)) {
-    throw new Error(
-      'Invalid Google Sheets URL or file ID. Use a https://docs.google.com/spreadsheets/d/{id}/… link or a valid Drive file ID.'
-    );
+    throw new InvalidGoogleSheetsInputError();
   }
 
   return { fileId: candidate };
@@ -108,7 +119,11 @@ function httpStatusFromUnknown(err: unknown): number | undefined {
   return undefined;
 }
 
-function exportDataToBuffer(data: unknown): Buffer {
+/**
+ * Normalizes `files.export` response `data` to a Buffer.
+ * googleapis may return Buffer, ArrayBuffer, a view, or a latin1/binary string.
+ */
+export function exportDataToBuffer(data: unknown): Buffer {
   if (Buffer.isBuffer(data)) {
     return data;
   }
@@ -118,7 +133,22 @@ function exportDataToBuffer(data: unknown): Buffer {
   if (ArrayBuffer.isView(data)) {
     return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
   }
-  throw new Error('Drive export response did not include binary data.');
+  if (typeof data === 'string') {
+    if (data.length === 0) {
+      throw new DriveExportError(
+        'Google Drive files.export returned an empty string body instead of binary data (string response despite responseType: arraybuffer).',
+        { cause: new Error('empty_string_export_body') }
+      );
+    }
+    // googleapis may deliver raw bytes as a latin1/binary string even when responseType is arraybuffer.
+    return Buffer.from(data, 'binary');
+  }
+  const kind =
+    data === null ? 'null' : data === undefined ? 'undefined' : typeof data;
+  throw new DriveExportError(
+    `Google Drive files.export returned unexpected body type (${kind}) instead of Buffer, ArrayBuffer, TypedArray, or binary string.`,
+    { cause: new TypeError(`unexpected_export_body:${kind}`) }
+  );
 }
 
 export async function fetchSheetsSnapshot(
@@ -179,6 +209,9 @@ export async function fetchSheetsSnapshot(
   try {
     xlsxBuffer = exportDataToBuffer(exportBody);
   } catch (err) {
+    if (err instanceof DriveExportError) {
+      throw err;
+    }
     throw new DriveExportError(undefined, { cause: err });
   }
 

@@ -177,12 +177,16 @@ export type RunCuratorAndMaskerLifecycleArgs = {
 /**
  * Walking Skeleton の副作用順序を一手に握る orchestrator。
  *
- * 段:
- *   [B] GCS uploadRawObject
- *   [C] Firestore initial set       — 失敗時 GCS rollback
- *   [D] Firestore update(curating)  — 失敗時 GCS + Firestore set rollback
- *   [E][F] runCuratorPhase          — curated / blocked / masking 終端 update
- *   [G][H] runMaskerPhase (masking のとき) — ai_safe / restricted / failed 終端 update
+ * Google Sheets 取り込みでは importedSnapshotOrchestrator が先に
+ * [A] parseGoogleSheetsInput、[A'] fetchSheetsSnapshot、[B-pre] 正規化テキスト化を行い、
+ * 以降は本関数と同じ [B]〜[H] の鎖に合流する。
+ *
+ * 段（アップロード直パスは [B] から）:
+ *   [B] uploadRawObject — 生バイトを GCS raw へ
+ *   [C] Firestore initial set — 失敗時 GCS rollback
+ *   [D] Firestore update(curating) — 失敗時 GCS + Firestore set rollback
+ *   [E][F] runCuratorPhase — curatorFlow + Firestore 終端（curated / blocked / masking）
+ *   [G][H] runMaskerPhase — requires_masking のときのみ、ai_safe / restricted / failed 終端更新
  *
  * route.ts は本関数の戻り値を HTTP レスポンスへ整形するだけにする。
  */
@@ -195,13 +199,13 @@ export async function orchestrateUploadProcessing(
   const aiSafeStoragePath = `masked/${docId}/${safeOriginalFileName}`;
   const contentSha256 = hashContentSha256(input.buffer);
 
-  // [B] GCS uploadRawObject
+  // [B] uploadRawObject — 生バイトを GCS raw へ
   await uploadRawObject(storagePath, input.buffer, input.contentType);
 
   const db = getFirestoreClient();
   const docRef = db.collection(DOCUMENTS_COLLECTION).doc(docId);
 
-  // [C] Firestore initial set
+  // [C] Firestore initial set — uploaded 相当の初回フィールド
   try {
     await docRef.set(
       buildUploadInitialDocumentBody({
@@ -218,7 +222,10 @@ export async function orchestrateUploadProcessing(
     throw e;
   }
 
-  // [D] Firestore update(curating) — レビュー 1.b 解消
+  // TODO(Phase 3-B): Share with `importedSnapshotOrchestrator.updateCuratingStatus`: one helper
+  // that runs the same `assertFirestoreInvariants` curating skeleton + `docRef.update({ status:
+  // 'curating', updatedAt })` after initial `set`, so upload/import cannot drift before lifecycle.
+  // [D] Firestore update(curating) — エージェント段の直前に status を curating へ
   try {
     assertFirestoreInvariants({
       status: 'curating',
@@ -242,6 +249,8 @@ export async function orchestrateUploadProcessing(
     throw e;
   }
 
+  // TODO(Phase 3-B): `runCuratorAndMaskerLifecycle` should remain the single post-curating-update
+  // entry for both Phase 2 upload and Phase 3 import once the uploaded→curating step is extracted.
   return runCuratorAndMaskerLifecycle({
     docRef,
     docId,
@@ -256,7 +265,7 @@ export async function orchestrateUploadProcessing(
 export async function runCuratorAndMaskerLifecycle(
   args: RunCuratorAndMaskerLifecycleArgs
 ): Promise<OrchestrateResult> {
-  // [E][F] Curator phase
+  // [E][F] runCuratorPhase — curatorFlow + Firestore 終端更新（masking なら次段へ）
   let curatorOutput: { result: CuratorOutputResult; completedAt: Date };
   try {
     curatorOutput = await runCuratorPhase({
@@ -283,7 +292,7 @@ export async function runCuratorAndMaskerLifecycle(
     };
   }
 
-  // curatorTerminal === 'masking' — Masker pipeline へ
+  // curatorTerminal === 'masking' — [G][H] runMaskerPhase へ
   let maskerOutcome: MaskerPhaseSuccess;
   try {
     maskerOutcome = await runMaskerPhase({
@@ -335,7 +344,7 @@ export async function runCuratorAndMaskerLifecycle(
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Curator phase
+// [E][F] Curator phase — runCuratorPhase
 // ─────────────────────────────────────────────────────────────────────
 
 async function runCuratorPhase(args: {
@@ -406,7 +415,7 @@ async function runCuratorPhase(args: {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Masker phase（中身は Step 2 でユーザーが実装）
+// [G][H] Masker phase — runMaskerPhase（requires_masking 時のパイプラインと終端更新）
 // ─────────────────────────────────────────────────────────────────────
 
 type CuratorContextForMasker = {
@@ -434,7 +443,7 @@ type MaskerPhaseSuccess =
   | { kind: 'restricted'; summary: MaskerSummary; sensitivityReason: string };
 
 /**
- * 仕様（あなたが Step 2 で書く中核 5-15 行）:
+ * [G][H] Masker 段の処理の流れ（擬似コード; 本文の try 内がこれに相当）:
  *
  *   const pipeline = await maskerPipelineFlow({
  *     fileName: args.fileName,
@@ -469,9 +478,8 @@ type MaskerPhaseSuccess =
  *     sensitivityReason: upgraded.sensitivityReason ?? '',
  *   };
  *
- * 例外時（catch の外側）: orchestrator の上位 try/catch が
- *   recordPhaseFailure(args.docRef, 'masker', e) を呼んでから throw する責務をもつ。
- *   → Step 2 ではここでも recordPhaseFailure を呼ぶ try/catch を関数全体にラップする。
+ * 例外時: 本関数の catch で recordPhaseFailure(docRef, 'masker', e) の後に再 throw。
+ *   runCuratorAndMaskerLifecycle が MaskerPhaseError にラップする。
  *
  * 不変条件チェック（任意）:
  *   buildAiSafeFirestoreUpdate / buildRestrictedFirestoreUpdate の戻り値に対して

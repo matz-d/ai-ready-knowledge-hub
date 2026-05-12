@@ -8,11 +8,13 @@ import { documentUploadSuccessBodyFromOrchestrate } from '../../../../lib/docume
 import {
   DriveExportError,
   GoogleSheetShareError,
+  InvalidGoogleSheetsInputError,
   UnsupportedMimeTypeError,
 } from '../../../../lib/googleSheetsSnapshotImporter';
 import { getServiceAccountEmail } from '../../../../lib/googleWorkspaceClient';
 import {
   GcsUploadError,
+  ImportTooLargeError,
   orchestrateImportedSnapshotProcessing,
 } from '../../../../lib/importedSnapshotOrchestrator';
 import {
@@ -49,10 +51,35 @@ function httpStatusFromUnknown(err: unknown): number | undefined {
   return undefined;
 }
 
-function isGoogleSheetsInputParseError(err: unknown): boolean {
-  return (
-    err instanceof Error &&
-    err.message.toLowerCase().includes('google sheets url or file id')
+function extractRequestUrlFromUnknown(err: unknown): string | undefined {
+  if (typeof err !== 'object' || err === null) {
+    return undefined;
+  }
+  const e = err as {
+    config?: { url?: unknown };
+    response?: { config?: { url?: unknown } };
+  };
+  const urlFromConfig = e.config?.url;
+  if (typeof urlFromConfig === 'string') {
+    return urlFromConfig;
+  }
+  const urlFromResponseConfig = e.response?.config?.url;
+  if (typeof urlFromResponseConfig === 'string') {
+    return urlFromResponseConfig;
+  }
+  return undefined;
+}
+
+function isLikelyDriveError(err: unknown): boolean {
+  if (err instanceof GoogleSheetShareError || err instanceof DriveExportError) {
+    return true;
+  }
+  const requestUrl = extractRequestUrlFromUnknown(err);
+  if (!requestUrl) {
+    return false;
+  }
+  return /(^https?:\/\/)?([a-z0-9-]+\.)?googleapis\.com\/drive\//i.test(
+    requestUrl
   );
 }
 
@@ -99,7 +126,7 @@ export async function POST(request: Request) {
   } catch (e) {
     console.error('[import/google-sheets] processing failed', e);
 
-    if (isGoogleSheetsInputParseError(e)) {
+    if (e instanceof InvalidGoogleSheetsInputError) {
       return NextResponse.json({ error: 'invalid_url' }, { status: 400 });
     }
 
@@ -117,7 +144,7 @@ export async function POST(request: Request) {
     }
 
     const status = httpStatusFromUnknown(e);
-    if (status === 404) {
+    if (status === 404 && isLikelyDriveError(e)) {
       return NextResponse.json({ error: 'sheet_not_found' }, { status: 404 });
     }
 
@@ -127,6 +154,10 @@ export async function POST(request: Request) {
 
     if (e instanceof DriveExportError) {
       return NextResponse.json({ error: 'drive_export_failed' }, { status: 502 });
+    }
+
+    if (e instanceof ImportTooLargeError) {
+      return NextResponse.json({ error: 'import_too_large' }, { status: 413 });
     }
 
     if (e instanceof GcsUploadError) {

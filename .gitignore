@@ -4,6 +4,7 @@
 !.env.local.example
 !.env*.example
 *.log
+*.tgz
 node_modules/
 .next/
 out/

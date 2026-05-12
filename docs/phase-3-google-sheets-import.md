@@ -263,10 +263,51 @@ externalSource: null | {
 - OAuth user delegation
 - MCP / gws の本線組み込み
 - schemaVersion の bump と backfill script
+- **HTTP レベルでの認証・認可・レート制限**（アプリ実装としては Phase 3-A では入れない。本番公開時はインフラまたはアプリ側で必須。理由とリスクは次節）
 
 ---
 
-## 5. エラー処理（Failure Policy）
+## 5. HTTP API と公開運用上のセキュリティ（PoC 制約）
+
+Phase 3-A の **`POST /api/import/google-sheets`** は、現時点のアプリ実装として **エンドポイント単体の認証・認可・レート制限を持たない**。これは **demo / PoC 前提**であり、インターネットにそのまま晒す設計ではない。
+
+### 5.1 未認証 API が意味するリスク（レビュー用）
+
+リクエストがサーバーに届くと、サーバーが利用する **サービスアカウント（SA）の権限と、Drive 上でその SA に共有された Spreadsheet** の範囲で、次が **誰でも（到達できれば）誘発しうる**:
+
+1. **Drive** から対象ブックの **`.xlsx` export（fetch）**
+2. **`KNOWLEDGE_HUB_BUCKET` への raw オブジェクト書き込み**
+3. 既存パイプラインに沿った **Curator / Masker（Vertex AI / Gemini 等）の呼び出し** と Firestore 更新
+
+**D-P3-A-4（SA 共有前提）** は「**どの Sheet を Drive が SA に読ませるか**」の境界であり、「**誰がこの HTTP API を叩けるか**」とは別問題である。API が未認証のまま広く到達可能だと、**コスト濫用**（Vertex・GCS・Drive クォータ）、**意図しない取り込みの連打**、**相手の用意した fileId への処理負荷**など、典型的な **公開未認証エンドポイントの abuse** が起きうる。
+
+### 5.2 本番またはインターネット経路で公開するときの必須事項
+
+**本番で Cloud Run 等をインターネット（または広い社内ネット）から利用可能にする場合、認証・認可・レート制限は必須**とする。例（組み合わせ・多層が望ましい）:
+
+| 観点 | 例 |
+| --- | --- |
+| 人・クライアントの識別 | **Cloud IAP**、OAuth2 / OIDC、**Bearer token** 検証、mTLS |
+| ネットワーク | **内部 LB / VPC 内のみ**、VPN 背後、**Cloud Run の ingress 制限**、許可リスト IP |
+| 濫用抑止 | **Cloud Armor**、API Gateway / LB のスロットリング、**アプリ層レート制限**、プロジェクトクォータとアラート |
+| ブラウザ経路 | セッション Cookie を使う場合は **SameSite** や CSRF 対策など、既存アプリの認証モデルに合わせた shield |
+
+「SA に Sheet を共有しているから安全」**ではない**。HTTP 面で誰でも import を起動できる状態のまま public URL を配ることは避ける。
+
+### 5.3 Demo / PoC で想定する前提（いずれか・または併用）
+
+ドキュメントとレビューでは、少なくとも次のいずれかを **明示した前提**で扱う:
+
+- **ローカル**: `npm run dev` と `localhost` のみ。到達可能な主体は開発者のマシンに限定。
+- **限定ネットワーク上のデプロイ**: VPC 内、社内 VPN の先、**ingress を internal のみ**にした Cloud Run など、**意図したクライアントだけが到達**する構成。
+- **IAP 等で人を制限した Cloud Run**: 匿名インターネットからは叩けず、許可された Google アカウント等のみ。
+- 一時的にパブリック URL を出す場合でも、**上記に近い shield** と **監査・クォータ・事後クリーンアップ**（[docs/demo-runbook.md](demo-runbook.md) の手動 reset 節など）を runbook に書き、**PoC 終了後の無効化**を含める。
+
+運用手順の補足は [docs/demo-runbook.md](demo-runbook.md) の Google Sheets 節（HTTP 到達制御の短い注意）を参照。
+
+---
+
+## 6. エラー処理（Failure Policy）
 
 | ケース | HTTP | 挙動 |
 | --- | --- | --- |
@@ -283,7 +324,7 @@ externalSource: null | {
 
 ---
 
-## 6. 実装ステップ（タスク分割）
+## 7. 実装ステップ（タスク分割）
 
 1. **Google auth / client 準備** ([src/lib/googleWorkspaceClient.ts])
    - ADC または env credential で `drive.readonly` scope の client を返す。
@@ -331,7 +372,7 @@ externalSource: null | {
 
 ---
 
-## 7. 完了条件
+## 8. 完了条件
 
 - [ ] Google Sheets URL / fileId を入力すると document が登録される
 - [ ] GCS の raw 領域に `.xlsx` snapshot が保存される
@@ -349,10 +390,11 @@ externalSource: null | {
 
 ---
 
-## 8. Phase 3-B 以降への送り
+## 9. Phase 3-B 以降への送り
 
 Phase 3-A の範囲外だが、Phase 3-B 以降で扱う候補。
 
+- **`POST /api/import/google-sheets` の認証・認可・レート制限**（本番公開に向けたアプリ実装、または IAP / API Gateway 等との統合）
 - 自動同期 / 差分検知（`modifiedTime` / `exportedAt` の比較で）
 - `externalSource.fileId` での de-dup または上書き import
 - `gid` / シート選択 / range 選択

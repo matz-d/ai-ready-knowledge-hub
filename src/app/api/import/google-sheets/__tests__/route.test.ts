@@ -3,13 +3,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   orchestrateImportedSnapshotProcessingMock,
   getServiceAccountEmailMock,
+  invalidGoogleSheetsInputErrorClass,
   googleSheetShareErrorClass,
   unsupportedMimeTypeErrorClass,
   driveExportErrorClass,
+  importTooLargeErrorClass,
   gcsUploadErrorClass,
   curatorPhaseErrorClass,
   maskerPhaseErrorClass,
 } = vi.hoisted(() => {
+  class InvalidGoogleSheetsInputErrorMock extends Error {
+    constructor(message = 'invalid sheets input') {
+      super(message);
+      this.name = 'InvalidGoogleSheetsInputError';
+    }
+  }
+
   class GoogleSheetShareErrorMock extends Error {
     constructor(message = 'share required') {
       super(message);
@@ -30,6 +39,13 @@ const {
     constructor(message = 'drive export failed') {
       super(message);
       this.name = 'DriveExportError';
+    }
+  }
+
+  class ImportTooLargeErrorMock extends Error {
+    constructor(message = 'import too large') {
+      super(message);
+      this.name = 'ImportTooLargeError';
     }
   }
 
@@ -61,9 +77,11 @@ const {
   return {
     orchestrateImportedSnapshotProcessingMock: vi.fn(),
     getServiceAccountEmailMock: vi.fn(),
+    invalidGoogleSheetsInputErrorClass: InvalidGoogleSheetsInputErrorMock,
     googleSheetShareErrorClass: GoogleSheetShareErrorMock,
     unsupportedMimeTypeErrorClass: UnsupportedMimeTypeErrorMock,
     driveExportErrorClass: DriveExportErrorMock,
+    importTooLargeErrorClass: ImportTooLargeErrorMock,
     gcsUploadErrorClass: GcsUploadErrorMock,
     curatorPhaseErrorClass: CuratorPhaseErrorMock,
     maskerPhaseErrorClass: MaskerPhaseErrorMock,
@@ -76,6 +94,7 @@ vi.mock('../../../../../agents/_shared/genkitClient', () => ({
 
 vi.mock('../../../../../lib/importedSnapshotOrchestrator', () => ({
   orchestrateImportedSnapshotProcessing: orchestrateImportedSnapshotProcessingMock,
+  ImportTooLargeError: importTooLargeErrorClass,
   GcsUploadError: gcsUploadErrorClass,
 }));
 
@@ -84,6 +103,7 @@ vi.mock('../../../../../lib/googleWorkspaceClient', () => ({
 }));
 
 vi.mock('../../../../../lib/googleSheetsSnapshotImporter', () => ({
+  InvalidGoogleSheetsInputError: invalidGoogleSheetsInputErrorClass,
   GoogleSheetShareError: googleSheetShareErrorClass,
   UnsupportedMimeTypeError: unsupportedMimeTypeErrorClass,
   DriveExportError: driveExportErrorClass,
@@ -227,15 +247,28 @@ describe('POST /api/import/google-sheets', () => {
     expect(orchestrateImportedSnapshotProcessingMock).not.toHaveBeenCalled();
   });
 
-  it('returns 400 invalid_url when parseGoogleSheetsInput fails', async () => {
+  it('returns 400 invalid_url when orchestration throws InvalidGoogleSheetsInputError', async () => {
     orchestrateImportedSnapshotProcessingMock.mockRejectedValue(
-      new Error(
-        'Invalid Google Sheets URL or file ID. Use a https://docs.google.com/spreadsheets/d/{id}/… link or a valid Drive file ID.'
-      )
+      new invalidGoogleSheetsInputErrorClass()
     );
 
     const response = await POST(
       buildRequest({ urlOrFileId: '  ', displayName: 'Revenue.xlsx' })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(parseJson(response)).resolves.toEqual({ error: 'invalid_url' });
+  });
+
+  it('returns 400 invalid_url for InvalidGoogleSheetsInputError regardless of message text', async () => {
+    orchestrateImportedSnapshotProcessingMock.mockRejectedValue(
+      new invalidGoogleSheetsInputErrorClass(
+        'Copy can change anytime without breaking status mapping.'
+      )
+    );
+
+    const response = await POST(
+      buildRequest({ urlOrFileId: 'x', displayName: 'Revenue.xlsx' })
     );
 
     expect(response.status).toBe(400);
@@ -276,6 +309,9 @@ describe('POST /api/import/google-sheets', () => {
 
   it('returns 404 sheet_not_found on Drive not found', async () => {
     orchestrateImportedSnapshotProcessingMock.mockRejectedValue({
+      config: {
+        url: 'https://www.googleapis.com/drive/v3/files/sheet-file-id-1234567890123',
+      },
       response: { status: 404 },
     });
 
@@ -286,6 +322,24 @@ describe('POST /api/import/google-sheets', () => {
     expect(response.status).toBe(404);
     await expect(parseJson(response)).resolves.toEqual({
       error: 'sheet_not_found',
+    });
+  });
+
+  it('does not return sheet_not_found for non-Drive 404-like errors', async () => {
+    orchestrateImportedSnapshotProcessingMock.mockRejectedValue({
+      response: {
+        status: 404,
+        config: { url: 'https://example.com/internal/not-found' },
+      },
+    });
+
+    const response = await POST(
+      buildRequest({ urlOrFileId: 'sheet-file-id-1234567890123' })
+    );
+
+    expect(response.status).toBe(502);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'drive_export_failed',
     });
   });
 
@@ -334,10 +388,28 @@ describe('POST /api/import/google-sheets', () => {
     });
   });
 
-  it('returns 500 curator_failed with docId', async () => {
+  it('returns 413 import_too_large when exported snapshot exceeds limit', async () => {
     orchestrateImportedSnapshotProcessingMock.mockRejectedValue(
-      new curatorPhaseErrorClass('doc-curator', new Error('curator failed'))
+      new importTooLargeErrorClass()
     );
+
+    const response = await POST(
+      buildRequest({ urlOrFileId: 'sheet-file-id-1234567890123' })
+    );
+
+    expect(response.status).toBe(413);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'import_too_large',
+    });
+  });
+
+  it('returns 500 curator_failed with docId', async () => {
+    const err = new curatorPhaseErrorClass(
+      'doc-curator',
+      new Error('curator failed')
+    );
+    Object.assign(err, { status: 404 });
+    orchestrateImportedSnapshotProcessingMock.mockRejectedValue(err);
 
     const response = await POST(
       buildRequest({ urlOrFileId: 'sheet-file-id-1234567890123' })
