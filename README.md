@@ -83,12 +83,29 @@ sample-data/
 | `npm run masker:risk [path]` | A8 residualRisk 評価 |
 | `npm run masker:pipeline [path]` | 原本 → SimpleMasker → A8 residualRisk → `ai_safe_ready` / `restricted_promoted` |
 | `npm run masker:dlp:smoke [path]` | Cloud DLP provider 単体の疎通確認 |
+| `npm run backfill:source-kind -- --dry-run` | `schemaVersion=1` document の対象件数と先頭 5 件 docId を表示（Firestore へは書き込まない） |
+| `npm run backfill:source-kind -- --confirm` | `schemaVersion=1` document を 500 件単位で `{ schemaVersion: 2, sourceKind: 'upload', externalSource: null }` に更新 |
 | `npm run chunks:regenerate -- <docId>` | CSV / `.xlsx` の GCS raw object から `documents/{docId}/chunks` を全置換。`--provider=simple-rule\|cloud-dlp` で chunk masking provider を固定可能 |
 | `npm run inventory:snapshot` | 実 LLM 出力で `docs/w1-artifacts/inventory.snapshot.json` を再生成 |
 | `npm run context:demo` | Context Package demo の統一エントリ。デフォルトは live、`--w1` 指定で fixture (`npm run context:demo -- --w1`) |
 | `npm run context:demo:live` | Firestore documents + chunks/GCS bodies から Context Package Markdown を出力。chunk がある document は chunk 優先、ない document は GCS body fallback（Firestore/GCS 条件不備時は終了コード 1） |
 | `npm run context:demo:w1` | W1 snapshot fixture から Context Package Markdown を出力する offline demo（Firestore/GCS 非接続） |
 | `npm run curator:ui` | Genkit dev UI で flow を観察 |
+
+### schemaVersion 1 → 2 backfill 実行手順
+
+本番 Firestore へ書き込む前に、必ず dry-run を先に実行する。
+
+1. dry-run（書き込みなし）
+
+   `npm run backfill:source-kind -- --dry-run`
+
+2. dry-run の `targetCount` / `previewDocIds` を確認
+3. confirm 実行（500 件単位で更新）
+
+   `npm run backfill:source-kind -- --confirm`
+
+4. 完了ログの `failedDocIds` を確認（失敗があっても処理は継続）
 
 ### セキュリティ境界の現状 (MVP)
 

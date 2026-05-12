@@ -16,6 +16,7 @@
     "masker:risk": "tsx scripts/runMaskerRisk.ts",
     "masker:pipeline": "tsx scripts/runMaskerPipeline.ts",
     "masker:dlp:smoke": "tsx scripts/runDlpMaskerSmoke.ts",
+    "backfill:source-kind": "tsx scripts/backfillSourceKind.ts",
     "chunks:regenerate": "tsx scripts/regenerateChunks.ts",
     "inventory:snapshot": "tsx scripts/generateInventorySnapshot.ts",
     "context:demo": "tsx scripts/runContextPackageDemo.ts",

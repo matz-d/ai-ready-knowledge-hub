@@ -177,6 +177,38 @@ export type RunCuratorAndMaskerLifecycleArgs = {
 };
 
 /**
+ * [D] initial `set` の直後、`status='curating'` へ進める前の不変条件検査と Firestore update。
+ * `externalSource` を省略すると upload 経路（`sourceKind: 'upload'`, `externalSource: null`）と同じ検査になる。
+ */
+export async function transitionDocumentToCurating(
+  docRef: DocumentReference,
+  contentSha256: string,
+  externalSource?: FirestoreExternalSource | null
+): Promise<void> {
+  const resolvedExternalSource = externalSource ?? null;
+  const sourceKind: FirestoreInitialDocumentDraft['sourceKind'] =
+    resolvedExternalSource === null ? 'upload' : 'google_workspace';
+  assertFirestoreInvariants({
+    sourceKind,
+    externalSource: resolvedExternalSource,
+    status: 'curating',
+    contentSha256,
+    aiSafeStoragePath: null,
+    sensitivity: null,
+    aiUsePolicy: null,
+    sensitivitySource: null,
+    originalCuratorSensitivity: null,
+    sensitivityReason: null,
+    curator: null,
+    masker: null,
+  });
+  await docRef.update({
+    status: 'curating',
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/**
  * Walking Skeleton の副作用順序を一手に握る orchestrator。
  *
  * Google Sheets 取り込みでは importedSnapshotOrchestrator が先に
@@ -224,37 +256,15 @@ export async function orchestrateUploadProcessing(
     throw e;
   }
 
-  // TODO(Phase 3-B): Share with `importedSnapshotOrchestrator.updateCuratingStatus`: one helper
-  // that runs the same `assertFirestoreInvariants` curating skeleton + `docRef.update({ status:
-  // 'curating', updatedAt })` after initial `set`, so upload/import cannot drift before lifecycle.
   // [D] Firestore update(curating) — エージェント段の直前に status を curating へ
   try {
-    assertFirestoreInvariants({
-      sourceKind: 'upload',
-      externalSource: null,
-      status: 'curating',
-      contentSha256,
-      aiSafeStoragePath: null,
-      sensitivity: null,
-      aiUsePolicy: null,
-      sensitivitySource: null,
-      originalCuratorSensitivity: null,
-      sensitivityReason: null,
-      curator: null,
-      masker: null,
-    });
-    await docRef.update({
-      status: 'curating',
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    await transitionDocumentToCurating(docRef, contentSha256);
   } catch (e) {
     await safeDeleteRawObject(storagePath);
     await safeDeleteFirestoreDoc(docRef);
     throw e;
   }
 
-  // TODO(Phase 3-B): `runCuratorAndMaskerLifecycle` should remain the single post-curating-update
-  // entry for both Phase 2 upload and Phase 3 import once the uploaded→curating step is extracted.
   return runCuratorAndMaskerLifecycle({
     docRef,
     docId,
@@ -826,6 +836,7 @@ export function buildUploadInitialDocumentBody(args: {
 export function buildImportedSnapshotInitialDocumentBody(args: {
   docId: string;
   fileName: string;
+  contentType: string;
   byteSize: number;
   contentSha256: string;
   storagePath: string;
@@ -834,9 +845,7 @@ export function buildImportedSnapshotInitialDocumentBody(args: {
   return buildBaseInitialDocumentBody({
     docId: args.docId,
     fileName: args.fileName,
-    // Phase 3-A imports Google Sheets only, always as Drive-exported XLSX.
-    contentType:
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    contentType: args.contentType,
     byteSize: args.byteSize,
     contentSha256: args.contentSha256,
     storagePath: args.storagePath,

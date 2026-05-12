@@ -53,6 +53,25 @@ Upload → Firestore/GCS → Inventory → Context Package を再現するため
    gcloud services enable dlp.googleapis.com --project="$GOOGLE_CLOUD_PROJECT"
    ```
 
+6. （Phase 3-B）Google Workspace 由来の **同一 Drive `fileId` を再取り込みする de-dup 検索**に使う複合インデックスを用意する。設計根拠は [docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md)（§3 末尾・§6–10 のチェックリスト）を参照。
+
+   リポジトリ直下の [`firestore.indexes.json`](../firestore.indexes.json) と同一定義を GCP に反映する方法の例:
+
+   - **gcloud（このリポジトリの正本 JSON を使わず 1 本で作成）**
+
+     ```bash
+     gcloud config set project "$GOOGLE_CLOUD_PROJECT"
+     gcloud firestore indexes composite create \
+       --collection-group=documents \
+       --query-scope=collection \
+       --field-config=field-path=externalSource.fileId,order=ascending \
+       --field-config=field-path=sourceKind,order=ascending
+     ```
+
+     ビルド完了まで数分かかることがあります。未作成のまま該当クエリを実行すると Firestore が `FAILED_PRECONDITION` とインデックス作成用リンクを返します。
+
+   - **Firebase CLI**: ルートの `firestore.indexes.json` を `firebase.json` の `firestore` 設定から参照しているプロジェクトでは、`firebase deploy --only firestore:indexes` で同一定義を反映できる。
+
 ## 3. 開発サーバー起動
 
 ```bash

@@ -5,12 +5,16 @@ const {
   parseGoogleSheetsInputMock,
   fetchSheetsSnapshotMock,
   xlsxBufferToNormalizedContentMock,
+  parseGoogleDocsInputMock,
+  fetchDocsSnapshotMock,
+  markdownBufferToNormalizedContentMock,
   curatorFlowMock,
   maskerPipelineFlowMock,
   uploadRawObjectMock,
   deleteRawObjectMock,
   uploadMaskedObjectMock,
   deleteMaskedObjectMock,
+  replaceChunksForDocMock,
   setMock,
   updateMock,
   deleteMock,
@@ -23,12 +27,16 @@ const {
   parseGoogleSheetsInputMock: vi.fn(),
   fetchSheetsSnapshotMock: vi.fn(),
   xlsxBufferToNormalizedContentMock: vi.fn(),
+  parseGoogleDocsInputMock: vi.fn(),
+  fetchDocsSnapshotMock: vi.fn(),
+  markdownBufferToNormalizedContentMock: vi.fn(),
   curatorFlowMock: vi.fn(),
   maskerPipelineFlowMock: vi.fn(),
   uploadRawObjectMock: vi.fn(),
   deleteRawObjectMock: vi.fn(),
   uploadMaskedObjectMock: vi.fn(),
   deleteMaskedObjectMock: vi.fn(),
+  replaceChunksForDocMock: vi.fn(),
   setMock: vi.fn(),
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
@@ -50,9 +58,33 @@ vi.mock('../googleSheetsSnapshotImporter', () => ({
   GOOGLE_SHEETS_MIME_TYPE: 'application/vnd.google-apps.spreadsheet',
   XLSX_EXPORT_MIME_TYPE:
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  googleSheetsWorkspaceImportAdapter: {
+    workspaceMimeType: 'application/vnd.google-apps.spreadsheet',
+    exportMimeType:
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    fileExtension: '.xlsx',
+    contentType:
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    toNormalizedContent: xlsxBufferToNormalizedContentMock,
+  },
   parseGoogleSheetsInput: parseGoogleSheetsInputMock,
   fetchSheetsSnapshot: fetchSheetsSnapshotMock,
   xlsxBufferToNormalizedContent: xlsxBufferToNormalizedContentMock,
+}));
+
+vi.mock('../googleDocsSnapshotImporter', () => ({
+  GOOGLE_DOCS_MIME_TYPE: 'application/vnd.google-apps.document',
+  MARKDOWN_EXPORT_MIME_TYPE: 'text/markdown',
+  googleDocsWorkspaceImportAdapter: {
+    workspaceMimeType: 'application/vnd.google-apps.document',
+    exportMimeType: 'text/markdown',
+    fileExtension: '.md',
+    contentType: 'text/markdown',
+    toNormalizedContent: markdownBufferToNormalizedContentMock,
+  },
+  parseGoogleDocsInput: parseGoogleDocsInputMock,
+  fetchDocsSnapshot: fetchDocsSnapshotMock,
+  markdownBufferToNormalizedContent: markdownBufferToNormalizedContentMock,
 }));
 
 vi.mock('../../agents/curator/flow', () => ({
@@ -74,6 +106,10 @@ vi.mock('../storage', () => ({
   deleteMaskedObject: deleteMaskedObjectMock,
 }));
 
+vi.mock('../chunkRegenerator', () => ({
+  replaceChunksForDoc: replaceChunksForDocMock,
+}));
+
 const docMock = {
   set: setMock,
   update: updateMock,
@@ -92,11 +128,14 @@ vi.mock('../firestore', () => ({
 
 import {
   ImportTooLargeError,
+  buildSafeMarkdownName,
   buildSafeXlsxName,
+  orchestrateImportedDocsSnapshotProcessing,
   orchestrateImportedSnapshotProcessing,
 } from '../importedSnapshotOrchestrator';
 
 const xlsxBuffer = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x01]);
+const markdownBuffer = Buffer.from('# Ops Guide\n\n- Step 1', 'utf-8');
 
 const snapshot = {
   metadata: {
@@ -108,6 +147,18 @@ const snapshot = {
   },
   xlsxBuffer,
   exportedAt: '2026-05-12T01:00:00.000Z',
+} as const;
+
+const docsSnapshot = {
+  metadata: {
+    fileId: 'docs-file-id',
+    name: 'Ops Guide',
+    mimeType: 'application/vnd.google-apps.document',
+    webViewLink: 'https://docs.google.com/document/d/docs-file-id/edit',
+    modifiedTime: '2026-05-10T11:22:33.000Z',
+  },
+  markdownBuffer,
+  exportedAt: '2026-05-12T01:30:00.000Z',
 } as const;
 
 const curatorDirectResult = {
@@ -183,6 +234,9 @@ beforeEach(() => {
   parseGoogleSheetsInputMock.mockReturnValue({ fileId: 'sheet-file-id' });
   fetchSheetsSnapshotMock.mockResolvedValue(snapshot);
   xlsxBufferToNormalizedContentMock.mockReturnValue('## Sheet1\n\n| A |');
+  parseGoogleDocsInputMock.mockReturnValue({ fileId: 'docs-file-id' });
+  fetchDocsSnapshotMock.mockResolvedValue(docsSnapshot);
+  markdownBufferToNormalizedContentMock.mockReturnValue('# Ops Guide\n\n- Step 1');
   setMock.mockResolvedValue(undefined);
   updateMock.mockResolvedValue(undefined);
   deleteMock.mockResolvedValue(undefined);
@@ -190,6 +244,7 @@ beforeEach(() => {
   deleteRawObjectMock.mockResolvedValue(undefined);
   uploadMaskedObjectMock.mockResolvedValue(undefined);
   deleteMaskedObjectMock.mockResolvedValue(undefined);
+  replaceChunksForDocMock.mockResolvedValue(undefined);
 });
 
 describe('orchestrateImportedSnapshotProcessing', () => {
@@ -236,6 +291,7 @@ describe('orchestrateImportedSnapshotProcessing', () => {
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'curated', aiUsePolicy: 'direct' })
     );
+    expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-1');
   });
 
   it('uses sheet fallback for Drive name that is only an xlsx suffix', async () => {
@@ -348,6 +404,7 @@ describe('orchestrateImportedSnapshotProcessing', () => {
         aiSafeStoragePath: 'masked/doc-2/料金表.xlsx',
       })
     );
+    expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-2');
   });
 
   it('returns restricted without writing a masked object', async () => {
@@ -368,6 +425,21 @@ describe('orchestrateImportedSnapshotProcessing', () => {
         sensitivitySource: 'masker',
         aiUsePolicy: 'blocked',
       })
+    );
+    expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+  });
+
+  it('marks failed when chunk replacement fails after terminal lifecycle', async () => {
+    randomUUIDMock.mockReturnValue('doc-9');
+    curatorFlowMock.mockResolvedValue(curatorDirectResult);
+    replaceChunksForDocMock.mockRejectedValue(new Error('chunk replace failed'));
+
+    await expect(
+      orchestrateImportedSnapshotProcessing({ urlOrFileId: 'sheet-file-id' })
+    ).rejects.toThrow('chunk replace failed');
+
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed' })
     );
   });
 
@@ -463,6 +535,54 @@ describe('orchestrateImportedSnapshotProcessing', () => {
   });
 });
 
+describe('orchestrateImportedDocsSnapshotProcessing', () => {
+  it('uses the same orchestrator flow for Google Docs with markdown export', async () => {
+    randomUUIDMock.mockReturnValue('doc-d1');
+    curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+    const result = await orchestrateImportedDocsSnapshotProcessing({
+      urlOrFileId: 'https://docs.google.com/document/d/docs-file-id/edit',
+    });
+
+    expect(result.kind).toBe('curated');
+    expect(result.fileName).toBe('Ops Guide.md');
+    expect(result.snapshotByteSize).toBe(markdownBuffer.length);
+    expect(parseGoogleDocsInputMock).toHaveBeenCalledWith(
+      'https://docs.google.com/document/d/docs-file-id/edit'
+    );
+    expect(uploadRawObjectMock).toHaveBeenCalledWith(
+      'raw/doc-d1/Ops Guide.md',
+      markdownBuffer,
+      'text/markdown'
+    );
+    expect(setMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'doc-d1',
+        fileName: 'Ops Guide.md',
+        contentType: 'text/markdown',
+        byteSize: markdownBuffer.length,
+        sourceKind: 'google_workspace',
+        externalSource: expect.objectContaining({
+          provider: 'google_drive',
+          fileId: 'docs-file-id',
+          name: 'Ops Guide',
+          modifiedTime: '2026-05-10T11:22:33.000Z',
+          exportedAt: '2026-05-12T01:30:00.000Z',
+          workspaceMimeType: 'application/vnd.google-apps.document',
+          exportMimeType: 'text/markdown',
+        }),
+      })
+    );
+    expect(curatorFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileName: 'Ops Guide.md',
+        content: '# Ops Guide\n\n- Step 1',
+      })
+    );
+    expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-d1');
+  });
+});
+
 describe('buildSafeXlsxName', () => {
   it('uses sheet fallback for empty or whitespace-only input', () => {
     expect(buildSafeXlsxName('')).toBe('sheet.xlsx');
@@ -500,5 +620,18 @@ describe('buildSafeXlsxName', () => {
 
   it('sanitizes path separators then applies xlsx rules', () => {
     expect(buildSafeXlsxName('a/b\\c.xlsx')).toBe('a_b_c.xlsx');
+  });
+});
+
+describe('buildSafeMarkdownName', () => {
+  it('uses document fallback for empty or extension-only names', () => {
+    expect(buildSafeMarkdownName('')).toBe('document.md');
+    expect(buildSafeMarkdownName('   ')).toBe('document.md');
+    expect(buildSafeMarkdownName('.md')).toBe('document.md');
+  });
+
+  it('strips a single .md suffix without doubling', () => {
+    expect(buildSafeMarkdownName('guide.md')).toBe('guide.md');
+    expect(buildSafeMarkdownName('guide.MD')).toBe('guide.md');
   });
 });

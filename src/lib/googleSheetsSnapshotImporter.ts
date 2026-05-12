@@ -1,11 +1,20 @@
 import { xlsxToNormalizedMarkdown } from './extractors/xlsxExtractor';
 import { getGoogleDriveClient } from './googleWorkspaceClient';
+import type { WorkspaceImportAdapter } from './workspaceImport/types';
 
 export const GOOGLE_SHEETS_MIME_TYPE =
   'application/vnd.google-apps.spreadsheet';
 
 export const XLSX_EXPORT_MIME_TYPE =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+export const googleSheetsWorkspaceImportAdapter: WorkspaceImportAdapter = {
+  workspaceMimeType: GOOGLE_SHEETS_MIME_TYPE,
+  exportMimeType: XLSX_EXPORT_MIME_TYPE,
+  fileExtension: '.xlsx',
+  contentType: XLSX_EXPORT_MIME_TYPE,
+  toNormalizedContent: (bytes) => xlsxBufferToNormalizedContent(bytes),
+};
 
 /** Thrown when Drive metadata says the file is not a Google Sheet (maps to HTTP 415). */
 export class UnsupportedMimeTypeError extends Error {
