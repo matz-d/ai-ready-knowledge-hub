@@ -8,7 +8,7 @@ import type {
   Sensitivity,
 } from '../agents/curator/schema';
 
-export const FIRESTORE_DOCUMENT_SCHEMA_VERSION = 1 as const;
+export const FIRESTORE_DOCUMENT_SCHEMA_VERSION = 2 as const;
 
 export type FirestoreDocumentStatus =
   | 'uploaded'
@@ -55,16 +55,24 @@ export type FirestoreErrorBlock = {
 
 export type FirestoreSourceKind = 'upload' | 'google_workspace';
 
+export type FirestoreWorkspaceMimeType =
+  | 'application/vnd.google-apps.spreadsheet'
+  | 'application/vnd.google-apps.document';
+
+export type FirestoreExportMimeType =
+  | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  | 'text/markdown';
+
 export type FirestoreExternalSource = {
   provider: 'google_drive';
-  workspaceMimeType: 'application/vnd.google-apps.spreadsheet';
+  workspaceMimeType: FirestoreWorkspaceMimeType;
   fileId: string;
   name: string;
   webViewLink?: string;
   modifiedTime?: string;
   importedAt: string;
   exportedAt: string;
-  exportMimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  exportMimeType: FirestoreExportMimeType;
 };
 
 export type FirestoreDocument = {
@@ -102,19 +110,12 @@ export type FirestoreDocument = {
 
 /**
  * Firestore `documents/{id}` から読み取った直後の raw 表現。
- * sourceKind / externalSource は schemaVersion 1 では optional で、
- * read 時に parseFirestoreDocumentData で defaulting される。
+ * schemaVersion 2 では sourceKind / externalSource は必須。
  *
  * 用途は「DocumentSnapshot.data() を一旦受ける箱」だけ。
  * 業務ロジックは必ず FirestoreDocument（parsed shape）を使うこと。
  */
-export type FirestoreRawDocumentShape = Omit<
-  FirestoreDocument,
-  'sourceKind' | 'externalSource'
-> & {
-  sourceKind?: FirestoreSourceKind;
-  externalSource?: FirestoreExternalSource | null;
-};
+export type FirestoreRawDocumentShape = FirestoreDocument;
 
 /**
  * Curator 入力として不変条件検証で実際に読まれるフィールドだけを満たせばよい。
@@ -136,6 +137,8 @@ export type FirestoreMaskerInvariantInput =
 
 export type FirestoreDocumentInvariantInput = Pick<
   FirestoreDocument,
+  | 'sourceKind'
+  | 'externalSource'
   | 'status'
   | 'contentSha256'
   | 'aiSafeStoragePath'
@@ -313,6 +316,27 @@ export function validateFirestoreDocumentInvariants(
     violations.push({
       path: 'sensitivityReason',
       message: 'status restricted requires non-empty sensitivityReason.',
+    });
+  }
+
+  if (
+    doc.sourceKind !== 'upload' &&
+    doc.sourceKind !== 'google_workspace'
+  ) {
+    violations.push({
+      path: 'sourceKind',
+      message: 'sourceKind must be one of upload or google_workspace.',
+    });
+  }
+
+  const hasGoogleDriveExternalSource =
+    doc.externalSource !== null &&
+    doc.externalSource.provider === 'google_drive';
+  if ((doc.sourceKind === 'google_workspace') !== hasGoogleDriveExternalSource) {
+    violations.push({
+      path: 'sourceKind',
+      message:
+        'sourceKind google_workspace requires externalSource provider google_drive, and upload requires externalSource null.',
     });
   }
 

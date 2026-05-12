@@ -6,6 +6,7 @@ import type {
   FirestoreDocument,
   FirestoreMaskerBlock,
 } from '../firestoreSchema';
+import { FIRESTORE_DOCUMENT_SCHEMA_VERSION } from '../firestoreSchema';
 import {
   adaptFirestoreDocumentToInventory,
   listInventoryDocumentsFromFirestore,
@@ -49,7 +50,7 @@ const baseMasker: FirestoreMaskerBlock = {
 function buildDoc(overrides: Partial<FirestoreDocument> = {}): FirestoreDocument {
   return {
     id: 'doc-1',
-    schemaVersion: 1,
+    schemaVersion: FIRESTORE_DOCUMENT_SCHEMA_VERSION,
     fileName: 'sample.txt',
     contentType: 'text/plain',
     byteSize: 12,
@@ -265,13 +266,15 @@ describe('adaptFirestoreDocumentToInventory', () => {
     );
   });
 
-  it('lists legacy raw Firestore documents without sourceKind/externalSource', async () => {
-    const { sourceKind: _sourceKind, externalSource: _externalSource, ...rawData } =
-      buildDoc();
+  it('throws parse error for schemaVersion 1 raw Firestore documents', async () => {
+    const rawData = {
+      ...buildDoc(),
+      schemaVersion: 1,
+    };
     const get = vi.fn().mockResolvedValue({
       docs: [
         {
-          id: 'legacy-doc',
+          id: 'legacy-v1-doc',
           data: () => rawData,
         },
       ],
@@ -283,17 +286,7 @@ describe('adaptFirestoreDocumentToInventory', () => {
       collection,
     } as unknown as ReturnType<typeof getFirestoreClient>);
 
-    const rows = await listInventoryDocumentsFromFirestore();
-
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toEqual(
-      expect.objectContaining({
-        id: 'legacy-doc',
-        fileName: 'sample.txt',
-        status: 'curated',
-        storagePath: 'raw/doc-1/sample.txt',
-      })
-    );
+    await expect(listInventoryDocumentsFromFirestore()).rejects.toThrow();
     expect(collection).toHaveBeenCalledWith('documents');
   });
 });

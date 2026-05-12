@@ -148,20 +148,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'sheet_not_found' }, { status: 404 });
     }
 
-    if (e instanceof UnsupportedMimeTypeError) {
-      return NextResponse.json({ error: 'not_a_spreadsheet' }, { status: 415 });
-    }
-
-    if (e instanceof DriveExportError) {
-      return NextResponse.json({ error: 'drive_export_failed' }, { status: 502 });
-    }
-
     if (e instanceof ImportTooLargeError) {
       return NextResponse.json({ error: 'import_too_large' }, { status: 413 });
     }
 
-    if (e instanceof GcsUploadError) {
-      return NextResponse.json({ error: 'gcs_failed' }, { status: 502 });
+    if (e instanceof UnsupportedMimeTypeError) {
+      return NextResponse.json({ error: 'not_a_spreadsheet' }, { status: 415 });
     }
 
     if (e instanceof CuratorPhaseError) {
@@ -182,6 +174,14 @@ export async function POST(request: Request) {
         },
         { status: 500 }
       );
+    }
+
+    if (e instanceof DriveExportError) {
+      return NextResponse.json({ error: 'drive_export_failed' }, { status: 502 });
+    }
+
+    if (e instanceof GcsUploadError) {
+      return NextResponse.json({ error: 'gcs_failed' }, { status: 502 });
     }
 
     return NextResponse.json({ error: 'drive_export_failed' }, { status: 502 });

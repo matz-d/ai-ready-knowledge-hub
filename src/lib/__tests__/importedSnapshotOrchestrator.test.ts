@@ -493,6 +493,11 @@ describe('buildSafeXlsxName', () => {
     expect(buildSafeXlsxName('report..xlsx')).toBe('report.xlsx');
   });
 
+  it('strips trailing dots re-exposed after max-length slice', () => {
+    const longName = `${'A'.repeat(194)}.${'B'.repeat(50)}.xlsx`;
+    expect(buildSafeXlsxName(longName)).toBe(`${'A'.repeat(194)}.xlsx`);
+  });
+
   it('sanitizes path separators then applies xlsx rules', () => {
     expect(buildSafeXlsxName('a/b\\c.xlsx')).toBe('a_b_c.xlsx');
   });

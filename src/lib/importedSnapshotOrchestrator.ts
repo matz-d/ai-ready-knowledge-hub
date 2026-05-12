@@ -138,7 +138,7 @@ export async function orchestrateImportedSnapshotProcessing(
   // preserve rollback: `safeDeleteRawObject` + `safeDeleteFirestoreDoc` on failure.
   // [D] Firestore update(curating) — エージェント段の直前に status を curating へ
   try {
-    await updateCuratingStatus(docRef, contentSha256);
+    await updateCuratingStatus(docRef, contentSha256, externalSource);
   } catch (e) {
     await safeDeleteRawObject(storagePath);
     await safeDeleteFirestoreDoc(docRef);
@@ -154,6 +154,8 @@ export async function orchestrateImportedSnapshotProcessing(
     displayName: input.displayName?.trim() || fileName,
     content,
     contentSha256,
+    sourceKind: 'google_workspace',
+    externalSource,
     storagePath,
     aiSafeStoragePath,
   });
@@ -185,16 +187,24 @@ export function buildSafeXlsxName(name: string): string {
   if (safeBase.length === 0) {
     safeBase = 'sheet';
   }
-  return `${safeBase.slice(0, 195)}.xlsx`;
+  let truncated = safeBase.slice(0, 195);
+  truncated = truncated.replace(/\.+$/, '');
+  if (truncated.length === 0) {
+    truncated = 'sheet';
+  }
+  return `${truncated}.xlsx`;
 }
 
 async function updateCuratingStatus(
   docRef: DocumentReference,
-  contentSha256: string
+  contentSha256: string,
+  externalSource: FirestoreExternalSource
 ): Promise<void> {
   // TODO(Phase 3-B): Inline body should move next to upload `orchestrateUploadProcessing` [D]
   // into e.g. `transitionDocumentToCurating` in `uploadOrchestrator` (or small shared module).
   assertFirestoreInvariants({
+    sourceKind: 'google_workspace',
+    externalSource,
     status: 'curating',
     contentSha256,
     aiSafeStoragePath: null,

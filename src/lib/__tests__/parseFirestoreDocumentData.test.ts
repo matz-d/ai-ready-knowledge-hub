@@ -9,6 +9,8 @@ const baseRawDocument = {
   contentType: 'text/plain',
   byteSize: 12,
   contentSha256: 'hash-1',
+  sourceKind: 'upload',
+  externalSource: null,
   storagePath: 'raw/doc-1/sample.txt',
   aiSafeStoragePath: null,
   status: 'uploaded',
@@ -30,11 +32,20 @@ const baseRawDocument = {
 } as const;
 
 describe('parseFirestoreDocumentData', () => {
-  it('defaults missing sourceKind/externalSource for legacy document shape', () => {
+  it('accepts schemaVersion 2 shape with required upload sourceKind/externalSource', () => {
     const parsed = parseFirestoreDocumentData(baseRawDocument);
 
     expect(parsed.sourceKind).toBe('upload');
     expect(parsed.externalSource).toBeNull();
+  });
+
+  it('rejects schemaVersion 1 documents as parse error', () => {
+    expect(() =>
+      parseFirestoreDocumentData({
+        ...baseRawDocument,
+        schemaVersion: 1,
+      })
+    ).toThrow();
   });
 
   it('keeps sourceKind/externalSource as-is for the new document shape', () => {
@@ -60,5 +71,24 @@ describe('parseFirestoreDocumentData', () => {
 
     expect(parsed.sourceKind).toBe('google_workspace');
     expect(parsed.externalSource).toEqual(nextShape.externalSource);
+  });
+
+  it('accepts google docs externalSource union values', () => {
+    const docsShape = {
+      ...baseRawDocument,
+      sourceKind: 'google_workspace' as const,
+      externalSource: {
+        provider: 'google_drive' as const,
+        workspaceMimeType: 'application/vnd.google-apps.document' as const,
+        fileId: 'drive-doc-1',
+        name: 'FAQ Draft',
+        importedAt: '2026-05-12T10:00:00.000Z',
+        exportedAt: '2026-05-12T10:00:05.000Z',
+        exportMimeType: 'text/markdown' as const,
+      },
+    };
+
+    const parsed = parseFirestoreDocumentData(docsShape);
+    expect(parsed.externalSource).toEqual(docsShape.externalSource);
   });
 });

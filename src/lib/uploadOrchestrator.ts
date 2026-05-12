@@ -170,6 +170,8 @@ export type RunCuratorAndMaskerLifecycleArgs = {
   displayName: string;
   content: string;
   contentSha256: string;
+  sourceKind: FirestoreInitialDocumentDraft['sourceKind'];
+  externalSource: FirestoreInitialDocumentDraft['externalSource'];
   storagePath: string;
   aiSafeStoragePath: string;
 };
@@ -228,6 +230,8 @@ export async function orchestrateUploadProcessing(
   // [D] Firestore update(curating) — エージェント段の直前に status を curating へ
   try {
     assertFirestoreInvariants({
+      sourceKind: 'upload',
+      externalSource: null,
       status: 'curating',
       contentSha256,
       aiSafeStoragePath: null,
@@ -257,6 +261,8 @@ export async function orchestrateUploadProcessing(
     displayName: input.displayName,
     content: input.content,
     contentSha256,
+    sourceKind: 'upload',
+    externalSource: null,
     storagePath,
     aiSafeStoragePath,
   });
@@ -273,6 +279,8 @@ export async function runCuratorAndMaskerLifecycle(
       displayName: args.displayName,
       content: args.content,
       contentSha256: args.contentSha256,
+      sourceKind: args.sourceKind,
+      externalSource: args.externalSource,
     });
   } catch (e) {
     throw new CuratorPhaseError(args.docId, e);
@@ -301,6 +309,8 @@ export async function runCuratorAndMaskerLifecycle(
       fileName: args.displayName,
       content: args.content,
       contentSha256: args.contentSha256,
+      sourceKind: args.sourceKind,
+      externalSource: args.externalSource,
       aiSafeStoragePath: args.aiSafeStoragePath,
       curatorContext: {
         sensitivity: curatorOutput.result.sensitivity,
@@ -352,6 +362,8 @@ async function runCuratorPhase(args: {
   displayName: string;
   content: string;
   contentSha256: string;
+  sourceKind: FirestoreInitialDocumentDraft['sourceKind'];
+  externalSource: FirestoreInitialDocumentDraft['externalSource'];
 }): Promise<{ result: CuratorOutputResult; completedAt: Date }> {
   try {
     const result = await curatorFlow({
@@ -361,6 +373,8 @@ async function runCuratorPhase(args: {
     const completedAt = new Date();
     const nextStatus = terminalStatusForCuratorPolicy(result.aiUsePolicy);
     assertFirestoreInvariants({
+      sourceKind: args.sourceKind,
+      externalSource: args.externalSource,
       status: nextStatus,
       contentSha256: args.contentSha256,
       aiSafeStoragePath: null,
@@ -432,6 +446,8 @@ type RunMaskerArgs = {
   fileName: string;
   content: string;
   contentSha256: string;
+  sourceKind: FirestoreInitialDocumentDraft['sourceKind'];
+  externalSource: FirestoreInitialDocumentDraft['externalSource'];
   aiSafeStoragePath: string;
   curatorContext: CuratorContextForMasker;
   /** Curator が書いた直後の effective fields。applyMaskerUpgrade に渡す土台。 */
@@ -483,7 +499,7 @@ type MaskerPhaseSuccess =
  *
  * 不変条件チェック（任意）:
  *   buildAiSafeFirestoreUpdate / buildRestrictedFirestoreUpdate の戻り値に対して
- *   assertFirestoreInvariants を呼ぶと runtime で 8 項目を検証できる（Firestore の
+ *   assertFirestoreInvariants を呼ぶと runtime で 11 項目を検証できる（Firestore の
  *   FieldValue.serverTimestamp は invariant 検査で扱えないので、Timestamp 化された
  *   shape を別途組み立てて検査するか、検査をスキップする判断が必要）。
  */
@@ -513,6 +529,8 @@ export async function runMaskerPhase(
       try {
         const update = buildAiSafeFirestoreUpdate(args, pipeline);
         assertFirestoreInvariants({
+          sourceKind: args.sourceKind,
+          externalSource: args.externalSource,
           status: terminalStatusForMaskerDecision(pipeline.decision),
           contentSha256: args.contentSha256,
           aiSafeStoragePath: args.aiSafeStoragePath,
@@ -544,6 +562,8 @@ export async function runMaskerPhase(
     );
     const update = buildRestrictedFirestoreUpdate(args, pipeline, upgraded);
     assertFirestoreInvariants({
+      sourceKind: args.sourceKind,
+      externalSource: args.externalSource,
       status: terminalStatusForMaskerDecision(pipeline.decision),
       contentSha256: args.contentSha256,
       aiSafeStoragePath: null,
@@ -740,6 +760,8 @@ function buildBaseInitialDocumentBody(args: {
 }): FirestoreInitialDocumentDraft {
   const now: FieldValueType = FieldValue.serverTimestamp();
   assertFirestoreInvariants({
+    sourceKind: args.sourceKind,
+    externalSource: args.externalSource,
     status: 'uploaded',
     contentSha256: args.contentSha256,
     aiSafeStoragePath: null,

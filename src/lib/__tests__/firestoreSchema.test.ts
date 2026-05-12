@@ -45,8 +45,21 @@ const baseRestrictedMasker: FirestoreMaskerBlock = {
   rationale: 'restricted required',
 };
 
+const baseExternalSource = {
+  provider: 'google_drive' as const,
+  workspaceMimeType: 'application/vnd.google-apps.spreadsheet' as const,
+  fileId: 'drive-file-1',
+  name: 'Sales Dashboard',
+  importedAt: '2026-05-12T09:59:00.000Z',
+  exportedAt: '2026-05-12T09:59:05.000Z',
+  exportMimeType:
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' as const,
+};
+
 function buildAiSafeDoc(overrides: Partial<InvariantInput> = {}): InvariantInput {
   return {
+    sourceKind: 'upload',
+    externalSource: null,
     status: 'ai_safe',
     contentSha256: 'hash-1',
     aiSafeStoragePath: 'masked/doc-1/sample.txt',
@@ -65,6 +78,8 @@ function buildRestrictedDoc(
   overrides: Partial<InvariantInput> = {}
 ): InvariantInput {
   return {
+    sourceKind: 'upload',
+    externalSource: null,
     status: 'restricted',
     contentSha256: 'hash-1',
     aiSafeStoragePath: null,
@@ -124,5 +139,43 @@ describe('validateFirestoreDocumentInvariants', () => {
 
   it('rejects terminal status when curator block is missing', () => {
     expectInvariantViolation(buildRestrictedDoc({ curator: null }), 'curator');
+  });
+
+  it('accepts google_workspace with google_drive externalSource', () => {
+    const doc = buildAiSafeDoc({
+      sourceKind: 'google_workspace',
+      externalSource: baseExternalSource,
+    });
+    expect(validateFirestoreDocumentInvariants(doc)).toEqual([]);
+  });
+
+  it('rejects invalid sourceKind values', () => {
+    expectInvariantViolation(
+      {
+        ...buildAiSafeDoc(),
+        sourceKind: 'legacy_upload' as unknown as InvariantInput['sourceKind'],
+      },
+      'sourceKind'
+    );
+  });
+
+  it('rejects google_workspace when externalSource is null', () => {
+    expectInvariantViolation(
+      buildAiSafeDoc({
+        sourceKind: 'google_workspace',
+        externalSource: null,
+      }),
+      'sourceKind'
+    );
+  });
+
+  it('rejects upload when externalSource is present', () => {
+    expectInvariantViolation(
+      buildAiSafeDoc({
+        sourceKind: 'upload',
+        externalSource: baseExternalSource,
+      }),
+      'sourceKind'
+    );
   });
 });
