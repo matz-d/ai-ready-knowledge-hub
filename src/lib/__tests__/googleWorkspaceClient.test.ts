@@ -27,6 +27,7 @@ describe('googleWorkspaceClient', () => {
   const originalServiceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
 
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
     delete process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   });

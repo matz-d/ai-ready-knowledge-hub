@@ -14,6 +14,7 @@ W2 MVP で `/upload` から始まる Walking Skeleton が書き込む Firestore 
 3. **Masker 昇格は不可逆**: 一度 `sensitivitySource: 'masker'` になった document を Curator 値に戻す経路は持たない（A8 と整合）。
 4. **status='failed' は一本化**: Masker pipeline 失敗時も `status='failed'` に倒す。`curator` ブロックは成功記録として保持され、`maskerError` ブロックに失敗詳細が残る。UI 側で「Curator 成功・Masker 失敗」を組み立てる。
 5. **終端 status は扱い方を表す**: `curated` は Curator だけで AI 参照可、`blocked` は Curator 時点で AI 不可、`ai_safe` は Masker 後に AI 参照版あり、`restricted` は Masker 後に AI 不可へ昇格、を意味する。
+6. **source metadata と保存名を分離する**: `externalSource.name` は Drive 等の原本名、`fileName` は document の表示・処理名、`storagePath` は GCS object key。Google Sheets import では API 成功レスポンスも Firestore に保存した `fileName` を返し、`storagePath` や API body の `displayName` から推測しない。
 
 ---
 
@@ -41,15 +42,31 @@ export type FirestoreDocumentStatus =
   | 'restricted' // Masker 完了・Restricted 昇格 (restricted_promoted) の終端
   | 'failed';    // どこかで失敗。詳細は curatorError / maskerError ブロック
 
+export type FirestoreSourceKind = 'upload' | 'google_workspace';
+
+export type FirestoreExternalSource = {
+  provider: 'google_drive';
+  workspaceMimeType: 'application/vnd.google-apps.spreadsheet';
+  fileId: string;
+  name: string;                  // Drive 上の原本名
+  webViewLink?: string;
+  modifiedTime?: string;
+  importedAt: string;
+  exportedAt: string;
+  exportMimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+};
+
 export type FirestoreDocument = {
   // ── identity ───────────────────────────
   id: string;
   schemaVersion: typeof FIRESTORE_DOCUMENT_SCHEMA_VERSION;
-  fileName: string;
+  fileName: string;                    // document の表示・処理用名
   contentType: string;
   byteSize: number;
-  contentSha256: string;
-  storagePath: string;                // raw/{docId}/{safeOriginalFileName}
+  contentSha256: string;               // upload raw bytes または imported snapshot bytes の SHA256
+  sourceKind: FirestoreSourceKind;
+  externalSource: FirestoreExternalSource | null;
+  storagePath: string;                 // raw/{docId}/{safeOriginalFileName}
   aiSafeStoragePath: string | null;   // masked/{docId}/{safeOriginalFileName}（ai_safe_ready のみ）
 
   // ── lifecycle ──────────────────────────
@@ -141,6 +158,8 @@ export type FirestoreDocument = {
   contentType: 'text/markdown',
   byteSize: 1234,
   contentSha256: 'abc...',
+  sourceKind: 'upload',
+  externalSource: null,
   storagePath: 'raw/<uuid>/就業規則テンプレート.md',
   aiSafeStoragePath: null,
   status: 'curated',

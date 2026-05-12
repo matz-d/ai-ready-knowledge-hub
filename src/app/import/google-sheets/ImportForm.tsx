@@ -47,6 +47,7 @@ export function ImportForm() {
   const processingIndicatorDelayTimeoutRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const copyHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,16 +94,37 @@ export function ImportForm() {
     }
   }, []);
 
+  const clearCopyHintDelay = useCallback(() => {
+    if (copyHintTimeoutRef.current) {
+      clearTimeout(copyHintTimeoutRef.current);
+      copyHintTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearProcessingIndicatorDelay();
+      clearCopyHintDelay();
+    };
+  }, [clearCopyHintDelay, clearProcessingIndicatorDelay]);
+
   const copyEmail = useCallback(async (email: string) => {
+    clearCopyHintDelay();
     try {
       await navigator.clipboard.writeText(email);
       setCopyHint('クリップボードにコピーしました');
-      setTimeout(() => setCopyHint(null), 2500);
+      copyHintTimeoutRef.current = setTimeout(() => {
+        setCopyHint(null);
+        copyHintTimeoutRef.current = null;
+      }, 2500);
     } catch {
       setCopyHint('コピーに失敗しました。手動で選択してください。');
-      setTimeout(() => setCopyHint(null), 3500);
+      copyHintTimeoutRef.current = setTimeout(() => {
+        setCopyHint(null);
+        copyHintTimeoutRef.current = null;
+      }, 3500);
     }
-  }, []);
+  }, [clearCopyHintDelay]);
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

@@ -104,6 +104,14 @@ function buildRequest(body: unknown): Request {
   });
 }
 
+function buildMalformedJsonRequest(): Request {
+  return new Request('http://localhost/api/import/google-sheets', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{',
+  });
+}
+
 async function parseJson(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
@@ -117,6 +125,7 @@ beforeEach(() => {
     kind: 'curated',
     docId: 'doc-1',
     storagePath: 'raw/doc-1/Revenue.xlsx',
+    fileName: 'Revenue.xlsx',
     curator: {
       documentType: '料金表',
       businessDomain: '営業',
@@ -160,6 +169,44 @@ describe('POST /api/import/google-sheets', () => {
     expect(body).not.toHaveProperty('masker');
   });
 
+  it('returns the persisted imported fileName even when displayName is provided', async () => {
+    orchestrateImportedSnapshotProcessingMock.mockResolvedValue({
+      kind: 'curated',
+      docId: 'doc-2',
+      storagePath: 'raw/doc-2/Drive_Source.xlsx',
+      fileName: 'Drive Source.xlsx',
+      curator: {
+        documentType: '料金表',
+        businessDomain: '営業',
+        sensitivity: 'Internal',
+        freshness: 'current',
+        isAuthoritativeCandidate: true,
+        aiUsePolicy: 'direct',
+        rationale: 'direct',
+      },
+      curatorCompletedAt: new Date('2026-05-12T00:00:00.000Z'),
+      snapshotByteSize: 4096,
+    });
+
+    const response = await POST(
+      buildRequest({
+        urlOrFileId: 'sheet-file-id-1234567890123',
+        displayName: 'User Supplied Name.xlsx',
+      })
+    );
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual(
+      expect.objectContaining({
+        docId: 'doc-2',
+        fileName: 'Drive Source.xlsx',
+        storagePath: 'raw/doc-2/Drive_Source.xlsx',
+        byteSize: 4096,
+      })
+    );
+  });
+
   it('returns 400 invalid_input with issues when body validation fails', async () => {
     const response = await POST(buildRequest({ displayName: 'Revenue.xlsx' }));
     const body = await parseJson(response);
@@ -167,6 +214,17 @@ describe('POST /api/import/google-sheets', () => {
     expect(response.status).toBe(400);
     expect(body.error).toBe('invalid_input');
     expect(Array.isArray(body.issues)).toBe(true);
+  });
+
+  it('returns 400 invalid_json when request body is malformed JSON', async () => {
+    const response = await POST(buildMalformedJsonRequest());
+
+    expect(response.status).toBe(400);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'invalid_json',
+      message: 'Request body must be valid JSON',
+    });
+    expect(orchestrateImportedSnapshotProcessingMock).not.toHaveBeenCalled();
   });
 
   it('returns 400 invalid_url when parseGoogleSheetsInput fails', async () => {
@@ -197,6 +255,22 @@ describe('POST /api/import/google-sheets', () => {
     await expect(parseJson(response)).resolves.toEqual({
       error: 'sheet_not_shared',
       serviceAccountEmail: 'importer-sa@example.iam.gserviceaccount.com',
+    });
+  });
+
+  it('returns 403 sheet_not_shared even when service account email lookup fails', async () => {
+    orchestrateImportedSnapshotProcessingMock.mockRejectedValue(
+      new googleSheetShareErrorClass()
+    );
+    getServiceAccountEmailMock.mockRejectedValue(new Error('ADC unavailable'));
+
+    const response = await POST(
+      buildRequest({ urlOrFileId: 'sheet-file-id-1234567890123' })
+    );
+
+    expect(response.status).toBe(403);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'sheet_not_shared',
     });
   });
 

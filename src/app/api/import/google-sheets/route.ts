@@ -57,7 +57,16 @@ function isGoogleSheetsInputParseError(err: unknown): boolean {
 }
 
 export async function POST(request: Request) {
-  const rawBody = await request.json().catch(() => undefined);
+  let rawBody: unknown;
+  try {
+    rawBody = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: 'invalid_json', message: 'Request body must be valid JSON' },
+      { status: 400 }
+    );
+  }
+
   const parsed = bodySchema.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json(
@@ -78,10 +87,7 @@ export async function POST(request: Request) {
     });
 
     const body = documentUploadSuccessBodyFromOrchestrate({
-      displayName:
-        displayName?.trim() ||
-        result.storagePath.split('/').pop() ||
-        'sheet.xlsx',
+      displayName: result.fileName,
       contentType:
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       byteSize: result.snapshotByteSize,
@@ -98,11 +104,13 @@ export async function POST(request: Request) {
     }
 
     if (e instanceof GoogleSheetShareError) {
-      const serviceAccountEmail = await getServiceAccountEmail();
+      const serviceAccountEmail = await getServiceAccountEmail().catch(
+        () => undefined
+      );
       return NextResponse.json(
         {
           error: 'sheet_not_shared',
-          serviceAccountEmail,
+          ...(serviceAccountEmail ? { serviceAccountEmail } : {}),
         },
         { status: 403 }
       );

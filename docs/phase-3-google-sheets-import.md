@@ -44,7 +44,7 @@ Phase 2 (構造化 Ingestion / KnowledgeChunk) は完了。Phase 3-A は **Phase
 
 ---
 
-## 2. 採用判断ログ（Phase 3-A 着手前の合意）
+## 2. 採用判断ログ（Phase 3-A の合意）
 
 ### D-P3-A-1: Snapshot 取り込みのアプローチ = **A 案 (Drive export `.xlsx`)**
 
@@ -87,6 +87,7 @@ Phase 2 (構造化 Ingestion / KnowledgeChunk) は完了。Phase 3-A は **Phase
 **選定理由:**
 - `validateFirestoreDocumentInvariants` は `masker.sourceContentHash === contentSha256` を要求している ([src/lib/firestoreSchema.ts](../src/lib/firestoreSchema.ts))。Snapshot の export bytes hash がそのまま `contentSha256` になるので、別 field を持つと「常に同値」の冗長フィールドになり混乱の元。
 - `contentSha256` の意味を「**upload raw bytes または imported snapshot bytes の hash**」とコメントで明記すれば足りる。
+- **Masker との整合:** Curator/Masker の入力は `.xlsx` から正規化した **markdown 文字列**だが、`masker.sourceContentHash` および masked オブジェクトの `sourceContentHash` はいずれも **`contentSha256`（snapshot `.xlsx` バイト列の SHA256）をそのまま渡す**（[src/lib/uploadOrchestrator.ts](../src/lib/uploadOrchestrator.ts) の `runMaskerPhase` / `buildMaskerWriteBlockDraft`）。markdown バイト列の hash とは一致させない。invariant は「マスク対象の出所が raw snapshot と同一であること」の証跡として snapshot hash を使う。
 
 **撤退条件:** Phase 3-B 以降で「Drive 上で modified されたが re-export 後に同一 bytes だった」のような差分検知が必要になり、export 行為自体の証跡を残したくなった場合は `externalSource.exportSha256` を追加する。ただしその時点でも `contentSha256` 自体は snapshot bytes の hash としての意味を維持する。
 
@@ -175,6 +176,23 @@ https://docs.google.com/spreadsheets/d/{fileId}
 - Drive export `.xlsx` は user upload `.xlsx` と cell formatting（日付 serial / formula cached value / merged cell / number format）の挙動が微妙に違う可能性がある。
 - Fixture を 1 つ固定するだけで、回帰の発見が早くなる。
 
+### D-P3-A-10: 名前の責務分離 = **原本名 / document 名 / 保存パス / AI 処理名を混ぜない**
+
+**選んだ案**: Google Sheets import では、Drive 上の原本名、Firestore document の `fileName`、GCS 保存用 `storagePath`、Curator / Masker に渡す処理用 `displayName` を別の責務として扱う。
+
+**責務:**
+- `externalSource.name`: Drive 上の原本名。原本性・差分検知・再取り込みの足場として保持し、アプリ都合では書き換えない。
+- `fileName`: この import run で作成した document の表示・処理用ファイル名。Phase 3-A では `Drive name` から末尾 `.xlsx` の重複を除いて `.xlsx` を付ける。Firestore に保存した値を API 成功レスポンスでも返す。
+- `storagePath`: GCS object key。`sanitizeOriginalFileName` と `buildSafeXlsxName` でパス安全化した保存用名を使い、`fileName` と完全一致することは要求しない。
+- `displayName`: API body の optional 値。Phase 3-A では Curator / Masker に渡す処理用名としてのみ使い、Firestore `fileName` や API 成功レスポンスの `fileName` は上書きしない。
+
+**選定理由:**
+- 元ファイル名は監査・再取り込み・差分検知に必要な証跡なので、AI 向けに読みやすくする都合で破壊しない。
+- 一方で、元ファイル名が `最終_コピー_修正済み` のように AI 文脈で読みにくい場合もある。将来 `canonicalTitle` / `contextTitle` のような AI-ready な文脈名を導入できるよう、Phase 3-A ではまず既存フィールドの責務を分離する。
+- API レスポンスと Firestore の `fileName` がずれると、取り込み直後の画面表示と後続の Inventory / Context Package 表示が不一致になるため、成功レスポンスは persisted `fileName` を正とする。
+
+**撤退条件:** Phase 3-B 以降でユーザー編集可能な表示名や AI 向け正規化タイトルが必要になった場合、`fileName` を上書きするのではなく、別フィールド（例: `displayTitle`, `canonicalTitle`, `contextTitle`）として追加する。
+
 ---
 
 ## 3. データスキーマ拡張
@@ -189,7 +207,7 @@ externalSource: null | {
   provider: 'google_drive';
   workspaceMimeType: 'application/vnd.google-apps.spreadsheet';
   fileId: string;
-  name: string;                  // Drive 上の元ファイル名（拡張子なし）
+  name: string;                  // Drive 上の元ファイル名
   webViewLink?: string;
   modifiedTime?: string;         // Drive 上の最終更新時刻
   importedAt: string;            // アプリの取り込み時刻
@@ -208,8 +226,10 @@ externalSource: null | {
 
 - `contentSha256`: 意味を「**upload raw bytes または imported snapshot bytes の SHA256**」とコメントで明記する。
 - `contentType`: Sheets 取り込み時は OOXML を固定で書く（`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`）。
-- `fileName`: `${driveMeta.name}.xlsx` で書く（Drive の元ファイル名に `.xlsx` suffix を付ける）。
-- `storagePath`: `raw/{docId}/{safeName}.xlsx`。
+- `fileName`: `${driveMeta.nameWithoutXlsx}.xlsx` で書く（Drive の元ファイル名に `.xlsx` suffix を付けるが、元名がすでに `.xlsx` で終わる場合は二重付与しない）。Firestore に保存したこの値を API 成功レスポンスでも返す。
+- `storagePath`: `raw/{docId}/{safeName}.xlsx`。`safeName` は Drive の `name` を [`sanitizeOriginalFileName`](../src/lib/documents.ts) でパス安全化したうえで `.xlsx` を付与する（実装: `importedSnapshotOrchestrator` の `buildSafeXlsxName`）。GCS キーに `/` 等が混入しない。
+- `externalSource.name`: Drive 上の元ファイル名をそのまま保持する。`fileName` / `storagePath` / API body の `displayName` とは責務が異なる。
+- API body の `displayName`: optional。Curator / Masker に渡す処理用名として使えるが、Firestore `fileName` や成功レスポンスの `fileName` は上書きしない。
 
 ### Defaulting の適用範囲
 
@@ -259,6 +279,8 @@ externalSource: null | {
 | Curator 失敗 | 500 + docId | Phase 2 と同じ `recordPhaseFailure` 経路、`status='failed'` に倒す |
 | Masker 失敗 | 500 + docId | Phase 2 と同じ `recordPhaseFailure` 経路、masked object は rollback |
 
+**大容量・タイムアウト（現状のギャップ）:** `POST /api/documents` には `MAX_UPLOAD_BYTES`（5 MiB）があるが、Drive import 経路では **export 後バイト長の上限チェックは未実装**。Google ネイティブ Sheet の Drive `files.get` の `size` はバイナリと異なり **export サイズの事前判定に使えない**ことが多いため、実装するなら **`files.export` 完了後に `xlsxBuffer.length` を上限と比較**するのが現実的。長時間 export は `DriveExportError`（502）に集約され得るが、明示的な timeout / `413` 相当の独自エラーは Phase 3-B 以降の検討事項。
+
 ---
 
 ## 6. 実装ステップ（タスク分割）
@@ -286,6 +308,7 @@ externalSource: null | {
 5. **API route 追加** (`POST /api/import/google-sheets`)
    - Body: `{ "urlOrFileId": "...", "displayName": "optional" }` の Zod 検証。
    - `orchestrateImportedSnapshotProcessing` への委譲。
+   - 成功レスポンスの `fileName` は orchestrator が返す persisted `fileName` を使う。`displayName` や `storagePath` 末尾から推測しない。
    - 403 時のエラーレスポンスに SA email を含める。
 
 6. **UI 追加** (`/import/google-sheets`)
@@ -313,6 +336,7 @@ externalSource: null | {
 - [ ] Google Sheets URL / fileId を入力すると document が登録される
 - [ ] GCS の raw 領域に `.xlsx` snapshot が保存される
 - [ ] Firestore に `sourceKind='google_workspace'` と `externalSource` メタデータが記録される
+- [ ] API 成功レスポンスの `fileName` が Firestore に保存した `fileName` と一致する
 - [ ] 既存 document が `sourceKind: 'upload'` / `externalSource: null` として読める（defaulting）
 - [ ] upload 経由の新規 document にも `sourceKind: 'upload'` / `externalSource: null` が明示的に書かれる
 - [ ] Curator / Masker が snapshot の markdown を元に正常に動作する

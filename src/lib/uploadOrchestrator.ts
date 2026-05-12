@@ -804,6 +804,7 @@ export function buildImportedSnapshotInitialDocumentBody(args: {
   return buildBaseInitialDocumentBody({
     docId: args.docId,
     fileName: args.fileName,
+    // Phase 3-A imports Google Sheets only, always as Drive-exported XLSX.
     contentType:
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     byteSize: args.byteSize,

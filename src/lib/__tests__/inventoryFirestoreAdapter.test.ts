@@ -1,4 +1,4 @@
-import type { Timestamp } from '@google-cloud/firestore';
+import { Timestamp } from '@google-cloud/firestore';
 import { describe, expect, it, vi } from 'vitest';
 import { getFirestoreClient } from '../firestore';
 import type {
@@ -17,9 +17,7 @@ vi.mock('../firestore', () => ({
 }));
 
 function timestamp(iso: string): Timestamp {
-  return {
-    toDate: () => new Date(iso),
-  } as Timestamp;
+  return Timestamp.fromDate(new Date(iso));
 }
 
 const baseCurator: FirestoreCuratorBlock = {
@@ -268,18 +266,8 @@ describe('adaptFirestoreDocumentToInventory', () => {
   });
 
   it('lists legacy raw Firestore documents without sourceKind/externalSource', async () => {
-    const { sourceKind: _sourceKind, externalSource: _externalSource, ...rawData } = {
-      ...buildDoc(),
-      createdAt: '2026-05-08T00:00:00.000Z',
-      updatedAt: '2026-05-08T02:00:00.000Z',
-      curator: {
-        ...baseCurator,
-        sensitivity: 'Internal',
-        aiUsePolicy: 'direct',
-        rationale: 'AI に直接渡せる社内手順です。',
-        completedAt: '2026-05-08T01:00:00.000Z',
-      },
-    };
+    const { sourceKind: _sourceKind, externalSource: _externalSource, ...rawData } =
+      buildDoc();
     const get = vi.fn().mockResolvedValue({
       docs: [
         {

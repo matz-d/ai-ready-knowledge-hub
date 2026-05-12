@@ -52,12 +52,7 @@ async function submitWithErrorResponse(
     }
   );
 
-  const form = document.querySelector('form.import-sheets-form');
-  if (!form) {
-    throw new Error('Import form not found.');
-  }
-
-  fireEvent.submit(form);
+  fireEvent.click(screen.getByRole('button', { name: '取り込む' }));
 
   await waitFor(() =>
     expect(fetchMock).toHaveBeenCalledWith(

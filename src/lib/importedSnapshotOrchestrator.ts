@@ -32,8 +32,9 @@ export type OrchestrateImportedSnapshotInput = {
   displayName?: string;
 };
 
-/** `OrchestrateResult` に加え、HTTP 成功レスポンス用の snapshot バイトサイズを付与する。 */
+/** `OrchestrateResult` に加え、HTTP 成功レスポンス用の snapshot metadata を付与する。 */
 export type ImportedSnapshotOrchestrateResult = OrchestrateResult & {
+  fileName: string;
   snapshotByteSize: number;
 };
 
@@ -60,7 +61,8 @@ export async function orchestrateImportedSnapshotProcessing(
   const content = xlsxBufferToNormalizedContent(xlsxBuffer);
 
   const docId = randomUUID();
-  const fileName = `${metadata.name}.xlsx`;
+  const baseFileName = metadata.name.replace(/\.xlsx$/i, '');
+  const fileName = `${baseFileName}.xlsx`;
   const safeName = buildSafeXlsxName(metadata.name);
   const storagePath = buildRawObjectPath(docId, safeName);
   const aiSafeStoragePath = `masked/${docId}/${safeName}`;
@@ -124,7 +126,7 @@ export async function orchestrateImportedSnapshotProcessing(
     storagePath,
     aiSafeStoragePath,
   });
-  return { ...lifecycle, snapshotByteSize: xlsxBuffer.length };
+  return { ...lifecycle, fileName, snapshotByteSize: xlsxBuffer.length };
 }
 
 function buildSafeXlsxName(name: string): string {

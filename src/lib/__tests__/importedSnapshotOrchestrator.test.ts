@@ -197,6 +197,7 @@ describe('orchestrateImportedSnapshotProcessing', () => {
     });
 
     expect(result.kind).toBe('curated');
+    expect(result.fileName).toBe('料金表.xlsx');
     expect(result.snapshotByteSize).toBe(xlsxBuffer.length);
     expect(parseGoogleSheetsInputMock).toHaveBeenCalledWith(
       'https://docs.google.com/spreadsheets/d/sheet-file-id/edit#gid=1'
@@ -230,6 +231,63 @@ describe('orchestrateImportedSnapshotProcessing', () => {
     );
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'curated', aiUsePolicy: 'direct' })
+    );
+  });
+
+  it('does not double-append .xlsx when Drive metadata name already has xlsx suffix', async () => {
+    fetchSheetsSnapshotMock.mockResolvedValue({
+      ...snapshot,
+      metadata: {
+        ...snapshot.metadata,
+        name: 'report.xlsx',
+      },
+    });
+    curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+    await orchestrateImportedSnapshotProcessing({
+      urlOrFileId: 'sheet-file-id',
+    });
+
+    expect(uploadRawObjectMock).toHaveBeenCalledWith(
+      'raw/doc-1/report.xlsx',
+      xlsxBuffer,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    expect(setMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileName: 'report.xlsx',
+      })
+    );
+  });
+
+  it('keeps persisted fileName separate from displayName used for AI processing', async () => {
+    fetchSheetsSnapshotMock.mockResolvedValue({
+      ...snapshot,
+      metadata: {
+        ...snapshot.metadata,
+        name: 'Drive Source',
+      },
+    });
+    curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+    const result = await orchestrateImportedSnapshotProcessing({
+      urlOrFileId: 'sheet-file-id',
+      displayName: 'Human Friendly Context Name',
+    });
+
+    expect(result.fileName).toBe('Drive Source.xlsx');
+    expect(setMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileName: 'Drive Source.xlsx',
+        externalSource: expect.objectContaining({
+          name: 'Drive Source',
+        }),
+      })
+    );
+    expect(curatorFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileName: 'Human Friendly Context Name',
+      })
     );
   });
 
