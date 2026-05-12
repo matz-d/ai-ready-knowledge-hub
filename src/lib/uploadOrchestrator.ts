@@ -15,6 +15,7 @@ import { FieldValue, getFirestoreClient } from './firestore';
 import {
   FIRESTORE_DOCUMENT_SCHEMA_VERSION,
   assertFirestoreInvariants,
+  type FirestoreExternalSource,
   hashContentSha256,
   maskerTerminalCuratorInvariantStub,
   terminalStatusForCuratorPolicy,
@@ -76,6 +77,8 @@ export type FirestoreInitialDocumentDraft = {
   contentType: string;
   byteSize: number;
   contentSha256: string;
+  sourceKind: 'upload' | 'google_workspace';
+  externalSource: FirestoreExternalSource | null;
   storagePath: string;
   aiSafeStoragePath: null;
   status: 'uploaded';
@@ -161,6 +164,16 @@ export class MaskerPhaseError extends Error {
   }
 }
 
+export type RunCuratorAndMaskerLifecycleArgs = {
+  docRef: DocumentReference;
+  docId: string;
+  displayName: string;
+  content: string;
+  contentSha256: string;
+  storagePath: string;
+  aiSafeStoragePath: string;
+};
+
 /**
  * Walking Skeleton の副作用順序を一手に握る orchestrator。
  *
@@ -191,7 +204,7 @@ export async function orchestrateUploadProcessing(
   // [C] Firestore initial set
   try {
     await docRef.set(
-      buildInitialDocumentBody({
+      buildUploadInitialDocumentBody({
         docId,
         displayName: input.displayName,
         contentType: input.contentType,
@@ -229,17 +242,31 @@ export async function orchestrateUploadProcessing(
     throw e;
   }
 
+  return runCuratorAndMaskerLifecycle({
+    docRef,
+    docId,
+    displayName: input.displayName,
+    content: input.content,
+    contentSha256,
+    storagePath,
+    aiSafeStoragePath,
+  });
+}
+
+export async function runCuratorAndMaskerLifecycle(
+  args: RunCuratorAndMaskerLifecycleArgs
+): Promise<OrchestrateResult> {
   // [E][F] Curator phase
   let curatorOutput: { result: CuratorOutputResult; completedAt: Date };
   try {
     curatorOutput = await runCuratorPhase({
-      docRef,
-      displayName: input.displayName,
-      content: input.content,
-      contentSha256,
+      docRef: args.docRef,
+      displayName: args.displayName,
+      content: args.content,
+      contentSha256: args.contentSha256,
     });
   } catch (e) {
-    throw new CuratorPhaseError(docId, e);
+    throw new CuratorPhaseError(args.docId, e);
   }
 
   const curatorTerminal = terminalStatusForCuratorPolicy(
@@ -249,8 +276,8 @@ export async function orchestrateUploadProcessing(
   if (curatorTerminal === 'curated' || curatorTerminal === 'blocked') {
     return {
       kind: curatorTerminal,
-      docId,
-      storagePath,
+      docId: args.docId,
+      storagePath: args.storagePath,
       curator: curatorOutput.result,
       curatorCompletedAt: curatorOutput.completedAt,
     };
@@ -260,12 +287,12 @@ export async function orchestrateUploadProcessing(
   let maskerOutcome: MaskerPhaseSuccess;
   try {
     maskerOutcome = await runMaskerPhase({
-      docRef,
-      docId,
-      fileName: input.displayName,
-      content: input.content,
-      contentSha256,
-      aiSafeStoragePath,
+      docRef: args.docRef,
+      docId: args.docId,
+      fileName: args.displayName,
+      content: args.content,
+      contentSha256: args.contentSha256,
+      aiSafeStoragePath: args.aiSafeStoragePath,
       curatorContext: {
         sensitivity: curatorOutput.result.sensitivity,
         aiUsePolicy: curatorOutput.result.aiUsePolicy,
@@ -280,15 +307,15 @@ export async function orchestrateUploadProcessing(
       },
     });
   } catch (e) {
-    throw new MaskerPhaseError(docId, e);
+    throw new MaskerPhaseError(args.docId, e);
   }
 
   if (maskerOutcome.kind === 'ai_safe') {
     return {
       kind: 'ai_safe',
-      docId,
-      storagePath,
-      aiSafeStoragePath,
+      docId: args.docId,
+      storagePath: args.storagePath,
+      aiSafeStoragePath: args.aiSafeStoragePath,
       curator: curatorOutput.result,
       curatorCompletedAt: curatorOutput.completedAt,
       masker: maskerOutcome.summary,
@@ -297,8 +324,8 @@ export async function orchestrateUploadProcessing(
 
   return {
     kind: 'restricted',
-    docId,
-    storagePath,
+    docId: args.docId,
+    storagePath: args.storagePath,
     curator: curatorOutput.result,
     curatorCompletedAt: curatorOutput.completedAt,
     masker: maskerOutcome.summary,
@@ -693,13 +720,15 @@ export async function safeDeleteMaskedObject(
 // 内部
 // ─────────────────────────────────────────────────────────────────────
 
-function buildInitialDocumentBody(args: {
+function buildBaseInitialDocumentBody(args: {
   docId: string;
-  displayName: string;
+  fileName: string;
   contentType: string;
   byteSize: number;
   contentSha256: string;
   storagePath: string;
+  sourceKind: FirestoreInitialDocumentDraft['sourceKind'];
+  externalSource: FirestoreInitialDocumentDraft['externalSource'];
 }): FirestoreInitialDocumentDraft {
   const now: FieldValueType = FieldValue.serverTimestamp();
   assertFirestoreInvariants({
@@ -717,10 +746,12 @@ function buildInitialDocumentBody(args: {
   return {
     id: args.docId,
     schemaVersion: FIRESTORE_DOCUMENT_SCHEMA_VERSION,
-    fileName: args.displayName,
+    fileName: args.fileName,
     contentType: args.contentType,
     byteSize: args.byteSize,
     contentSha256: args.contentSha256,
+    sourceKind: args.sourceKind,
+    externalSource: args.externalSource,
     storagePath: args.storagePath,
     aiSafeStoragePath: null,
     status: 'uploaded',
@@ -742,7 +773,48 @@ function buildInitialDocumentBody(args: {
   };
 }
 
-async function safeDeleteRawObject(storagePath: string): Promise<void> {
+export function buildUploadInitialDocumentBody(args: {
+  docId: string;
+  displayName: string;
+  contentType: string;
+  byteSize: number;
+  contentSha256: string;
+  storagePath: string;
+}): FirestoreInitialDocumentDraft {
+  return buildBaseInitialDocumentBody({
+    docId: args.docId,
+    fileName: args.displayName,
+    contentType: args.contentType,
+    byteSize: args.byteSize,
+    contentSha256: args.contentSha256,
+    storagePath: args.storagePath,
+    sourceKind: 'upload',
+    externalSource: null,
+  });
+}
+
+export function buildImportedSnapshotInitialDocumentBody(args: {
+  docId: string;
+  fileName: string;
+  byteSize: number;
+  contentSha256: string;
+  storagePath: string;
+  externalSource: FirestoreExternalSource;
+}): FirestoreInitialDocumentDraft {
+  return buildBaseInitialDocumentBody({
+    docId: args.docId,
+    fileName: args.fileName,
+    contentType:
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    byteSize: args.byteSize,
+    contentSha256: args.contentSha256,
+    storagePath: args.storagePath,
+    sourceKind: 'google_workspace',
+    externalSource: args.externalSource,
+  });
+}
+
+export async function safeDeleteRawObject(storagePath: string): Promise<void> {
   try {
     await deleteRawObject(storagePath);
   } catch (e) {
@@ -750,7 +822,7 @@ async function safeDeleteRawObject(storagePath: string): Promise<void> {
   }
 }
 
-async function safeDeleteFirestoreDoc(
+export async function safeDeleteFirestoreDoc(
   docRef: DocumentReference
 ): Promise<void> {
   try {

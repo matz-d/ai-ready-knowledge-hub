@@ -1,0 +1,34 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`xlsxToMarkdownSheets (Drive export fixture) > renders date/formula/merged cells equivalently to user-upload xlsx 1`] = `
+{
+  "dateCells": {
+    "markdownTable": "| Label | Date | Note |
+| --- | --- | --- |
+| Start | 2025-01-15 | project start |
+| Checkpoint | 2025-02-01 | review |
+| Launch | 2025-03-20 | go live |
+| LegacySerial | 2025-01-21 | raw serial |
+| Leap | 2024-02-29 | leap day |",
+    "range": "A1:C6",
+    "sheetName": "DateCells",
+  },
+  "emptySheet": {
+    "markdownTable": "",
+    "range": "A1:A1",
+    "sheetName": "EmptySheet",
+  },
+  "formulaMerged": {
+    "markdownTable": "| Metric | Value | Comment |
+| --- | --- | --- |
+| North | 10 |  |
+| South | 20 |  |
+| West | 15 |  |
+| Total | 45 | auto calc |
+| Merged block |  |  |
+| Tail | 7 | post merge |",
+    "range": "A1:C7",
+    "sheetName": "FormulaMerged",
+  },
+}
+`;

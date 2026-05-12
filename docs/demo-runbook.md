@@ -1,7 +1,7 @@
 # Live Demo Runbook (MVP / W2)
 
 Upload → Firestore/GCS → Inventory → Context Package を再現するための実行手順です。  
-この時点では **MVP デモ** であり、PDF 専用抽出 / Google Drive 連携は未導入です。  
+この時点では **MVP デモ** であり、PDF 専用抽出は未導入です。**Google Sheets** は [Phase 3-A](phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。  
 現状のマスキング境界は **SimpleMasker または Cloud DLP + Gemini residual risk** です。
 
 ## 1. 前提条件
@@ -71,7 +71,78 @@ npm run dev
 - `古い料金表_2023.csv`（運用条件により blocked / review 寄りになり得る）
 - **`.xlsx`**（Excel）も Phase 2 の upload 対象。料金表・顧客一覧などをシート単位で投入し、`chunks:regenerate` では CSV と同様に spreadsheet chunk 化できる
 
-## 5. Upload 後に見るポイント
+## 5. Google Sheets を取り込むデモ手順
+
+Phase 3-A は **Drive API で `.xlsx` をエクスポート**し、既存の upload と同じ Curator / Masker / Firestore / GCS 経路に載せます。デモ担当は次の順で進めれば、共有 → URL 投入 → 取り込み完了まで再現できます。
+
+### 5.0 この節だけで取り込み完了まで（推奨順路）
+
+次を **上から順に** 実行すれば、他節を挟まずに Google Sheets の 1 件取り込みが完了します（chunk 生成や Context Package export まで見る場合は §5.3 の末尾と §10 / §7 を続けてください）。
+
+1. §2 まで完了し、`.env.local` に `GOOGLE_CLOUD_PROJECT` と `KNOWLEDGE_HUB_BUCKET` がある。デモでは **`GOOGLE_APPLICATION_CREDENTIALS`** にサービスアカウント（SA）キー JSON のパスを指定する構成を推奨する（ADC がユーザ認証のみだと環境によって Drive が通らないことがある）。
+2. ターミナルで `gcloud services enable drive.googleapis.com --project="$GOOGLE_CLOUD_PROJECT"` を一度実行し、下記 §5.1 の Drive API 前提を満たす。
+3. §3 のとおり `npm run dev` を起動する。
+4. ブラウザで `http://localhost:3000/import/google-sheets` を開く。
+5. ページ内 **フォーム直上** の **「サービスアカウント」** パネルに表示されているメールアドレスをコピーする（読み込み失敗時は §5.1 と SA キー／ADC を確認する）。
+6. 取り込みたい Google スプレッドシートを開き、下記 §5.2 のとおり、そのメールアドレスを **閲覧者** で共有する（別 SA にだけ共有していると 403 になる）。
+7. 同一ページのフォームにスプレッドシートの **URL** または **fileId** を貼り、§5.3 のとおり取り込みを実行する。
+8. 成功したらブラウザで `http://localhost:3000/`（Inventory）を開き、新しい document の **status / sensitivity** が期待どおりか確認する（詳細は §6）。
+9. `403` や共有エラーが出たら §5.4 の表に沿って原因を切り分ける。
+
+### 5.1 前提（API と認証）
+
+- §2 まで完了しており、`npm run dev` が起動できること。
+- 対象 GCP プロジェクトで **Google Drive API** が有効であること（未設定なら一度だけ実行）:
+
+  ```bash
+  gcloud services enable drive.googleapis.com --project="$GOOGLE_CLOUD_PROJECT"
+  ```
+
+- サーバーが Drive にアクセスするときの主役は **サービス アカウント（SA）** です。ローカルでは通常 `GOOGLE_APPLICATION_CREDENTIALS` に SA キー JSON のパスを指定します（§8 の live E2E と同様）。ADC がユーザ認証のみの場合、実行環境のポリシーに依存するため、**デモでは SA キーを明示した構成を推奨**します。
+
+### 5.2 取り込み対象の Sheet を SA と共有する
+
+**共有先のメールアドレス**は、アプリが Drive を呼び出すときに使っている SA の `client_email` と一致している必要があります。**`http://localhost:3000/import/google-sheets` を開くと、フォーム直上の「サービスアカウント」パネルにその SA のメールアドレスがコピー用に表示されます**（ここに出たアドレスをそのまま Sheets の共有相手に追加する）。
+
+共有は Google Sheets 側で行います。
+
+1. 取り込みたいスプレッドシートをブラウザで開く。
+2. 右上の **共有** を開く。
+3. 上記の SA メールアドレスを追加し、権限は **閲覧者** で足ります（エクスポートは読み取り相当の操作のため）。
+4. 保存して、SA がファイル一覧から当該ブックを開ける状態にする。
+
+**GCP コンソールで SA メールを突き合わせる場合**（UI と同一か確認したいとき）:
+
+1. [Google Cloud コンソール](https://console.cloud.google.com/) で対象プロジェクトを選択する。
+2. 左メニュー **IAM と管理** → **サービス アカウント** を開く。
+3. アプリが使っているサービス アカウント（ローカルならキー JSON の `client_email`、Cloud Run なら実行サービス アカウント）を選び、**メール**列のアドレスをコピーする。
+4. それが import ページの **「サービスアカウント」** パネル（フォーム直上）に表示されているアドレスと一致していることを確認する。
+
+### 5.3 URL を貼って取り込むまでの流れ
+
+1. §3 のとおり `npm run dev` を起動する。
+2. ブラウザで `http://localhost:3000/import/google-sheets` を開く。
+3. **「サービスアカウント」** パネル（フォーム直上）のメールをコピーし、§5.2 のとおり Sheet に共有済みであることを確認する。
+4. フォームに **スプレッドシートの URL**（例: `https://docs.google.com/spreadsheets/d/{fileId}/edit`）または **素の fileId** を貼り付ける。  
+   **注意**: URL に特定タブの `gid=...` が付いていても **全シートをまとめて**取り込みます（設計上 `gid` は無視）。UI の説明文にも同趣旨が記載されています。
+5. 任意の表示名があれば入力し、取り込み（送信）を実行する。
+6. 成功したら §6 と同様に、Firestore の `documents/{docId}` と GCS の `raw/{docId}/...xlsx`、トップの Inventory で status / sensitivity を確認する。
+7. 必要に応じて §10 で `chunks:regenerate -- <docId>` を実行し、§7 の `context:demo:live` で `sheet=…, range=…` 付きの export を確認する。
+
+### 5.4 `403` が出たときの典型原因と対処
+
+| 想定原因 | 対処 |
+| --- | --- |
+| Sheet を **SA メールと共有していない**、または別の SA にだけ共有している | import ページの **「サービスアカウント」** パネルに表示されているメールと **完全一致**する相手に、対象ブックを閲覧者で共有し直す。GCP コンソールのサービス アカウント一覧と突き合わせる（§5.2）。 |
+| **Google Workspace** のドメインで、組織外（プロジェクトの SA は多くの場合組織外）への共有が管理者ポリシーで禁止されている | 管理者に依頼して当該 SA を許可リストに入れるか、共有用に制限の緩いテスト用 Google アカウント／個人 Gmail 上の Sheet でデモする。 |
+| 貼った URL がスプレッドシート以外、または **アクセスのない別ユーザのファイル** | URL を見直す。ブラウザでは開けても、**サーバー側の SA に共有されていなければ** Drive からは読めない。 |
+| **Drive API 未使用**のプロジェクト | §5.1 のとおり `drive.googleapis.com` を有効化してから再試行。 |
+
+API が返すエラーメッセージに **共有すべき SA メール**が含まれる場合は、その文字列に従って共有設定を直す。
+
+## 6. Upload 後に見るポイント
+
+`/upload` の multipart でも、§5 の Google Sheets import でも、パイプラインが成功すれば同じ Firestore / GCS の形で終端に達します（`sourceKind` が `google_workspace` の行は Drive 由来のメタデータが付きます）。
 
 ### `/upload` 直後
 
@@ -87,7 +158,7 @@ npm run dev
 - トップページの **Firestore Inventory** セクションで status/sensitivity を確認
 - Firestore 読み取り不能時のみ W1 snapshot fallback が使われる
 
-## 6. Context Package export
+## 7. Context Package export
 
 1. live corpus から生成（Firestore + GCS）
 
@@ -120,9 +191,9 @@ npm run dev
 - **chunk が 1 件以上ある document**: `Full AI-Ready Sources` は **chunk の `text` / `maskedText`** を使い、行タイトルに `fileName (sheet=…, range=…)` 形式のヒントが付く（GCS 本文の document-only 経路は使わない）。
 - **chunk が 0 件の document**: 従来どおり GCS から `aiSafeContent` を読むフォールバック（未再生成の既存 corpus も空にならない）。
 
-確認するときは、§9 の手順で chunk を生成したうえで `npm run context:demo:live` を実行し、該当ファイルのセクションが chunk 由来になっているかを見ます。
+確認するときは、§10 の手順で chunk を生成したうえで `npm run context:demo:live` を実行し、該当ファイルのセクションが chunk 由来になっているかを見ます。
 
-## 7. E2E test policy
+## 8. E2E test policy
 
 E2E は 2 層に分けます。
 
@@ -169,7 +240,7 @@ gcloud auth application-default login
 
 env が不足している場合、live E2E は skip します。live E2E を実装拡張する場合も、自動削除は入れず、作成した `documents/{docId}` と `raw/` / `masked/` object path をログに出してください。
 
-## 8. DLP live smoke
+## 9. DLP live smoke
 
 Cloud DLP provider 単体の疎通確認:
 
@@ -195,7 +266,7 @@ MASKER_PROVIDER=cloud-dlp npm run masker:pipeline -- sample-data/accounting-offi
 
 この結果により、DLP は決定論的 PII、Gemini residual risk は文脈的な再識別リスクを見る分担が live で確認済み。
 
-## 9. Phase 2: Chunk regeneration smoke
+## 10. Phase 2: Chunk regeneration smoke
 
 Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で確認する手順です。
 
@@ -254,7 +325,7 @@ Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で
    npm run context:demo:live
    ```
 
-   `context:demo:live` は Firestore から chunk を読み込み（§6 参照）、chunk がある document は **chunk 本文**が `Full AI-Ready Sources` に載ります。spreadsheet の場合、見出しに **`fileName (sheet=…, range=…)`** が付くことを確認します（Markdown 内の `[Sheet1 A1:E20]` のような表記は export 実装に依存します）。
+   `context:demo:live` は Firestore から chunk を読み込み（§7 参照）、chunk がある document は **chunk 本文**が `Full AI-Ready Sources` に載ります。spreadsheet の場合、見出しに **`fileName (sheet=…, range=…)`** が付くことを確認します（Markdown 内の `[Sheet1 A1:E20]` のような表記は export 実装に依存します）。
 
 ### Phase 2 固有のよくある失敗
 
@@ -267,7 +338,7 @@ Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で
 
 ---
 
-## 10. よくある失敗
+## 11. よくある失敗
 
 - `KNOWLEDGE_HUB_BUCKET` 未設定
   - リポジトリルートの `.env.local` を確認（`npm run context:demo:live` は `loadEnv` で読み込み）。ルート以外の cwd で `tsx` 直実行している場合は環境変数が未注入のことがある
@@ -284,8 +355,10 @@ Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で
   - 現状は該当文書のみ human review に回り、読めた文書は export 継続
 - Vertex/Gemini auth failure
   - `GOOGLE_CLOUD_PROJECT` / IAM 権限 / ADC を再確認
+- Google Sheets の import で **403** / Drive がファイルにアクセスできない
+  - §5.4（共有漏れ・Workspace 共有制限・Drive API 未使用など）を確認する
 
-## 11. Reset / cleanup（手動のみ）
+## 12. Reset / cleanup（手動のみ）
 
 - Firestore `documents` collection と `gs://$KNOWLEDGE_HUB_BUCKET/raw/`, `gs://$KNOWLEDGE_HUB_BUCKET/masked/` を手動で整理する
 - 破壊的操作のため、本リポジトリでは **自動削除スクリプトは提供しない**

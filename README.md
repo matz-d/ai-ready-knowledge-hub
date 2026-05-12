@@ -93,7 +93,8 @@ sample-data/
 ### セキュリティ境界の現状 (MVP)
 
 - Cloud DLP は Masker provider として導入済み。未指定時は `simple-rule` fallback、`MASKER_PROVIDER=cloud-dlp` または `chunks:regenerate -- --provider=cloud-dlp` で明示できる。
-- Document AI / Drive 連携は未導入。
+- Document AI は未導入。Drive 連携は Phase 3-A の Google Sheets import で Drive API の service account 認証を使う。
+- Google Sheets import の対象 Sheet は、UI/API が表示する service account email と事前に共有する必要がある。
 - `.txt` / `.md` / `.csv` は UTF-8、`.xlsx` は OOXML zip package として検証・解析する。raw object は GCS に保存し、Curator/Masker 入力には normalized markdown を渡す。
 - chunk-level `maskedText` は Firestore subcollection に inline 保存する。chunk 単位の GCS masked object は作らない。
 - `context:demo:live` では、GCS 本文取得に失敗した document-only fallback 対象は export 全体を落とさず human review に回し、読めた文書 / chunk のみ `Full AI-Ready Sources` に含める。

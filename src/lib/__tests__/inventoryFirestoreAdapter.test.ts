@@ -1,12 +1,20 @@
 import type { Timestamp } from '@google-cloud/firestore';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { getFirestoreClient } from '../firestore';
 import type {
   FirestoreCuratorBlock,
   FirestoreDocument,
   FirestoreMaskerBlock,
 } from '../firestoreSchema';
-import { adaptFirestoreDocumentToInventory } from '../inventoryFirestoreAdapter';
+import {
+  adaptFirestoreDocumentToInventory,
+  listInventoryDocumentsFromFirestore,
+} from '../inventoryFirestoreAdapter';
 import { adaptW1SnapshotEntries } from '../inventory';
+
+vi.mock('../firestore', () => ({
+  getFirestoreClient: vi.fn(),
+}));
 
 function timestamp(iso: string): Timestamp {
   return {
@@ -48,6 +56,8 @@ function buildDoc(overrides: Partial<FirestoreDocument> = {}): FirestoreDocument
     contentType: 'text/plain',
     byteSize: 12,
     contentSha256: 'hash-1',
+    sourceKind: 'upload',
+    externalSource: null,
     storagePath: 'raw/doc-1/sample.txt',
     aiSafeStoragePath: null,
     status: 'curated',
@@ -255,5 +265,47 @@ describe('adaptFirestoreDocumentToInventory', () => {
         storagePath: 'sample-data/w1.txt',
       })
     );
+  });
+
+  it('lists legacy raw Firestore documents without sourceKind/externalSource', async () => {
+    const { sourceKind: _sourceKind, externalSource: _externalSource, ...rawData } = {
+      ...buildDoc(),
+      createdAt: '2026-05-08T00:00:00.000Z',
+      updatedAt: '2026-05-08T02:00:00.000Z',
+      curator: {
+        ...baseCurator,
+        sensitivity: 'Internal',
+        aiUsePolicy: 'direct',
+        rationale: 'AI に直接渡せる社内手順です。',
+        completedAt: '2026-05-08T01:00:00.000Z',
+      },
+    };
+    const get = vi.fn().mockResolvedValue({
+      docs: [
+        {
+          id: 'legacy-doc',
+          data: () => rawData,
+        },
+      ],
+    });
+    const limit = vi.fn(() => ({ get }));
+    const orderBy = vi.fn(() => ({ limit }));
+    const collection = vi.fn(() => ({ orderBy }));
+    vi.mocked(getFirestoreClient).mockReturnValue({
+      collection,
+    } as unknown as ReturnType<typeof getFirestoreClient>);
+
+    const rows = await listInventoryDocumentsFromFirestore();
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        id: 'legacy-doc',
+        fileName: 'sample.txt',
+        status: 'curated',
+        storagePath: 'raw/doc-1/sample.txt',
+      })
+    );
+    expect(collection).toHaveBeenCalledWith('documents');
   });
 });

@@ -53,13 +53,30 @@ export type FirestoreErrorBlock = {
   occurredAt: Timestamp;
 };
 
+export type FirestoreSourceKind = 'upload' | 'google_workspace';
+
+export type FirestoreExternalSource = {
+  provider: 'google_drive';
+  workspaceMimeType: 'application/vnd.google-apps.spreadsheet';
+  fileId: string;
+  name: string;
+  webViewLink?: string;
+  modifiedTime?: string;
+  importedAt: string;
+  exportedAt: string;
+  exportMimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+};
+
 export type FirestoreDocument = {
   id: string;
   schemaVersion: typeof FIRESTORE_DOCUMENT_SCHEMA_VERSION;
   fileName: string;
   contentType: string;
   byteSize: number;
+  /** upload raw bytes または imported snapshot bytes の SHA256 */
   contentSha256: string;
+  sourceKind: FirestoreSourceKind;
+  externalSource: FirestoreExternalSource | null;
   storagePath: string;
   aiSafeStoragePath: string | null;
 
@@ -81,6 +98,22 @@ export type FirestoreDocument = {
   curatorError: FirestoreErrorBlock | null;
   masker: FirestoreMaskerBlock | null;
   maskerError: FirestoreErrorBlock | null;
+};
+
+/**
+ * Firestore `documents/{id}` から読み取った直後の raw 表現。
+ * sourceKind / externalSource は schemaVersion 1 では optional で、
+ * read 時に parseFirestoreDocumentData で defaulting される。
+ *
+ * 用途は「DocumentSnapshot.data() を一旦受ける箱」だけ。
+ * 業務ロジックは必ず FirestoreDocument（parsed shape）を使うこと。
+ */
+export type FirestoreRawDocumentShape = Omit<
+  FirestoreDocument,
+  'sourceKind' | 'externalSource'
+> & {
+  sourceKind?: FirestoreSourceKind;
+  externalSource?: FirestoreExternalSource | null;
 };
 
 /**

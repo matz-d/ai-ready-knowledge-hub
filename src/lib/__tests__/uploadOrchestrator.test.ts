@@ -203,6 +203,12 @@ describe('orchestrateUploadProcessing', () => {
       baseInput.buffer,
       'text/plain'
     );
+    expect(setMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceKind: 'upload',
+        externalSource: null,
+      })
+    );
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'curated', aiUsePolicy: 'direct' })
     );

@@ -18,6 +18,22 @@ const timestampLikeSchema = z.union([
   z.string(),
 ]);
 
+const sourceKindLikeSchema = z.enum(['upload', 'google_workspace']);
+
+const externalSourceLikeSchema = z.object({
+  provider: z.literal('google_drive'),
+  workspaceMimeType: z.literal('application/vnd.google-apps.spreadsheet'),
+  fileId: z.string(),
+  name: z.string(),
+  webViewLink: z.string().optional(),
+  modifiedTime: z.string().optional(),
+  importedAt: z.string(),
+  exportedAt: z.string(),
+  exportMimeType: z.literal(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ),
+});
+
 const firestoreErrorBlockSchema = z.object({
   message: z.string(),
   occurredAt: timestampLikeSchema,
@@ -75,6 +91,11 @@ const firestoreDocumentDataSchema = z
     contentType: z.string(),
     byteSize: z.number(),
     contentSha256: z.string(),
+    sourceKind: sourceKindLikeSchema.optional().default('upload'),
+    externalSource: z
+      .union([z.null(), externalSourceLikeSchema])
+      .optional()
+      .default(null),
     storagePath: z.string(),
     aiSafeStoragePath: z.string().nullable(),
     status: firestoreDocumentStatusSchema,

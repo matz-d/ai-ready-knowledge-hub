@@ -659,6 +659,12 @@ sample-data/
 
 ---
 
+## Phase 3-A: Google Sheets Snapshot Import（D-P3-A-1〜D-P3-A-9）
+
+**要約**: Drive `files.export` で `.xlsx` スナップショットを取り Phase 2 パイプラインへ載せる方式、`sourceKind` / `externalSource` と defaulting、SA 共有前提、`gid` 無視の全シート import、重複許容、orchestrator 分割、`src/` 本線、Drive export fixture など、Phase 3-A の採用判断 **D-P3-A-1** から **D-P3-A-9** までの本文・代替案・撤退条件は [docs/phase-3-google-sheets-import.md](phase-3-google-sheets-import.md) の **「2. 採用判断ログ（Phase 3-A 着手前の合意）」** に正本として記録している。
+
+---
+
 ## 関連ドキュメント
 
 - [docs/concept.md](concept.md) — プロダクトコンセプト

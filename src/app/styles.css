@@ -1269,6 +1269,242 @@ pre {
   word-break: break-all;
 }
 
+/* Global site header + Google Sheets import UI */
+.site-header {
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.site-header__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 12px 0;
+}
+
+.site-header__brand {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.site-header__brand:hover {
+  color: var(--accent);
+}
+
+.site-header__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+}
+
+.site-header__nav a {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.site-header__nav a:hover {
+  text-decoration: underline;
+}
+
+.import-sheets-layout {
+  margin-top: 8px;
+}
+
+.import-sa-panel {
+  max-width: 720px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--accent-soft);
+}
+
+.import-sa-panel__title {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.import-sa-panel__lead {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--foreground);
+}
+
+.import-sa-panel__lead strong {
+  font-weight: 800;
+}
+
+.import-sa-panel__status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.import-sa-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+.import-sa-panel__email {
+  flex: 1 1 220px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.import-sa-panel__copy {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.import-sa-panel__copy:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.import-sa-panel__warn {
+  margin: 0;
+  color: var(--danger);
+  font-size: 14px;
+}
+
+.import-sa-panel__hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.import-sheets-form {
+  max-width: 720px;
+}
+
+.import-sheets-url-input {
+  width: 100%;
+}
+
+.import-sheets-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--blue-soft);
+  border: 1px solid #c9d8ec;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--foreground);
+}
+
+.import-sheets-note code {
+  font-size: 12px;
+}
+
+.import-share-error-panel {
+  max-width: 720px;
+  padding: 20px 22px;
+  border: 1px solid #e3b9b2;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: #4a2a26;
+}
+
+.import-share-error-panel__title {
+  display: block;
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--danger);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.import-share-error-panel p {
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+
+.import-share-error-panel__email-block {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: #fff;
+  border: 2px solid var(--danger);
+}
+
+.import-share-error-panel__label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--danger);
+  text-transform: uppercase;
+}
+
+.import-share-error-panel__email {
+  display: block;
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  word-break: break-all;
+  color: var(--foreground);
+}
+
+.import-share-error-panel__copy {
+  margin-top: 4px;
+}
+
+.import-share-error-panel__fallback {
+  font-size: 14px;
+}
+
+.import-share-error-panel__doc {
+  margin-bottom: 0;
+  font-size: 14px;
+}
+
+.import-share-error-panel__doc a {
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.import-error-code-banner {
+  max-width: 720px;
+  padding: 16px 18px;
+  border-radius: 8px;
+  border: 1px solid #e3b9b2;
+  background: var(--danger-soft);
+  color: #4a2a26;
+}
+
+.import-error-code-banner strong {
+  display: block;
+  margin-bottom: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 15px;
+  color: var(--danger);
+}
+
+.import-error-code-banner p {
+  margin: 0;
+  line-height: 1.6;
+}
+
 .sensitivity-badge {
   display: inline-block;
   padding: 5px 10px;
