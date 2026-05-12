@@ -162,6 +162,7 @@ export async function POST(request: Request) {
       byteSize: buffer.length,
       modelId,
       result,
+      ingestMeta: { kind: 'created' },
     });
 
     return NextResponse.json(body);

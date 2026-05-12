@@ -14,8 +14,13 @@ export function documentUploadSuccessBodyFromOrchestrate(args: {
   byteSize: number;
   modelId: string;
   result: OrchestrateResult;
+  ingestMeta: {
+    kind: 'created' | 'overwritten';
+    skipped?: boolean;
+  };
 }): DocumentUploadSuccessResponse {
-  const { displayName, contentType, byteSize, modelId, result } = args;
+  const { displayName, contentType, byteSize, modelId, result, ingestMeta } =
+    args;
   const base = {
     docId: result.docId,
     fileName: displayName,
@@ -23,6 +28,8 @@ export function documentUploadSuccessBodyFromOrchestrate(args: {
     byteSize,
     storagePath: result.storagePath,
     status: result.kind,
+    kind: ingestMeta.kind,
+    ...(ingestMeta.skipped === true ? { skipped: true as const } : {}),
     curator: toSerializableCurator(
       result.curator,
       modelId,

@@ -146,6 +146,7 @@ beforeEach(() => {
     docId: 'doc-1',
     storagePath: 'raw/doc-1/Revenue.xlsx',
     fileName: 'Revenue.xlsx',
+    ingestKind: 'created',
     curator: {
       documentType: '料金表',
       businessDomain: '営業',
@@ -184,9 +185,42 @@ describe('POST /api/import/google-sheets', () => {
           aiUsePolicy: 'direct',
           modelId: 'test-model',
         }),
+        kind: 'created',
       })
     );
     expect(body).not.toHaveProperty('masker');
+    expect(body).not.toHaveProperty('skipped');
+  });
+
+  it('returns kind overwritten and skipped when orchestrator short-circuits unchanged bytes', async () => {
+    orchestrateImportedSnapshotProcessingMock.mockResolvedValue({
+      kind: 'curated',
+      docId: 'doc-skip',
+      storagePath: 'raw/doc-skip/Revenue.xlsx',
+      fileName: 'Revenue.xlsx',
+      ingestKind: 'overwritten',
+      skipped: true,
+      curator: {
+        documentType: '料金表',
+        businessDomain: '営業',
+        sensitivity: 'Internal',
+        freshness: 'current',
+        isAuthoritativeCandidate: true,
+        aiUsePolicy: 'direct',
+        rationale: 'direct',
+      },
+      curatorCompletedAt: new Date('2026-05-12T00:00:00.000Z'),
+      snapshotByteSize: 2048,
+    });
+
+    const response = await POST(
+      buildRequest({ urlOrFileId: 'sheet-file-id-1234567890123' })
+    );
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(200);
+    expect(body.kind).toBe('overwritten');
+    expect(body.skipped).toBe(true);
   });
 
   it('returns the persisted imported fileName even when displayName is provided', async () => {
@@ -195,6 +229,7 @@ describe('POST /api/import/google-sheets', () => {
       docId: 'doc-2',
       storagePath: 'raw/doc-2/Drive_Source.xlsx',
       fileName: 'Drive Source.xlsx',
+      ingestKind: 'created',
       curator: {
         documentType: '料金表',
         businessDomain: '営業',
@@ -223,6 +258,7 @@ describe('POST /api/import/google-sheets', () => {
         fileName: 'Drive Source.xlsx',
         storagePath: 'raw/doc-2/Drive_Source.xlsx',
         byteSize: 4096,
+        kind: 'created',
       })
     );
   });

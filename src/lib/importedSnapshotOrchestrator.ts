@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DocumentReference } from '@google-cloud/firestore';
+import { ZodError } from 'zod';
+import type { CuratorOutputResult } from '../agents/curator/schema';
 import {
   DOCUMENTS_COLLECTION,
   MAX_UPLOAD_BYTES,
@@ -7,7 +9,11 @@ import {
   sanitizeOriginalFileName,
 } from './documents';
 import { FieldValue, getFirestoreClient } from './firestore';
-import { hashContentSha256, type FirestoreExternalSource } from './firestoreSchema';
+import {
+  hashContentSha256,
+  type FirestoreDocument,
+  type FirestoreExternalSource,
+} from './firestoreSchema';
 import {
   fetchDocsSnapshot,
   googleDocsWorkspaceImportAdapter,
@@ -25,9 +31,11 @@ import {
   safeDeleteFirestoreDoc,
   safeDeleteRawObject,
   transitionDocumentToCurating,
+  type MaskerSummary,
   type OrchestrateResult,
 } from './uploadOrchestrator';
 import { replaceChunksForDoc } from './chunkRegenerator';
+import { parseFirestoreDocumentData } from './parseFirestoreDocumentData';
 import type {
   WorkspaceImportAdapter,
   WorkspaceSnapshot,
@@ -42,6 +50,10 @@ export type OrchestrateImportedSnapshotInput = {
 export type ImportedSnapshotOrchestrateResult = OrchestrateResult & {
   fileName: string;
   snapshotByteSize: number;
+  /** Maps to success JSON `kind` (de-dup: new vs overwrite). */
+  ingestKind: 'created' | 'overwritten';
+  /** When true, same as JSON `skipped` — contentSha256 unchanged short-circuit. */
+  skipped?: true;
 };
 
 export type WorkspaceImportOrchestratorDependencies = {
@@ -50,6 +62,13 @@ export type WorkspaceImportOrchestratorDependencies = {
   adapter: WorkspaceImportAdapter;
   normalizeFileBaseName: (name: string) => string;
   buildSafeFileName: (name: string) => string;
+};
+
+type ImportedSnapshotMode = 'create' | 'overwrite';
+
+type ExistingWorkspaceDocument = {
+  docRef: DocumentReference;
+  firestoreDocument: FirestoreDocument;
 };
 
 /** Thrown when raw snapshot upload to GCS fails (maps to HTTP 502). */
@@ -95,6 +114,46 @@ const docsWorkspaceImportDeps: WorkspaceImportOrchestratorDependencies = {
   buildSafeFileName: buildSafeMarkdownName,
 };
 
+export async function findExistingDocByFileId(
+  fileId: string
+): Promise<ExistingWorkspaceDocument | null> {
+  const db = getFirestoreClient();
+  const snapshot = await db
+    .collection(DOCUMENTS_COLLECTION)
+    .where('externalSource.fileId', '==', fileId)
+    .where('sourceKind', '==', 'google_workspace')
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    return null;
+  }
+
+  const docSnapshot = snapshot.docs[0];
+  const raw = docSnapshot.data();
+  if (raw == null) {
+    throw new Error(`Document ${docSnapshot.id} has no payload.`);
+  }
+
+  let firestoreDocument: FirestoreDocument;
+  try {
+    firestoreDocument = parseFirestoreDocumentData(raw);
+  } catch (err: unknown) {
+    if (err instanceof ZodError) {
+      throw new Error(
+        `Existing workspace document ${docSnapshot.id} does not match the expected schema.`,
+        { cause: err }
+      );
+    }
+    throw err;
+  }
+
+  return {
+    docRef: db.collection(DOCUMENTS_COLLECTION).doc(docSnapshot.id),
+    firestoreDocument,
+  };
+}
+
 /**
  * Workspace import（Sheets / Docs）の共通 orchestrator。
  * `deps` を差し替えることで source 固有差分（parse, export, normalize）を吸収する。
@@ -110,6 +169,8 @@ export async function orchestrateImportedSnapshotProcessing(
 
   // [A'] fetchSnapshot — Drive metadata 取得 + files.export
   const { metadata, exportBuffer, exportedAt } = await deps.fetchSnapshot(fileId);
+  const existing = await findExistingDocByFileId(fileId);
+  const mode: ImportedSnapshotMode = existing ? 'overwrite' : 'create';
 
   if (exportBuffer.length > MAX_UPLOAD_BYTES) {
     throw new ImportTooLargeError(exportBuffer.length);
@@ -118,7 +179,7 @@ export async function orchestrateImportedSnapshotProcessing(
   // [B-pre] toNormalizedContent — Curator / Masker 入力向け正規化
   const content = deps.adapter.toNormalizedContent(exportBuffer);
 
-  const docId = randomUUID();
+  const docId = existing?.docRef.id ?? randomUUID();
   const baseFileName = deps.normalizeFileBaseName(metadata.name);
   const fileName = `${baseFileName}${deps.adapter.fileExtension}`;
   const safeName = deps.buildSafeFileName(metadata.name);
@@ -126,16 +187,31 @@ export async function orchestrateImportedSnapshotProcessing(
   const aiSafeStoragePath = `masked/${docId}/${safeName}`;
   const contentSha256 = hashContentSha256(exportBuffer);
   const contentType = deps.adapter.contentType;
-
-  // [B] uploadRawObject — export bytes を GCS raw 領域へ
-  try {
-    await uploadRawObject(storagePath, exportBuffer, contentType);
-  } catch (e) {
-    throw new GcsUploadError(e);
-  }
+  const previousStoragePath = existing?.firestoreDocument.storagePath;
 
   const db = getFirestoreClient();
-  const docRef = db.collection(DOCUMENTS_COLLECTION).doc(docId);
+  const docRef = existing?.docRef ?? db.collection(DOCUMENTS_COLLECTION).doc(docId);
+
+  if (
+    mode === 'overwrite' &&
+    existing?.firestoreDocument.contentSha256 === contentSha256
+  ) {
+    const existingLifecycle = lifecycleResultFromExistingDocument(
+      docId,
+      existing.firestoreDocument
+    );
+    if (existingLifecycle) {
+      await updateMetadataOnlyForSkippedOverwrite(docRef, metadata, exportedAt);
+      return {
+        ...existingLifecycle,
+        fileName: existing.firestoreDocument.fileName,
+        snapshotByteSize: exportBuffer.length,
+        ingestKind: 'overwritten',
+        skipped: true,
+      };
+    }
+  }
+
   const externalSource: FirestoreExternalSource = {
     provider: 'google_drive',
     workspaceMimeType: deps.adapter.workspaceMimeType,
@@ -148,7 +224,14 @@ export async function orchestrateImportedSnapshotProcessing(
     exportMimeType: deps.adapter.exportMimeType,
   };
 
-  // [C] Firestore initial set — uploaded 相当の初回フィールド + externalSource
+  // [B] uploadRawObject — export bytes を GCS raw 領域へ
+  try {
+    await uploadRawObject(storagePath, exportBuffer, contentType);
+  } catch (e) {
+    throw new GcsUploadError(e);
+  }
+
+  // [C] Firestore initial/overwrite set — uploaded 相当の初回フィールド + externalSource
   try {
     await docRef.set(
       buildImportedSnapshotInitialDocumentBody({
@@ -159,7 +242,8 @@ export async function orchestrateImportedSnapshotProcessing(
         contentSha256,
         storagePath,
         externalSource,
-      })
+      }),
+      { merge: false }
     );
   } catch (e) {
     await safeDeleteRawObject(storagePath);
@@ -170,8 +254,18 @@ export async function orchestrateImportedSnapshotProcessing(
   try {
     await transitionDocumentToCurating(docRef, contentSha256, externalSource);
   } catch (e) {
-    await safeDeleteRawObject(storagePath);
-    await safeDeleteFirestoreDoc(docRef);
+    if (mode === 'create') {
+      await safeDeleteRawObject(storagePath);
+      await safeDeleteFirestoreDoc(docRef);
+    } else {
+      await updateFailedStatusAfterOverwriteError(
+        docRef,
+        'curatorError',
+        `curating transition failed: ${
+          e instanceof Error ? e.message : String(e)
+        }`
+      );
+    }
     throw e;
   }
 
@@ -199,7 +293,21 @@ export async function orchestrateImportedSnapshotProcessing(
       throw error;
     }
   }
-  return { ...lifecycle, fileName, snapshotByteSize: exportBuffer.length };
+
+  if (
+    mode === 'overwrite' &&
+    previousStoragePath &&
+    previousStoragePath !== storagePath
+  ) {
+    await safeDeleteRawObject(previousStoragePath);
+  }
+
+  return {
+    ...lifecycle,
+    fileName,
+    snapshotByteSize: exportBuffer.length,
+    ingestKind: mode === 'create' ? 'created' : 'overwritten',
+  };
 }
 
 /**
@@ -281,6 +389,120 @@ export function buildSafeMarkdownName(name: string): string {
   return buildSafeWorkspaceFileName(name, '.md', 'document');
 }
 
+function lifecycleResultFromExistingDocument(
+  docId: string,
+  document: FirestoreDocument
+): OrchestrateResult | null {
+  if (document.curator == null) {
+    return null;
+  }
+
+  const curatorResult: CuratorOutputResult = {
+    documentType: document.curator.documentType,
+    businessDomain: document.curator.businessDomain,
+    sensitivity: document.curator.sensitivity,
+    freshness: document.curator.freshness,
+    isAuthoritativeCandidate: document.curator.isAuthoritativeCandidate,
+    aiUsePolicy: document.curator.aiUsePolicy,
+    rationale: document.curator.rationale,
+  };
+  const curatorCompletedAt = timestampToDate(document.curator.completedAt);
+
+  if (document.status === 'curated' || document.status === 'blocked') {
+    return {
+      kind: document.status,
+      docId,
+      storagePath: document.storagePath,
+      curator: curatorResult,
+      curatorCompletedAt,
+    };
+  }
+
+  if (document.status === 'ai_safe') {
+    if (document.masker == null || document.aiSafeStoragePath == null) {
+      return null;
+    }
+    return {
+      kind: 'ai_safe',
+      docId,
+      storagePath: document.storagePath,
+      aiSafeStoragePath: document.aiSafeStoragePath,
+      curator: curatorResult,
+      curatorCompletedAt,
+      masker: maskerSummaryFromDocument(document.masker),
+    };
+  }
+
+  if (document.status === 'restricted') {
+    if (
+      document.masker == null ||
+      document.sensitivityReason == null ||
+      document.originalCuratorSensitivity == null
+    ) {
+      return null;
+    }
+    return {
+      kind: 'restricted',
+      docId,
+      storagePath: document.storagePath,
+      curator: curatorResult,
+      curatorCompletedAt,
+      masker: maskerSummaryFromDocument(document.masker),
+      sensitivityReason: document.sensitivityReason,
+      originalCuratorSensitivity: document.originalCuratorSensitivity,
+    };
+  }
+
+  return null;
+}
+
+function maskerSummaryFromDocument(masker: FirestoreDocument['masker']): MaskerSummary {
+  if (masker == null) {
+    throw new Error('masker summary requires non-null masker block');
+  }
+  return {
+    decision: masker.decision,
+    provider: masker.provider,
+    maskedSpansCount: masker.maskedSpansCount,
+    ruleHits: masker.ruleHits,
+    residualRisk: masker.residualRisk,
+    rationale: masker.rationale,
+    recommendedSensitivity: masker.recommendedSensitivity,
+    completedAt: timestampToDate(masker.completedAt),
+    modelId: masker.modelId,
+  };
+}
+
+function timestampToDate(value: unknown): Date {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    return new Date(value);
+  }
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toDate' in value &&
+    typeof value.toDate === 'function'
+  ) {
+    return value.toDate();
+  }
+  throw new Error('Unexpected timestamp payload');
+}
+
+async function updateMetadataOnlyForSkippedOverwrite(
+  docRef: DocumentReference,
+  metadata: WorkspaceSnapshot['metadata'],
+  exportedAt: string
+): Promise<void> {
+  await docRef.update({
+    'externalSource.exportedAt': exportedAt,
+    'externalSource.modifiedTime': metadata.modifiedTime ?? FieldValue.delete(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
 async function updateFailedStatusAfterChunkReplaceError(
   docRef: DocumentReference,
   cause: unknown
@@ -300,6 +522,30 @@ async function updateFailedStatusAfterChunkReplaceError(
   } catch (updateError) {
     console.error(
       '[importedSnapshotOrchestrator] failed to update status after chunk replacement error',
+      updateError
+    );
+  }
+}
+
+async function updateFailedStatusAfterOverwriteError(
+  docRef: DocumentReference,
+  errorField: 'curatorError' | 'maskerError',
+  message: string
+): Promise<void> {
+  const truncated =
+    message.length > 8000 ? `${message.slice(0, 8000)}…` : message;
+  try {
+    await docRef.update({
+      status: 'failed',
+      updatedAt: FieldValue.serverTimestamp(),
+      [errorField]: {
+        message: truncated,
+        occurredAt: FieldValue.serverTimestamp(),
+      },
+    });
+  } catch (updateError) {
+    console.error(
+      '[importedSnapshotOrchestrator] failed to update failed status after overwrite error',
       updateError
     );
   }

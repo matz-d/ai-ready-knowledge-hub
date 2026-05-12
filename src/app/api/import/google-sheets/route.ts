@@ -120,6 +120,10 @@ export async function POST(request: Request) {
       byteSize: result.snapshotByteSize,
       modelId,
       result,
+      ingestMeta: {
+        kind: result.ingestKind,
+        ...(result.skipped === true ? { skipped: true } : {}),
+      },
     });
 
     return NextResponse.json(body);

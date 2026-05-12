@@ -28,6 +28,7 @@ describe('documentUploadSuccessBodyFromOrchestrate', () => {
       byteSize: 5,
       modelId: 'm1',
       result,
+      ingestMeta: { kind: 'created' },
     });
     expect(body).toEqual({
       docId: 'd1',
@@ -36,6 +37,7 @@ describe('documentUploadSuccessBodyFromOrchestrate', () => {
       byteSize: 5,
       storagePath: 'raw/d1/a.txt',
       status: 'curated',
+      kind: 'created',
       curator: {
         documentType: 'メモ',
         businessDomain: '社内手順',
@@ -49,6 +51,7 @@ describe('documentUploadSuccessBodyFromOrchestrate', () => {
       },
     });
     expect(body).not.toHaveProperty('masker');
+    expect(body).not.toHaveProperty('skipped');
     expect(body).not.toHaveProperty('aiSafeStoragePath');
   });
 
@@ -79,8 +82,11 @@ describe('documentUploadSuccessBodyFromOrchestrate', () => {
       byteSize: 3,
       modelId: 'm1',
       result,
+      ingestMeta: { kind: 'overwritten', skipped: true },
     });
     expect(body.status).toBe('ai_safe');
+    expect(body.kind).toBe('overwritten');
+    expect(body.skipped).toBe(true);
     expect(body.aiSafeStoragePath).toBe('masked/d2/a.txt');
     expect(body.masker?.decision).toBe('ai_safe_ready');
   });

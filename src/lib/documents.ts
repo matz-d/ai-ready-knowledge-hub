@@ -47,6 +47,10 @@ export type DocumentUploadSuccessResponse = {
   masker?: SerializableMaskerBlock;
   sensitivityReason?: string;
   originalCuratorSensitivity?: string;
+  /** Ingest semantics: new Firestore doc vs reused docId (workspace import de-dup). */
+  kind: 'created' | 'overwritten';
+  /** True only when re-import skipped downstream processing because contentSha256 was unchanged. */
+  skipped?: boolean;
 };
 
 export type DocumentUploadCuratorErrorResponse = {

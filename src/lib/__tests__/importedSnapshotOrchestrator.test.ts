@@ -20,8 +20,12 @@ const {
   deleteMock,
   docFnMock,
   collectionMock,
+  whereMock,
+  limitMock,
+  queryGetMock,
   getFirestoreClientMock,
   serverTimestampMock,
+  fieldValueDeleteMock,
 } = vi.hoisted(() => ({
   randomUUIDMock: vi.fn(),
   parseGoogleSheetsInputMock: vi.fn(),
@@ -42,8 +46,12 @@ const {
   deleteMock: vi.fn(),
   docFnMock: vi.fn(),
   collectionMock: vi.fn(),
+  whereMock: vi.fn(),
+  limitMock: vi.fn(),
+  queryGetMock: vi.fn(),
   getFirestoreClientMock: vi.fn(),
   serverTimestampMock: vi.fn(),
+  fieldValueDeleteMock: vi.fn(),
 }));
 
 vi.mock('node:crypto', async (importOriginal) => {
@@ -115,13 +123,25 @@ const docMock = {
   update: updateMock,
   delete: deleteMock,
 };
-docFnMock.mockImplementation(() => docMock);
-collectionMock.mockImplementation(() => ({ doc: docFnMock }));
+docFnMock.mockImplementation((id?: string) => ({
+  ...docMock,
+  id: id ?? 'doc-unknown',
+}));
+const queryChain = {
+  where: whereMock,
+  limit: limitMock,
+  get: queryGetMock,
+};
+whereMock.mockImplementation(() => queryChain);
+limitMock.mockImplementation(() => queryChain);
+collectionMock.mockImplementation(() => ({ doc: docFnMock, where: whereMock }));
 getFirestoreClientMock.mockImplementation(() => ({ collection: collectionMock }));
 serverTimestampMock.mockImplementation(() => 'SERVER_TIMESTAMP');
+fieldValueDeleteMock.mockImplementation(() => 'FIELD_DELETE');
 vi.mock('../firestore', () => ({
   FieldValue: {
     serverTimestamp: serverTimestampMock,
+    delete: fieldValueDeleteMock,
   },
   getFirestoreClient: getFirestoreClientMock,
 }));
@@ -133,6 +153,7 @@ import {
   orchestrateImportedDocsSnapshotProcessing,
   orchestrateImportedSnapshotProcessing,
 } from '../importedSnapshotOrchestrator';
+import { hashContentSha256 } from '../firestoreSchema';
 
 const xlsxBuffer = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x01]);
 const markdownBuffer = Buffer.from('# Ops Guide\n\n- Step 1', 'utf-8');
@@ -228,6 +249,75 @@ const restrictedPipelineResult = {
   },
 } as const;
 
+function makeExistingWorkspaceDocData(
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    id: 'doc-existing',
+    schemaVersion: 2,
+    fileName: 'Legacy Revenue.xlsx',
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    byteSize: 1024,
+    contentSha256: 'legacy-sha256',
+    sourceKind: 'google_workspace',
+    externalSource: {
+      provider: 'google_drive',
+      workspaceMimeType: 'application/vnd.google-apps.spreadsheet',
+      fileId: 'sheet-file-id',
+      name: 'Legacy Revenue',
+      importedAt: '2026-05-01T00:00:00.000Z',
+      exportedAt: '2026-05-01T00:00:00.000Z',
+      modifiedTime: '2026-05-01T00:00:00.000Z',
+      exportMimeType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    },
+    storagePath: 'raw/doc-existing/Legacy Revenue.xlsx',
+    aiSafeStoragePath: null,
+    status: 'curated',
+    createdAt: new Date('2026-05-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+    documentType: '表',
+    businessDomain: '料金管理',
+    sensitivity: 'Internal',
+    freshness: 'current',
+    isAuthoritativeCandidate: true,
+    aiUsePolicy: 'direct',
+    sensitivitySource: 'curator',
+    originalCuratorSensitivity: null,
+    sensitivityReason: null,
+    curator: {
+      documentType: '表',
+      businessDomain: '料金管理',
+      sensitivity: 'Internal',
+      freshness: 'current',
+      isAuthoritativeCandidate: true,
+      aiUsePolicy: 'direct',
+      rationale: 'legacy',
+      completedAt: new Date('2026-05-01T00:00:00.000Z'),
+      modelId: 'test-model',
+    },
+    curatorError: null,
+    masker: null,
+    maskerError: null,
+    ...overrides,
+  };
+}
+
+function makeExistingWorkspaceQuerySnapshot(
+  data: Record<string, unknown>,
+  docId = 'doc-existing'
+): { empty: false; docs: Array<{ id: string; data: () => Record<string, unknown> }> } {
+  return {
+    empty: false,
+    docs: [
+      {
+        id: docId,
+        data: () => data,
+      },
+    ],
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   randomUUIDMock.mockReturnValue('doc-1');
@@ -245,6 +335,7 @@ beforeEach(() => {
   uploadMaskedObjectMock.mockResolvedValue(undefined);
   deleteMaskedObjectMock.mockResolvedValue(undefined);
   replaceChunksForDocMock.mockResolvedValue(undefined);
+  queryGetMock.mockResolvedValue({ empty: true, docs: [] });
 });
 
 describe('orchestrateImportedSnapshotProcessing', () => {
@@ -258,6 +349,8 @@ describe('orchestrateImportedSnapshotProcessing', () => {
     expect(result.kind).toBe('curated');
     expect(result.fileName).toBe('料金表.xlsx');
     expect(result.snapshotByteSize).toBe(xlsxBuffer.length);
+    expect(result.ingestKind).toBe('created');
+    expect(result.skipped).toBeUndefined();
     expect(parseGoogleSheetsInputMock).toHaveBeenCalledWith(
       'https://docs.google.com/spreadsheets/d/sheet-file-id/edit#gid=1'
     );
@@ -283,7 +376,8 @@ describe('orchestrateImportedSnapshotProcessing', () => {
           exportMimeType:
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         }),
-      })
+      }),
+      { merge: false }
     );
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'curating' })
@@ -319,7 +413,8 @@ describe('orchestrateImportedSnapshotProcessing', () => {
         externalSource: expect.objectContaining({
           name: '  .xlsx  ',
         }),
-      })
+      }),
+      { merge: false }
     );
   });
 
@@ -345,7 +440,8 @@ describe('orchestrateImportedSnapshotProcessing', () => {
     expect(setMock).toHaveBeenCalledWith(
       expect.objectContaining({
         fileName: 'report.xlsx',
-      })
+      }),
+      { merge: false }
     );
   });
 
@@ -371,7 +467,8 @@ describe('orchestrateImportedSnapshotProcessing', () => {
         externalSource: expect.objectContaining({
           name: 'Drive Source',
         }),
-      })
+      }),
+      { merge: false }
     );
     expect(curatorFlowMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -426,6 +523,105 @@ describe('orchestrateImportedSnapshotProcessing', () => {
         aiUsePolicy: 'blocked',
       })
     );
+    expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+  });
+
+  it('overwrites existing document using the same docId and deletes old raw path when safeName changes', async () => {
+    queryGetMock.mockResolvedValue(
+      makeExistingWorkspaceQuerySnapshot(
+        makeExistingWorkspaceDocData({
+          id: 'doc-overwrite',
+          storagePath: 'raw/doc-overwrite/Legacy Revenue.xlsx',
+          contentSha256: 'old-hash',
+        }),
+        'doc-overwrite'
+      )
+    );
+    fetchSheetsSnapshotMock.mockResolvedValue({
+      ...snapshot,
+      metadata: { ...snapshot.metadata, name: 'Renamed Revenue' },
+    });
+    curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+    const result = await orchestrateImportedSnapshotProcessing({
+      urlOrFileId: 'sheet-file-id',
+    });
+
+    expect(result.ingestKind).toBe('overwritten');
+    expect(result.skipped).toBeUndefined();
+    expect(uploadRawObjectMock).toHaveBeenCalledWith(
+      'raw/doc-overwrite/Renamed Revenue.xlsx',
+      xlsxBuffer,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    expect(setMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'doc-overwrite' }),
+      { merge: false }
+    );
+    expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-overwrite');
+    expect(deleteRawObjectMock).toHaveBeenCalledWith(
+      'raw/doc-overwrite/Legacy Revenue.xlsx'
+    );
+  });
+
+  it('short-circuits overwrite when contentSha256 is unchanged', async () => {
+    const unchangedHash = hashContentSha256(xlsxBuffer);
+    queryGetMock.mockResolvedValue(
+      makeExistingWorkspaceQuerySnapshot(
+        makeExistingWorkspaceDocData({
+          id: 'doc-same-hash',
+          contentSha256: unchangedHash,
+        }),
+        'doc-same-hash'
+      )
+    );
+    curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+    const result = await orchestrateImportedSnapshotProcessing({
+      urlOrFileId: 'sheet-file-id',
+    });
+
+    expect(result.ingestKind).toBe('overwritten');
+    expect(result.skipped).toBe(true);
+    expect(uploadRawObjectMock).not.toHaveBeenCalled();
+    expect(setMock).not.toHaveBeenCalled();
+    expect(curatorFlowMock).not.toHaveBeenCalled();
+    expect(maskerPipelineFlowMock).not.toHaveBeenCalled();
+    expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'externalSource.exportedAt': '2026-05-12T01:00:00.000Z',
+        'externalSource.modifiedTime': '2026-05-10T01:02:03.000Z',
+      })
+    );
+  });
+
+  it('on overwrite set failure, deletes newly uploaded raw object', async () => {
+    queryGetMock.mockResolvedValue(
+      makeExistingWorkspaceQuerySnapshot(
+        makeExistingWorkspaceDocData({
+          id: 'doc-set-fail',
+          storagePath: 'raw/doc-set-fail/Legacy Revenue.xlsx',
+          contentSha256: 'old-hash',
+        }),
+        'doc-set-fail'
+      )
+    );
+    fetchSheetsSnapshotMock.mockResolvedValue({
+      ...snapshot,
+      metadata: { ...snapshot.metadata, name: 'New Revenue' },
+    });
+    setMock.mockRejectedValue(new Error('overwrite set failed'));
+
+    await expect(
+      orchestrateImportedSnapshotProcessing({ urlOrFileId: 'sheet-file-id' })
+    ).rejects.toThrow('overwrite set failed');
+
+    expect(uploadRawObjectMock).toHaveBeenCalledTimes(1);
+    expect(deleteRawObjectMock).toHaveBeenCalledWith(
+      'raw/doc-set-fail/New Revenue.xlsx'
+    );
+    expect(curatorFlowMock).not.toHaveBeenCalled();
     expect(replaceChunksForDocMock).not.toHaveBeenCalled();
   });
 
@@ -547,6 +743,7 @@ describe('orchestrateImportedDocsSnapshotProcessing', () => {
     expect(result.kind).toBe('curated');
     expect(result.fileName).toBe('Ops Guide.md');
     expect(result.snapshotByteSize).toBe(markdownBuffer.length);
+    expect(result.ingestKind).toBe('created');
     expect(parseGoogleDocsInputMock).toHaveBeenCalledWith(
       'https://docs.google.com/document/d/docs-file-id/edit'
     );
@@ -571,7 +768,8 @@ describe('orchestrateImportedDocsSnapshotProcessing', () => {
           workspaceMimeType: 'application/vnd.google-apps.document',
           exportMimeType: 'text/markdown',
         }),
-      })
+      }),
+      { merge: false }
     );
     expect(curatorFlowMock).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -335,6 +335,13 @@ export function ImportForm() {
 
       {status === 'done' && success ? (
         <>
+          <p className="import-ingest-meta" role="status">
+            {success.kind === 'created'
+              ? '新規ドキュメントとして取り込みました。'
+              : success.skipped
+                ? '既存ドキュメントに対し、内容は変わらないため分類・チャンク処理をスキップしました（メタ情報のみ更新）。'
+                : '既存ドキュメントを上書きしました。'}
+          </p>
           <CuratorResultCard result={success} />
           <MaskerResultCard result={success} />
         </>

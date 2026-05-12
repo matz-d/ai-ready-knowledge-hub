@@ -121,6 +121,7 @@ describe('POST /api/documents', () => {
         contentType: 'text/plain',
         storagePath: 'raw/doc-1/sample.txt',
         status: 'curated',
+        kind: 'created',
         curator: expect.objectContaining({
           aiUsePolicy: 'direct',
           modelId: 'test-model',
@@ -159,6 +160,7 @@ describe('POST /api/documents', () => {
       expect.objectContaining({
         fileName: 'sample.md',
         contentType: 'text/markdown',
+        kind: 'created',
       })
     );
   });
@@ -269,6 +271,7 @@ describe('POST /api/documents', () => {
       expect.objectContaining({
         docId: 'doc-blocked',
         status: 'blocked',
+        kind: 'created',
         storagePath: 'raw/doc-blocked/sample.txt',
         curator: expect.objectContaining({
           aiUsePolicy: 'blocked',
@@ -317,6 +320,7 @@ describe('POST /api/documents', () => {
       expect.objectContaining({
         docId: 'doc-ai-safe',
         status: 'ai_safe',
+        kind: 'created',
         storagePath: 'raw/doc-ai-safe/sample.txt',
         aiSafeStoragePath: 'masked/doc-ai-safe/sample.txt',
         masker: expect.objectContaining({
@@ -367,6 +371,7 @@ describe('POST /api/documents', () => {
       expect.objectContaining({
         docId: 'doc-restricted',
         status: 'restricted',
+        kind: 'created',
         storagePath: 'raw/doc-restricted/sample.txt',
         sensitivityReason: 'risk remains',
         originalCuratorSensitivity: 'Confidential',
