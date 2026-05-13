@@ -665,8 +665,29 @@ sample-data/
 
 ---
 
+---
+
+## Phase 3-C 事前方針: 認証・デプロイ・配布形態（2026-05-13）
+
+**決定**: Phase 3-C の設計方針として以下を確定した。詳細は [docs/phase-3-c-direction.md](phase-3-c-direction.md) に正本として記録。
+
+**アプリ認証**: Cloud IAP + Google Workspace SSO を第一選択。`x-goog-authenticated-user-email` を監査ログのキーとして一気通貫させる。
+
+**Drive 認証**: OAuth 2.0 User Delegation（drive.file scope、offline access なし）を推奨。Phase 3-B の Service Account 個別共有は Phase 3-C で移行。
+
+**配布形態戦略**: SaaS（Year 1） → Lightweight BYOC / Docker on 顧客 Cloud Run（Year 2） → Full BYOC（Year 3）の 3 段階。「Docker 配布 on 顧客 Cloud Run」は実質 Lightweight BYOC と同義。
+
+**ハッカソン向けデプロイ**: GitHub Actions + Artifact Registry + Cloud Run。monolithic Dockerfile（multi-stage）で commit → test → build → push → deploy を自動化し、採点軸「まわす」のエビデンスとする。Artifact Registry の役割は「バージョン管理」より「CI/CD pipeline の可視化・透明性」。
+
+**Phase 3-C 実装優先順序**: (1) Cloud IAP + tenantId middleware、(2) GitHub Actions CI/CD 整備、(3) AuditEvent collection、(4) monitoring ダッシュボード。BYOC / Terraform / マルチリージョンはやらない。
+
+**実装方式への影響**: ビジネスロジック（Curator / Masker / Firestore / GCS）はほぼ変わらない。認証・Secret・deployment 層を env / middleware に集約して pluggable にしておくことが Year 2 移行コストを下げる唯一の準備。
+
+---
+
 ## 関連ドキュメント
 
+- [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
 - [docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) — Phase 3-B（Drive 再取り込み・schemaVersion 2・鮮度バッジ・完了条件の正本）
 - [docs/concept.md](concept.md) — プロダクトコンセプト
 - [docs/architecture.md](architecture.md) — 技術構成
