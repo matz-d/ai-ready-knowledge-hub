@@ -152,13 +152,13 @@ describe('GET /api/workspace/freshness', () => {
     });
   });
 
-  it('maps Drive 403 to drive_forbidden with HTTP 502', async () => {
+  it('maps Drive 403 to drive_forbidden as a normal unknown freshness response', async () => {
     driveFilesGetMock.mockRejectedValue({ response: { status: 403 } });
 
     const response = await GET(buildRequest('doc-1'));
     const body = await parseJson(response);
 
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(200);
     expect(body).toEqual({
       isStale: false,
       savedModifiedTime: '2026-05-10T01:02:03.000Z',
@@ -167,18 +167,33 @@ describe('GET /api/workspace/freshness', () => {
     });
   });
 
-  it('maps Drive 404 to drive_not_found with HTTP 502', async () => {
+  it('maps Drive 404 to drive_not_found as a normal unknown freshness response', async () => {
     driveFilesGetMock.mockRejectedValue({ code: 404 });
 
     const response = await GET(buildRequest('doc-1'));
     const body = await parseJson(response);
 
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(200);
     expect(body).toEqual({
       isStale: false,
       savedModifiedTime: '2026-05-10T01:02:03.000Z',
       latestModifiedTime: '',
       code: 'drive_not_found',
+    });
+  });
+
+  it('maps missing latest Drive modifiedTime to unknown freshness response', async () => {
+    driveFilesGetMock.mockResolvedValue({ data: {} });
+
+    const response = await GET(buildRequest('doc-1'));
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      isStale: false,
+      savedModifiedTime: '2026-05-10T01:02:03.000Z',
+      latestModifiedTime: '',
+      code: 'latest_modified_time_unknown',
     });
   });
 

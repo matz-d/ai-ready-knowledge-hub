@@ -15,6 +15,7 @@ const {
   uploadMaskedObjectMock,
   deleteMaskedObjectMock,
   replaceChunksForDocMock,
+  clearChunksForDocMock,
   setMock,
   updateMock,
   deleteMock,
@@ -41,6 +42,7 @@ const {
   uploadMaskedObjectMock: vi.fn(),
   deleteMaskedObjectMock: vi.fn(),
   replaceChunksForDocMock: vi.fn(),
+  clearChunksForDocMock: vi.fn(),
   setMock: vi.fn(),
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
@@ -116,6 +118,7 @@ vi.mock('../storage', () => ({
 
 vi.mock('../chunkRegenerator', () => ({
   replaceChunksForDoc: replaceChunksForDocMock,
+  clearChunksForDoc: clearChunksForDocMock,
 }));
 
 const docMock = {
@@ -335,6 +338,7 @@ beforeEach(() => {
   uploadMaskedObjectMock.mockResolvedValue(undefined);
   deleteMaskedObjectMock.mockResolvedValue(undefined);
   replaceChunksForDocMock.mockResolvedValue(undefined);
+  clearChunksForDocMock.mockResolvedValue(undefined);
   queryGetMock.mockResolvedValue({ empty: true, docs: [] });
 });
 
@@ -555,12 +559,72 @@ describe('orchestrateImportedSnapshotProcessing', () => {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     );
     expect(setMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'doc-overwrite' }),
+      expect.objectContaining({
+        id: 'doc-overwrite',
+        createdAt: new Date('2026-05-01T00:00:00.000Z'),
+        updatedAt: 'SERVER_TIMESTAMP',
+      }),
       { merge: false }
     );
     expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-overwrite');
     expect(deleteRawObjectMock).toHaveBeenCalledWith(
       'raw/doc-overwrite/Legacy Revenue.xlsx'
+    );
+  });
+
+  it('queries duplicate workspace fileIds with limit 2 before choosing overwrite target', async () => {
+    queryGetMock.mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: 'doc-first',
+          data: () =>
+            makeExistingWorkspaceDocData({
+              id: 'doc-first',
+              contentSha256: 'old-hash',
+            }),
+        },
+        {
+          id: 'doc-second',
+          data: () =>
+            makeExistingWorkspaceDocData({
+              id: 'doc-second',
+              contentSha256: 'older-hash',
+            }),
+        },
+      ],
+    });
+    curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+    await orchestrateImportedSnapshotProcessing({ urlOrFileId: 'sheet-file-id' });
+
+    expect(limitMock).toHaveBeenCalledWith(2);
+    expect(setMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'doc-first' }),
+      { merge: false }
+    );
+  });
+
+  it('clears old chunks best-effort when overwrite curator phase fails', async () => {
+    queryGetMock.mockResolvedValue(
+      makeExistingWorkspaceQuerySnapshot(
+        makeExistingWorkspaceDocData({
+          id: 'doc-curator-fail',
+          contentSha256: 'old-hash',
+        }),
+        'doc-curator-fail'
+      )
+    );
+    curatorFlowMock.mockRejectedValue(new Error('curator failed'));
+
+    await expect(
+      orchestrateImportedSnapshotProcessing({ urlOrFileId: 'sheet-file-id' })
+    ).rejects.toThrow('curator failed');
+
+    expect(clearChunksForDocMock).toHaveBeenCalledWith('doc-curator-fail');
+    expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed' })
     );
   });
 

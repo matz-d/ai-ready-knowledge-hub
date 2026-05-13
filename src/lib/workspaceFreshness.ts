@@ -1,4 +1,4 @@
-import { parseFirestoreDocumentData } from './parseFirestoreDocumentData';
+import { parseFirestoreDocumentSnapshot } from './parseFirestoreDocumentData';
 import { getFirestoreClient } from './firestore';
 import { getGoogleDriveClient } from './googleWorkspaceClient';
 
@@ -10,6 +10,7 @@ export type WorkspaceFreshnessResult = {
   isStale: boolean;
   savedModifiedTime: string;
   latestModifiedTime: string;
+  code?: 'ok' | 'latest_modified_time_unknown' | WorkspaceFreshnessDriveCode;
 };
 
 export class WorkspaceDocumentNotFoundError extends Error {
@@ -45,7 +46,10 @@ export class DriveFreshnessAccessError extends Error {
 }
 
 export class MissingLatestModifiedTimeError extends Error {
-  constructor(readonly fileId: string) {
+  constructor(
+    readonly fileId: string,
+    readonly savedModifiedTime: string
+  ) {
     super(`Drive metadata response did not include modifiedTime: ${fileId}`);
     this.name = 'MissingLatestModifiedTimeError';
   }
@@ -91,11 +95,7 @@ export async function getWorkspaceFreshness(
     throw new WorkspaceDocumentNotFoundError(docId);
   }
 
-  const rawData = snapshot.data();
-  const document = parseFirestoreDocumentData({
-    id: snapshot.id ?? docId,
-    ...rawData,
-  });
+  const document = parseFirestoreDocumentSnapshot(snapshot);
 
   if (
     document.sourceKind !== 'google_workspace' ||
@@ -131,7 +131,10 @@ export async function getWorkspaceFreshness(
   }
 
   if (!latestModifiedTime) {
-    throw new MissingLatestModifiedTimeError(document.externalSource.fileId);
+    throw new MissingLatestModifiedTimeError(
+      document.externalSource.fileId,
+      savedModifiedTime
+    );
   }
 
   return {

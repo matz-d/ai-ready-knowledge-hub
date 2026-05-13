@@ -34,8 +34,8 @@ import {
   type MaskerSummary,
   type OrchestrateResult,
 } from './uploadOrchestrator';
-import { replaceChunksForDoc } from './chunkRegenerator';
-import { parseFirestoreDocumentData } from './parseFirestoreDocumentData';
+import { clearChunksForDoc, replaceChunksForDoc } from './chunkRegenerator';
+import { parseFirestoreDocumentSnapshot } from './parseFirestoreDocumentData';
 import type {
   WorkspaceImportAdapter,
   WorkspaceSnapshot,
@@ -122,22 +122,23 @@ export async function findExistingDocByFileId(
     .collection(DOCUMENTS_COLLECTION)
     .where('externalSource.fileId', '==', fileId)
     .where('sourceKind', '==', 'google_workspace')
-    .limit(1)
+    .limit(2)
     .get();
 
   if (snapshot.empty) {
     return null;
   }
 
-  const docSnapshot = snapshot.docs[0];
-  const raw = docSnapshot.data();
-  if (raw == null) {
-    throw new Error(`Document ${docSnapshot.id} has no payload.`);
+  if (snapshot.docs.length > 1) {
+    console.warn(
+      `[importedSnapshotOrchestrator] duplicate google_workspace documents for fileId=${fileId}; using ${snapshot.docs[0].id}`
+    );
   }
 
+  const docSnapshot = snapshot.docs[0];
   let firestoreDocument: FirestoreDocument;
   try {
-    firestoreDocument = parseFirestoreDocumentData(raw);
+    firestoreDocument = parseFirestoreDocumentSnapshot(docSnapshot);
   } catch (err: unknown) {
     if (err instanceof ZodError) {
       throw new Error(
@@ -242,6 +243,7 @@ export async function orchestrateImportedSnapshotProcessing(
         contentSha256,
         storagePath,
         externalSource,
+        createdAt: existing?.firestoreDocument.createdAt,
       }),
       { merge: false }
     );
@@ -270,17 +272,25 @@ export async function orchestrateImportedSnapshotProcessing(
   }
 
   // [E][F][G][H] runCuratorAndMaskerLifecycle — Curator 分類〜終端更新、必要時は Masker
-  const lifecycle = await runCuratorAndMaskerLifecycle({
-    docRef,
-    docId,
-    displayName: input.displayName?.trim() || fileName,
-    content,
-    contentSha256,
-    sourceKind: 'google_workspace',
-    externalSource,
-    storagePath,
-    aiSafeStoragePath,
-  });
+  let lifecycle: OrchestrateResult;
+  try {
+    lifecycle = await runCuratorAndMaskerLifecycle({
+      docRef,
+      docId,
+      displayName: input.displayName?.trim() || fileName,
+      content,
+      contentSha256,
+      sourceKind: 'google_workspace',
+      externalSource,
+      storagePath,
+      aiSafeStoragePath,
+    });
+  } catch (error) {
+    if (mode === 'overwrite') {
+      await safeClearChunksForDoc(docId);
+    }
+    throw error;
+  }
   if (
     lifecycle.kind === 'ai_safe' ||
     lifecycle.kind === 'curated' ||
@@ -523,6 +533,17 @@ async function updateFailedStatusAfterChunkReplaceError(
     console.error(
       '[importedSnapshotOrchestrator] failed to update status after chunk replacement error',
       updateError
+    );
+  }
+}
+
+async function safeClearChunksForDoc(docId: string): Promise<void> {
+  try {
+    await clearChunksForDoc(docId);
+  } catch (error) {
+    console.error(
+      `[importedSnapshotOrchestrator] best-effort chunk clear failed for docId=${docId}`,
+      error
     );
   }
 }

@@ -40,20 +40,33 @@ export function DocumentDetailClient({ doc }: Props) {
             isStale: boolean;
             savedModifiedTime: string;
             latestModifiedTime: string;
+            code?: string;
           };
-          setFreshness(
-            data.isStale
-              ? {
-                  kind: 'stale',
-                  savedModifiedTime: data.savedModifiedTime,
-                  latestModifiedTime: data.latestModifiedTime,
-                }
-              : {
-                  kind: 'fresh',
-                  savedModifiedTime: data.savedModifiedTime,
-                  latestModifiedTime: data.latestModifiedTime,
-                }
-          );
+          if (
+            data.code === 'drive_not_found' ||
+            data.code === 'drive_forbidden'
+          ) {
+            setFreshness({
+              kind: 'drive_inaccessible',
+              code: data.code,
+            });
+          } else if (data.code === 'latest_modified_time_unknown') {
+            setFreshness({ kind: 'unknown' });
+          } else {
+            setFreshness(
+              data.isStale
+                ? {
+                    kind: 'stale',
+                    savedModifiedTime: data.savedModifiedTime,
+                    latestModifiedTime: data.latestModifiedTime,
+                  }
+                : {
+                    kind: 'fresh',
+                    savedModifiedTime: data.savedModifiedTime,
+                    latestModifiedTime: data.latestModifiedTime,
+                  }
+            );
+          }
         } else {
           const body = (await res.json()) as {
             code?: string;

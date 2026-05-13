@@ -9,7 +9,7 @@ import type {
   FirestoreMaskerBlock,
 } from './firestoreSchema';
 import type { InventoryDocument } from './inventory';
-import { parseFirestoreDocumentData } from './parseFirestoreDocumentData';
+import { parseFirestoreDocumentSnapshot } from './parseFirestoreDocumentData';
 
 const INVENTORY_TERMINAL_STATUSES = new Set<FirestoreDocumentStatus>([
   'curated',
@@ -134,10 +134,7 @@ export async function listInventoryDocumentsFromFirestore(
     .get();
 
   return snapshot.docs.flatMap((docSnapshot) => {
-    const parsed = parseFirestoreDocumentData({
-      ...docSnapshot.data(),
-      id: docSnapshot.id,
-    });
+    const parsed = parseFirestoreDocumentSnapshot(docSnapshot);
     const row = adaptFirestoreDocumentToInventory(
       docSnapshot.id,
       parsed

@@ -19,6 +19,27 @@ type Props = {
 
 const TOAST_DURATION_MS = 4000;
 
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = {
+  sheet_not_shared:
+    'Drive の共有設定を確認してください。サービスアカウントに閲覧権限が必要です。',
+  import_too_large:
+    '取り込み対象が大きすぎます。5MB 以下に分割してから再取り込みしてください。',
+  workspace_freshness_failed:
+    'Drive の更新確認に失敗しました。少し待ってから再試行してください。',
+  drive_forbidden:
+    'Drive ファイルにアクセスできません。共有設定を確認してください。',
+  drive_not_found:
+    'Drive ファイルが見つかりません。削除または移動されていないか確認してください。',
+  document_not_found: '対象の文書が見つかりません。',
+  google_sheets_import_failed:
+    'Google Sheets の取り込みに失敗しました。共有設定とファイル形式を確認してください。',
+};
+
+function messageForReimportError(code: string | undefined): string {
+  if (!code) return '再取り込みに失敗しました。';
+  return ERROR_MESSAGE_BY_CODE[code] ?? '再取り込みに失敗しました。';
+}
+
 export function ReimportButton({ urlOrFileId, className }: Props) {
   const [status, setStatus] = useState<ReimportStatus>('idle');
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -67,10 +88,10 @@ export function ReimportButton({ urlOrFileId, className }: Props) {
         }
         setStatus('done');
       } else {
-        let message = '再取り込みに失敗しました。';
+        let message = messageForReimportError(undefined);
         try {
           const body = (await res.json()) as { error?: string };
-          if (body.error) message = body.error;
+          message = messageForReimportError(body.error);
         } catch {
           // ignore parse error
         }

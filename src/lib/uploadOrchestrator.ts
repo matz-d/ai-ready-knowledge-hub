@@ -16,6 +16,7 @@ import {
   FIRESTORE_DOCUMENT_SCHEMA_VERSION,
   assertFirestoreInvariants,
   type FirestoreExternalSource,
+  type FirestoreDocument,
   hashContentSha256,
   maskerTerminalCuratorInvariantStub,
   terminalStatusForCuratorPolicy,
@@ -69,7 +70,7 @@ export type RestrictedTerminalFirestoreUpdateDraft = {
   maskerError: null;
 };
 
-/** Firestore 初回 `set` 用の合成ドキュメント（serverTimestamp を createdAt/updatedAt に共有）。 */
+/** Firestore 初回 `set` 用の合成ドキュメント（create 時は serverTimestamp を createdAt/updatedAt に共有）。 */
 export type FirestoreInitialDocumentDraft = {
   id: string;
   schemaVersion: typeof FIRESTORE_DOCUMENT_SCHEMA_VERSION;
@@ -82,7 +83,7 @@ export type FirestoreInitialDocumentDraft = {
   storagePath: string;
   aiSafeStoragePath: null;
   status: 'uploaded';
-  createdAt: FieldValueType;
+  createdAt: FieldValueType | FirestoreDocument['createdAt'];
   updatedAt: FieldValueType;
   documentType: null;
   businessDomain: null;
@@ -767,6 +768,7 @@ function buildBaseInitialDocumentBody(args: {
   storagePath: string;
   sourceKind: FirestoreInitialDocumentDraft['sourceKind'];
   externalSource: FirestoreInitialDocumentDraft['externalSource'];
+  createdAt?: FirestoreInitialDocumentDraft['createdAt'];
 }): FirestoreInitialDocumentDraft {
   const now: FieldValueType = FieldValue.serverTimestamp();
   assertFirestoreInvariants({
@@ -795,7 +797,7 @@ function buildBaseInitialDocumentBody(args: {
     storagePath: args.storagePath,
     aiSafeStoragePath: null,
     status: 'uploaded',
-    createdAt: now,
+    createdAt: args.createdAt ?? now,
     updatedAt: now,
     documentType: null,
     businessDomain: null,
@@ -841,6 +843,7 @@ export function buildImportedSnapshotInitialDocumentBody(args: {
   contentSha256: string;
   storagePath: string;
   externalSource: FirestoreExternalSource;
+  createdAt?: FirestoreInitialDocumentDraft['createdAt'];
 }): FirestoreInitialDocumentDraft {
   return buildBaseInitialDocumentBody({
     docId: args.docId,
@@ -851,6 +854,7 @@ export function buildImportedSnapshotInitialDocumentBody(args: {
     storagePath: args.storagePath,
     sourceKind: 'google_workspace',
     externalSource: args.externalSource,
+    createdAt: args.createdAt,
   });
 }
 

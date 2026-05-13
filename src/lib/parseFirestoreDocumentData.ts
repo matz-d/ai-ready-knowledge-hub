@@ -1,4 +1,5 @@
 import { Timestamp } from '@google-cloud/firestore';
+import type { DocumentSnapshot } from '@google-cloud/firestore';
 import { z } from 'zod';
 import {
   AiUsePolicyEnum,
@@ -122,4 +123,17 @@ const firestoreDocumentDataSchema = z
 
 export function parseFirestoreDocumentData(data: unknown): FirestoreDocument {
   return firestoreDocumentDataSchema.parse(data) as FirestoreDocument;
+}
+
+export function parseFirestoreDocumentSnapshot(
+  snapshot: DocumentSnapshot
+): FirestoreDocument {
+  const data = snapshot.data();
+  if (data == null) {
+    throw new Error(`Firestore document ${snapshot.id} has no payload.`);
+  }
+  return parseFirestoreDocumentData({
+    ...data,
+    id: snapshot.id,
+  });
 }

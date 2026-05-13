@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server';
 import {
   DriveFreshnessAccessError,
+  MissingLatestModifiedTimeError,
   MissingSavedModifiedTimeError,
   NonWorkspaceDocumentError,
   WorkspaceDocumentNotFoundError,
@@ -50,9 +51,17 @@ export async function GET(request: Request) {
           savedModifiedTime: err.savedModifiedTime,
           latestModifiedTime: '',
           code: err.code,
-        },
-        { status: 502 }
+        }
       );
+    }
+
+    if (err instanceof MissingLatestModifiedTimeError) {
+      return NextResponse.json({
+        isStale: false,
+        savedModifiedTime: err.savedModifiedTime,
+        latestModifiedTime: '',
+        code: 'latest_modified_time_unknown',
+      });
     }
 
     console.error('[workspace/freshness] freshness check failed', err);

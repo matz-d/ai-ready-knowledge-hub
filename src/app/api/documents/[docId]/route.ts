@@ -5,7 +5,7 @@
  */
 import { NextResponse } from 'next/server';
 import { getFirestoreClient } from '../../../../lib/firestore';
-import { parseFirestoreDocumentData } from '../../../../lib/parseFirestoreDocumentData';
+import { parseFirestoreDocumentSnapshot } from '../../../../lib/parseFirestoreDocumentData';
 import { adaptFirestoreDocumentToInventory } from '../../../../lib/inventoryFirestoreAdapter';
 
 export const runtime = 'nodejs';
@@ -28,10 +28,7 @@ export async function GET(
     return NextResponse.json({ error: 'document_not_found' }, { status: 404 });
   }
 
-  const parsed = parseFirestoreDocumentData({
-    id: snapshot.id,
-    ...snapshot.data(),
-  });
+  const parsed = parseFirestoreDocumentSnapshot(snapshot);
 
   const inventory = adaptFirestoreDocumentToInventory(snapshot.id, parsed);
 

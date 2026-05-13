@@ -16,7 +16,7 @@ import {
   assertKnowledgeChunkInvariants,
   type KnowledgeChunk,
 } from './knowledgeChunkSchema';
-import { parseFirestoreDocumentData } from './parseFirestoreDocumentData';
+import { parseFirestoreDocumentSnapshot } from './parseFirestoreDocumentData';
 import { readRawObject } from './storage';
 
 const TERMINAL_CHUNK_ELIGIBLE_STATUSES = new Set<FirestoreDocumentStatus>([
@@ -64,14 +64,9 @@ async function loadDocument(docId: string): Promise<{
     throw new Error(`Document not found: ${docId}`);
   }
 
-  const raw = snapshot.data();
-  if (raw == null) {
-    throw new Error(`Document ${docId} exists but has no data payload.`);
-  }
-
   let firestoreDocument;
   try {
-    firestoreDocument = parseFirestoreDocumentData(raw);
+    firestoreDocument = parseFirestoreDocumentSnapshot(snapshot);
   } catch (err: unknown) {
     if (err instanceof ZodError) {
       throw new Error(
@@ -316,4 +311,9 @@ export async function regenerateChunksForDoc(
 
 export async function replaceChunksForDoc(docId: string): Promise<void> {
   await regenerateChunksForDoc(docId);
+}
+
+export async function clearChunksForDoc(docId: string): Promise<void> {
+  const existingSnapshot = await chunksRef(docId).get();
+  await deleteRefsInBatches(existingSnapshot.docs.map((doc) => doc.ref));
 }

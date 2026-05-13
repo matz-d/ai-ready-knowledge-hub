@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import '../../styles.css';
 import { getFirestoreClient } from '../../../lib/firestore';
-import { parseFirestoreDocumentData } from '../../../lib/parseFirestoreDocumentData';
+import { parseFirestoreDocumentSnapshot } from '../../../lib/parseFirestoreDocumentData';
 import {
   adaptFirestoreDocumentToInventory,
 } from '../../../lib/inventoryFirestoreAdapter';
@@ -17,10 +17,7 @@ async function fetchDocument(docId: string): Promise<InventoryDocument | null> {
     const db = getFirestoreClient();
     const snapshot = await db.collection('documents').doc(docId).get();
     if (!snapshot.exists) return null;
-    const parsed = parseFirestoreDocumentData({
-      id: snapshot.id,
-      ...snapshot.data(),
-    });
+    const parsed = parseFirestoreDocumentSnapshot(snapshot);
     return adaptFirestoreDocumentToInventory(snapshot.id, parsed);
   } catch {
     return null;
