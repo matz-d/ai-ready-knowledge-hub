@@ -1,6 +1,7 @@
 {
   "name": "ai-ready-knowledge-hub",
   "private": true,
+  "packageManager": "pnpm@10.33.4",
   "type": "module",
   "scripts": {
     "dev": "next dev",
@@ -12,7 +13,7 @@
     "test:e2e:live": "vitest run --config vitest.e2e.live.config.ts",
     "test:watch": "vitest",
     "security:ioc:mini-shai-hulud": "tsx scripts/scanMiniShaiHuludIocs.ts",
-    "security:audit": "npm audit --omit=dev",
+    "security:audit": "pnpm audit --prod",
     "curator": "tsx scripts/runCurator.ts",
     "curator:all": "tsx scripts/runCuratorAll.ts",
     "masker:risk": "tsx scripts/runMaskerRisk.ts",
@@ -29,7 +30,7 @@
   "dependencies": {
     "@genkit-ai/google-genai": "^1.33.0",
     "@google-cloud/dlp": "^6.6.1",
-    "@google-cloud/firestore": "^8.6.0",
+    "@google-cloud/firestore": "^8.5.0",
     "@google-cloud/storage": "^7.18.0",
     "csv-parse": "^6.2.1",
     "exceljs": "^4.4.0",
@@ -53,10 +54,8 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
   },
-  "overrides": {
-    "postcss": "^8.5.10"
-  },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.0.0",
+    "pnpm": ">=10.16.0"
   }
 }

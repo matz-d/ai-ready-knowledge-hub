@@ -26,10 +26,10 @@
 - W1-4: Next.js 最小アプリを Cloud Run (`ai-ready-knowledge-hub-w1`, `asia-northeast1`) にデプロイ済み (組織ポリシーで `allUsers` 不可、認証付きで HTTP 200)
 - **W1 統合 (5/8 PM)**: `poc/w1/` を削除し、Curator/Masker の schema・prompt・Genkit flow を `src/agents/{curator,masker,_shared}/` の正本へ昇格。固定デモ用 fixture は通常 UI から外し、W1 の実 LLM snapshot は `docs/w1-artifacts/` に回顧用 artifact として退避。
 - **Task1 (W2 Walking Skeleton)**: `/upload` → `POST /api/documents` → Cloud Storage (`raw/{docId}/{safeOriginalFileName}`) → Firestore (`documents/{docId}`) → `curatorFlow` → 単票結果表示まで実装。実 GCP 接続で `HTTP 200`、GCS object、Firestore `status=curated` を確認済み。
-- **Task2 (Masker Pipeline MVP)**: `SimpleMasker` → 既存 `maskerRiskFlow` → `ai_safe_ready` / `restricted_promoted` の pipeline と CLI (`npm run masker:pipeline`) を実装。実 Vertex 接続で契約書サンプルは `restricted_promoted`、顧客対応メモは `ai_safe_ready` を確認済み。
-- **Task3 (Restricted 除外の受け皿)**: `applyMaskerUpgrade`、W1 snapshot adapter、Context Package input builder を実装。Restricted 文書は `Full AI-Ready Sources` から除外され、human review として出力される。`npm run context:demo` は **live default**（引数なしで live、`--w1` 指定で fixture）として動作する。バケット名は `KNOWLEDGE_HUB_BUCKET`、GCP 認証は ADC（例: `gcloud auth application-default login`）。`context:demo:live` は fallback せず、Firestore/GCS 条件不備時は non-zero で終了する。オフライン検証は `npm run context:demo:w1`。トップページの Inventory は Firestore 正本を優先し、読み取り失敗時のみ W1 snapshot にフォールバック（フォールバック時のみプレースホルダ本文を許可）。
+- **Task2 (Masker Pipeline MVP)**: `SimpleMasker` → 既存 `maskerRiskFlow` → `ai_safe_ready` / `restricted_promoted` の pipeline と CLI (`pnpm masker:pipeline`) を実装。実 Vertex 接続で契約書サンプルは `restricted_promoted`、顧客対応メモは `ai_safe_ready` を確認済み。
+- **Task3 (Restricted 除外の受け皿)**: `applyMaskerUpgrade`、W1 snapshot adapter、Context Package input builder を実装。Restricted 文書は `Full AI-Ready Sources` から除外され、human review として出力される。`pnpm context:demo` は **live default**（引数なしで live、`--w1` 指定で fixture）として動作する。バケット名は `KNOWLEDGE_HUB_BUCKET`、GCP 認証は ADC（例: `gcloud auth application-default login`）。`context:demo:live` は fallback せず、Firestore/GCS 条件不備時は non-zero で終了する。オフライン検証は `pnpm context:demo:w1`。トップページの Inventory は Firestore 正本を優先し、読み取り失敗時のみ W1 snapshot にフォールバック（フォールバック時のみプレースホルダ本文を許可）。
 - **Phase 1 follow-up (Cloud DLP)**: Masker provider 境界から `cloud-dlp` を選択可能。`MASKER_PROVIDER=cloud-dlp` または chunk 再生成 CLI の `--provider=cloud-dlp` で provider を固定できる。masked object metadata には provider / hash / schema version を残す。
-- **Phase 2 (KnowledgeChunk)**: CSV / `.xlsx` を spreadsheet chunk に変換し、`documents/{docId}/chunks/{chunkId}` subcollection に保存・読み戻しできる。`.xlsx` upload は raw OOXML を GCS に保存しつつ、Curator/Masker 入力には normalized markdown を渡す。chunk 再生成は `npm run chunks:regenerate -- <docId>` の手動 CLI のみで、write → stale delete の全置換。`context:demo:live` は chunk がある document では chunk `text` / `maskedText` を優先し、chunk がない document は従来の GCS body fallback を使う。
+- **Phase 2 (KnowledgeChunk)**: CSV / `.xlsx` を spreadsheet chunk に変換し、`documents/{docId}/chunks/{chunkId}` subcollection に保存・読み戻しできる。`.xlsx` upload は raw OOXML を GCS に保存しつつ、Curator/Masker 入力には normalized markdown を渡す。chunk 再生成は `pnpm chunks:regenerate -- <docId>` の手動 CLI のみで、write → stale delete の全置換。`context:demo:live` は chunk がある document では chunk `text` / `maskedText` を優先し、chunk がない document は従来の GCS body fallback を使う。
 - 詳細振り返り: [docs/week1-retrospective.md](docs/week1-retrospective.md)
 
 ### コードの位置 (Phase 2 完了時点)
@@ -69,28 +69,28 @@ sample-data/
   masked/                             # Masker A8 評価のマスク済み入力 2 件
 ```
 
-### npm scripts
+### pnpm scripts
 
 | コマンド | 用途 |
 |---|---|
-| `npm run dev` / `build` / `start` | Next.js |
-| `npm run typecheck` | tsc --noEmit (src + scripts 全体) |
-| `npm run test` / `test:watch` | Vitest unit（`src/**/*.test.ts`、E2E は除外） |
-| `npm run test:e2e:smoke` | GCP/Vertex なしの安定 E2E。fake Firestore/GCS + stub Curator/Masker で upload → Inventory → Context Package を検証 |
-| `npm run test:e2e:live` | 実 GCP/Firestore/GCS/Vertex 用の live E2E 枠。デフォルト CI には含めない。env 不足時は skip |
-| `npm run curator [path]` | Curator flow を 1 ファイルに対し実行 |
-| `npm run curator:all [dir]` | sample-data 全件で smoke 実行 |
-| `npm run masker:risk [path]` | A8 residualRisk 評価 |
-| `npm run masker:pipeline [path]` | 原本 → SimpleMasker → A8 residualRisk → `ai_safe_ready` / `restricted_promoted` |
-| `npm run masker:dlp:smoke [path]` | Cloud DLP provider 単体の疎通確認 |
-| `npm run backfill:source-kind -- --dry-run` | `schemaVersion=1` document の対象件数と先頭 5 件 docId を表示（Firestore へは書き込まない） |
-| `npm run backfill:source-kind -- --confirm` | `schemaVersion=1` document を 500 件単位で `{ schemaVersion: 2, sourceKind: 'upload', externalSource: null }` に更新 |
-| `npm run chunks:regenerate -- <docId>` | CSV / `.xlsx` の GCS raw object から `documents/{docId}/chunks` を全置換。`--provider=simple-rule\|cloud-dlp` で chunk masking provider を固定可能 |
-| `npm run inventory:snapshot` | 実 LLM 出力で `docs/w1-artifacts/inventory.snapshot.json` を再生成 |
-| `npm run context:demo` | Context Package demo の統一エントリ。デフォルトは live、`--w1` 指定で fixture (`npm run context:demo -- --w1`) |
-| `npm run context:demo:live` | Firestore documents + chunks/GCS bodies から Context Package Markdown を出力。chunk がある document は chunk 優先、ない document は GCS body fallback（Firestore/GCS 条件不備時は終了コード 1） |
-| `npm run context:demo:w1` | W1 snapshot fixture から Context Package Markdown を出力する offline demo（Firestore/GCS 非接続） |
-| `npm run curator:ui` | Genkit dev UI で flow を観察 |
+| `pnpm dev` / `build` / `start` | Next.js |
+| `pnpm typecheck` | tsc --noEmit (src + scripts 全体) |
+| `pnpm test` / `test:watch` | Vitest unit（`src/**/*.test.ts`、E2E は除外） |
+| `pnpm test:e2e:smoke` | GCP/Vertex なしの安定 E2E。fake Firestore/GCS + stub Curator/Masker で upload → Inventory → Context Package を検証 |
+| `pnpm test:e2e:live` | 実 GCP/Firestore/GCS/Vertex 用の live E2E 枠。デフォルト CI には含めない。env 不足時は skip |
+| `pnpm curator [path]` | Curator flow を 1 ファイルに対し実行 |
+| `pnpm curator:all [dir]` | sample-data 全件で smoke 実行 |
+| `pnpm masker:risk [path]` | A8 residualRisk 評価 |
+| `pnpm masker:pipeline [path]` | 原本 → SimpleMasker → A8 residualRisk → `ai_safe_ready` / `restricted_promoted` |
+| `pnpm masker:dlp:smoke [path]` | Cloud DLP provider 単体の疎通確認 |
+| `pnpm backfill:source-kind -- --dry-run` | `schemaVersion=1` document の対象件数と先頭 5 件 docId を表示（Firestore へは書き込まない） |
+| `pnpm backfill:source-kind -- --confirm` | `schemaVersion=1` document を 500 件単位で `{ schemaVersion: 2, sourceKind: 'upload', externalSource: null }` に更新 |
+| `pnpm chunks:regenerate -- <docId>` | CSV / `.xlsx` の GCS raw object から `documents/{docId}/chunks` を全置換。`--provider=simple-rule\|cloud-dlp` で chunk masking provider を固定可能 |
+| `pnpm inventory:snapshot` | 実 LLM 出力で `docs/w1-artifacts/inventory.snapshot.json` を再生成 |
+| `pnpm context:demo` | Context Package demo の統一エントリ。デフォルトは live、`--w1` 指定で fixture (`pnpm context:demo -- --w1`) |
+| `pnpm context:demo:live` | Firestore documents + chunks/GCS bodies から Context Package Markdown を出力。chunk がある document は chunk 優先、ない document は GCS body fallback（Firestore/GCS 条件不備時は終了コード 1） |
+| `pnpm context:demo:w1` | W1 snapshot fixture から Context Package Markdown を出力する offline demo（Firestore/GCS 非接続） |
+| `pnpm curator:ui` | Genkit dev UI で flow を観察 |
 
 ### schemaVersion 1 → 2 backfill 実行手順
 
@@ -98,12 +98,12 @@ sample-data/
 
 1. dry-run（書き込みなし）
 
-   `npm run backfill:source-kind -- --dry-run`
+   `pnpm backfill:source-kind -- --dry-run`
 
 2. dry-run の `targetCount` / `previewDocIds` を確認
 3. confirm 実行（500 件単位で更新）
 
-   `npm run backfill:source-kind -- --confirm`
+   `pnpm backfill:source-kind -- --confirm`
 
 4. 完了ログの `failedDocIds` を確認（失敗があっても処理は継続）
 

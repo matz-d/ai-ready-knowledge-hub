@@ -8,8 +8,8 @@ const PREVIEW_DOC_COUNT = 5;
 
 const USAGE = [
   'Usage:',
-  '  npm run backfill:source-kind -- --dry-run',
-  '  npm run backfill:source-kind -- --confirm',
+  '  pnpm backfill:source-kind -- --dry-run',
+  '  pnpm backfill:source-kind -- --confirm',
 ].join('\n');
 
 type Mode = 'dry-run' | 'confirm';

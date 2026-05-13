@@ -4,9 +4,9 @@ import { resolveMaskingProvider } from '../src/agents/masker/provider';
 import { regenerateChunksForDoc } from '../src/lib/chunkRegenerator';
 
 const USAGE = [
-  'Usage: npm run chunks:regenerate -- <docId>',
-  '       npm run chunks:regenerate -- --dry-run <docId>',
-  '       npm run chunks:regenerate -- --provider=<simple-rule|cloud-dlp> <docId>',
+  'Usage: pnpm chunks:regenerate -- <docId>',
+  '       pnpm chunks:regenerate -- --dry-run <docId>',
+  '       pnpm chunks:regenerate -- --provider=<simple-rule|cloud-dlp> <docId>',
 ].join('\n');
 
 type CliArgs = {

@@ -7,7 +7,7 @@ async function main(): Promise<void> {
   const fileArg = process.argv[2];
   if (!fileArg) {
     console.error(
-      'Usage: npm run masker:pipeline -- <path-to-text-file>'
+      'Usage: pnpm masker:pipeline -- <path-to-text-file>'
     );
     process.exit(1);
   }

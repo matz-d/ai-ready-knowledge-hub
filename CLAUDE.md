@@ -17,3 +17,11 @@ SMEの散らばった文書を分類・マスキングし、目的に応じてAI
 ## AIエージェント向け（正本ポリシー）
 
 **製品としての定義・目的・スコープは、この `CLAUDE.md` だけを正とする。** `.claude/skills/` の各スキルは GCP / Gemini などの手順補助であり、プロダクトの説明を別途複製しない。読み順と優先ルールは `.claude/skills/project-context/SKILL.md` を参照。
+
+## Package Manager Policy
+
+- このリポジトリの package manager は **pnpm**。`npm install` / `npm run ...` / `package-lock.json` は使わない。
+- pnpm は `package.json` の `packageManager` に合わせる。`pnpm --version` が `engines.pnpm` を満たさない場合は、作業前に pnpm を更新する。
+- 依存関係の install は `pnpm install --frozen-lockfile` を基本とし、lockfile は `pnpm-lock.yaml` を正とする。
+- `pnpm-workspace.yaml` の `minimumReleaseAge: 4320` はサプライチェーン対策の正本設定。公開から3日以内の package version を導入してはいけない。
+- install / build / test の確認は `pnpm install --frozen-lockfile`、`pnpm build`、`pnpm test` で行う。

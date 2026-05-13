@@ -1,0 +1,7 @@
+packages:
+  - .
+
+minimumReleaseAge: 4320
+
+overrides:
+  postcss: ^8.5.10

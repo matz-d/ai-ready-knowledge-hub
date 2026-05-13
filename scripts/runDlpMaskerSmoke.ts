@@ -6,7 +6,7 @@ import { applyCloudDlpMask } from '../src/agents/masker/cloudDlpMasker';
 async function main(): Promise<void> {
   const fileArg = process.argv[2];
   if (!fileArg) {
-    console.error('Usage: npm run masker:dlp:smoke -- <path-to-text-file>');
+    console.error('Usage: pnpm masker:dlp:smoke -- <path-to-text-file>');
     process.exit(1);
   }
 

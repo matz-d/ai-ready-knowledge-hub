@@ -94,6 +94,13 @@ function packageNameFromLockPath(lockPath: string, entryName?: string): string {
   return lockPath.slice(nodeModulesIndex + 'node_modules/'.length);
 }
 
+function isAffectedPackage(packageName: string): boolean {
+  return (
+    affectedScopes.some((scope) => packageName.startsWith(scope)) ||
+    affectedUnscopedPackages.has(packageName)
+  );
+}
+
 function findPackageLockHits(): string[] {
   const lockPath = path.join(rootDir, 'package-lock.json');
   if (!existsSync(lockPath)) {
@@ -105,15 +112,38 @@ function findPackageLockHits(): string[] {
 
   for (const [lockEntryPath, entry] of Object.entries(lock.packages ?? {})) {
     const packageName = packageNameFromLockPath(lockEntryPath, entry.name);
-    if (
-      affectedScopes.some((scope) => packageName.startsWith(scope)) ||
-      affectedUnscopedPackages.has(packageName)
-    ) {
+    if (isAffectedPackage(packageName)) {
       hits.push(`${packageName}@${entry.version ?? 'unknown'} (${lockEntryPath})`);
     }
   }
 
   return hits;
+}
+
+function findPnpmLockHits(): string[] {
+  const lockPath = path.join(rootDir, 'pnpm-lock.yaml');
+  if (!existsSync(lockPath)) {
+    return [];
+  }
+
+  const content = readFileSync(lockPath, 'utf8');
+  const hits = new Set<string>();
+
+  for (const scope of affectedScopes) {
+    if (content.includes(scope)) {
+      hits.add(`${scope}* (pnpm-lock.yaml)`);
+    }
+  }
+
+  for (const packageName of affectedUnscopedPackages) {
+    const escapedPackageName = packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const packagePattern = new RegExp(`(^|[/\\s'"])${escapedPackageName}@`, 'm');
+    if (packagePattern.test(content)) {
+      hits.add(`${packageName} (pnpm-lock.yaml)`);
+    }
+  }
+
+  return [...hits];
 }
 
 function* walkFiles(dir: string): Generator<string> {
@@ -188,7 +218,7 @@ function findUserPersistenceHits(): string[] {
   return hits;
 }
 
-const packageHits = findPackageLockHits();
+const packageHits = [...findPackageLockHits(), ...findPnpmLockHits()];
 const payloadHits = findPayloadFiles();
 const markerHits = findTextMarkers();
 const persistenceHits = findUserPersistenceHits();
