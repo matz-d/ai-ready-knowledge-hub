@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { buildContextPackageExportInput } from '../contextPackageInput';
 import {
   attachContextPackageBodies,
@@ -72,21 +72,14 @@ function knowledgeChunk(overrides: Partial<KnowledgeChunk> = {}): KnowledgeChunk
   };
 }
 
-function createWorkbookBuffer(): Buffer {
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.aoa_to_sheet([
-      ['項目', '値'],
-      ['fallback', 'xlsx markdown'],
-    ]),
-    'Fallback'
-  );
+async function createWorkbookBuffer(): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.addWorksheet('Fallback').addRows([
+    ['項目', '値'],
+    ['fallback', 'xlsx markdown'],
+  ]);
 
-  return XLSX.write(workbook, {
-    type: 'buffer',
-    bookType: 'xlsx',
-  }) as Buffer;
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
 beforeEach(() => {

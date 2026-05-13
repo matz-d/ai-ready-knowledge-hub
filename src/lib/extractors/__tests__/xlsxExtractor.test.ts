@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { extractXlsx } from '../xlsxExtractor';
 
 const baseInput = {
@@ -9,50 +9,35 @@ const baseInput = {
   documentAiUsePolicy: 'direct' as const,
 };
 
-function createWorkbookBuffer(sheetCount = 2): Buffer {
-  const workbook = XLSX.utils.book_new();
+async function createWorkbookBuffer(sheetCount = 2): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
 
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.aoa_to_sheet([
-      ['顧客名', '数量'],
-      ['Acme', 10],
-    ]),
-    '顧客一覧'
-  );
+  workbook.addWorksheet('顧客一覧').addRows([
+    ['顧客名', '数量'],
+    ['Acme', 10],
+  ]);
 
   if (sheetCount >= 2) {
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ['部署', '人数'],
-        ['営業', 3],
-      ]),
-      '部署集計'
-    );
+    workbook.addWorksheet('部署集計').addRows([
+      ['部署', '人数'],
+      ['営業', 3],
+    ]);
   }
 
   for (let i = 2; i < sheetCount; i += 1) {
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ['列1', '列2'],
-        [`row-${i}`, `${i}`],
-      ]),
-      `Sheet${i + 1}`
-    );
+    workbook.addWorksheet(`Sheet${i + 1}`).addRows([
+      ['列1', '列2'],
+      [`row-${i}`, `${i}`],
+    ]);
   }
 
-  return XLSX.write(workbook, {
-    type: 'buffer',
-    bookType: 'xlsx',
-  }) as Buffer;
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
 describe('extractXlsx', () => {
-  it('extracts chunks by sheet used range and sets spreadsheet locator', () => {
-    const content = createWorkbookBuffer();
-    const { chunks, normalizedMarkdown } = extractXlsx({
+  it('extracts chunks by sheet used range and sets spreadsheet locator', async () => {
+    const content = await createWorkbookBuffer();
+    const { chunks, normalizedMarkdown } = await extractXlsx({
       ...baseInput,
       content: new Uint8Array(content),
     });
@@ -66,10 +51,10 @@ describe('extractXlsx', () => {
     expect(normalizedMarkdown).toContain('## 部署集計');
   });
 
-  it('applies column header sensitivity rules for each chunk independently', () => {
-    const { chunks } = extractXlsx({
+  it('applies column header sensitivity rules for each chunk independently', async () => {
+    const { chunks } = await extractXlsx({
       ...baseInput,
-      content: createWorkbookBuffer(),
+      content: await createWorkbookBuffer(),
     });
 
     const customerChunk = chunks.find(
@@ -99,10 +84,10 @@ describe('extractXlsx', () => {
     expect(departmentChunk.sensitivitySource).toBe('inherited');
   });
 
-  it('keeps chunk count within practical limits for typical multi-sheet inputs', () => {
-    const { chunks } = extractXlsx({
+  it('keeps chunk count within practical limits for typical multi-sheet inputs', async () => {
+    const { chunks } = await extractXlsx({
       ...baseInput,
-      content: createWorkbookBuffer(12),
+      content: await createWorkbookBuffer(12),
     });
 
     expect(chunks.length).toBeLessThanOrEqual(50);

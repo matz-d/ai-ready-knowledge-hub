@@ -11,7 +11,7 @@ export type WorkspaceImportAdapter = {
   exportMimeType: ExportMimeType;
   fileExtension: '.xlsx' | '.md';
   contentType: string;
-  toNormalizedContent: (bytes: Buffer) => string;
+  toNormalizedContent: (bytes: Buffer) => string | Promise<string>;
 };
 
 export type WorkspaceSnapshotMetadata = {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 const getGoogleDriveClientMock = vi.hoisted(() => vi.fn());
 
@@ -248,18 +248,14 @@ describe('fetchSheetsSnapshot', () => {
 });
 
 describe('xlsxBufferToNormalizedContent', () => {
-  it('delegates to xlsxToNormalizedMarkdown', () => {
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ['A', 'B'],
-        [1, 2],
-      ]),
-      'Sheet1'
-    );
-    const buf = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
-    const md = xlsxBufferToNormalizedContent(buf);
+  it('delegates to xlsxToNormalizedMarkdown', async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet('Sheet1').addRows([
+      ['A', 'B'],
+      [1, 2],
+    ]);
+    const buf = Buffer.from(await workbook.xlsx.writeBuffer());
+    const md = await xlsxBufferToNormalizedContent(buf);
     expect(md).toContain('## Sheet1');
     expect(md).toContain('| A | B |');
   });

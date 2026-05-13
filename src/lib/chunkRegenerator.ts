@@ -32,7 +32,7 @@ const FIRESTORE_BATCH_LIMIT = 500;
 type ExtractorResult = {
   extractorName: 'csv' | 'xlsx';
   extractorInput: string;
-  chunks: ReturnType<typeof extractCsv>['chunks'] | ReturnType<typeof extractXlsx>['chunks'];
+  chunks: ReturnType<typeof extractCsv>['chunks'];
 };
 
 type StoredChunkSnapshot = {
@@ -102,7 +102,7 @@ async function loadDocument(docId: string): Promise<{
   return { inventoryDocument, status: firestoreDocument.status };
 }
 
-function extractChunks(args: {
+async function extractChunks(args: {
   docId: string;
   fileName: string;
   content: Buffer;
@@ -112,7 +112,7 @@ function extractChunks(args: {
   documentAiUsePolicy: NonNullable<
     ReturnType<typeof adaptFirestoreDocumentToInventory>
   >['aiUsePolicy'];
-}): ExtractorResult {
+}): Promise<ExtractorResult> {
   const extension = path.extname(args.fileName).toLowerCase();
 
   if (extension === '.csv') {
@@ -140,7 +140,7 @@ function extractChunks(args: {
   }
 
   if (extension === '.xlsx') {
-    const extracted = extractXlsx({
+    const extracted = await extractXlsx({
       docId: args.docId,
       fileName: args.fileName,
       content: args.content,
@@ -282,7 +282,7 @@ export async function regenerateChunksForDoc(
   }
 
   const rawContent = await readRawObject(storagePath);
-  const extracted = extractChunks({
+  const extracted = await extractChunks({
     docId,
     fileName: inventoryDocument.fileName,
     content: rawContent,

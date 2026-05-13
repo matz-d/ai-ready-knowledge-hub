@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 const {
   orchestrateUploadProcessingMock,
@@ -49,21 +49,14 @@ vi.mock('../../../../lib/uploadOrchestrator', () => ({
 
 import { POST } from '../route';
 
-function createWorkbookBuffer(): Buffer {
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.aoa_to_sheet([
-      ['顧客名', '数量'],
-      ['Acme', 10],
-    ]),
-    '顧客一覧'
-  );
+async function createWorkbookBuffer(): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.addWorksheet('顧客一覧').addRows([
+    ['顧客名', '数量'],
+    ['Acme', 10],
+  ]);
 
-  return XLSX.write(workbook, {
-    type: 'buffer',
-    bookType: 'xlsx',
-  }) as Buffer;
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
 function toBlobPart(buffer: Buffer): BlobPart {
@@ -166,7 +159,7 @@ describe('POST /api/documents', () => {
   });
 
   it('accepts .xlsx upload and passes raw bytes plus normalized markdown content', async () => {
-    const workbookBuffer = createWorkbookBuffer();
+    const workbookBuffer = await createWorkbookBuffer();
     const file = new File([toBlobPart(workbookBuffer)], 'sales.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
@@ -189,7 +182,7 @@ describe('POST /api/documents', () => {
   });
 
   it('fills .xlsx contentType from extension when MIME type is empty', async () => {
-    const payload = createWorkbookBuffer();
+    const payload = await createWorkbookBuffer();
     const file = {
       name: 'sales.xlsx',
       type: '',
@@ -219,7 +212,7 @@ describe('POST /api/documents', () => {
   });
 
   it('allows official .xlsx MIME type', async () => {
-    const file = new File([toBlobPart(createWorkbookBuffer())], 'sales.xlsx', {
+    const file = new File([toBlobPart(await createWorkbookBuffer())], 'sales.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
 

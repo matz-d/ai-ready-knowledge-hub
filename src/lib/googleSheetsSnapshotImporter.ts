@@ -237,6 +237,8 @@ export async function fetchSheetsSnapshot(
   };
 }
 
-export function xlsxBufferToNormalizedContent(xlsxBuffer: Buffer): string {
+export async function xlsxBufferToNormalizedContent(
+  xlsxBuffer: Buffer
+): Promise<string> {
   return xlsxToNormalizedMarkdown(xlsxBuffer);
 }

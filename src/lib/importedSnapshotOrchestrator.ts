@@ -177,7 +177,7 @@ export async function orchestrateImportedSnapshotProcessing(
   }
 
   // [B-pre] toNormalizedContent — Curator / Masker 入力向け正規化
-  const content = deps.adapter.toNormalizedContent(exportBuffer);
+  const content = await deps.adapter.toNormalizedContent(exportBuffer);
 
   const docId = existing?.docRef.id ?? randomUUID();
   const baseFileName = deps.normalizeFileBaseName(metadata.name);

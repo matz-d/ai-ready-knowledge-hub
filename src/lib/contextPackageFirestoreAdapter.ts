@@ -68,7 +68,7 @@ export async function attachContextPackageBodies(
       try {
         const body =
           doc.status === 'curated' && getAllowedExtension(doc.fileName) === '.xlsx'
-            ? xlsxToNormalizedMarkdown(await readRawBody(objectPath))
+            ? await xlsxToNormalizedMarkdown(await readRawBody(objectPath))
             : await readBody(objectPath);
         return {
           ...doc,

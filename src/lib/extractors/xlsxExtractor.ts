@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import type { AiUsePolicy, Sensitivity } from '../../agents/curator/schema';
 import {
   DEFAULT_COLUMN_SENSITIVITY_RULES,
@@ -69,44 +69,130 @@ function toBuffer(content: Buffer | Uint8Array): Buffer {
   return Buffer.from(content.buffer, content.byteOffset, content.byteLength);
 }
 
-function normalizedUsedRangeA1(worksheet: XLSX.WorkSheet): string {
-  const ref = worksheet['!ref'];
-  if (typeof ref !== 'string' || ref.trim() === '') {
+function encodeColumnName(columnNumber: number): string {
+  let dividend = columnNumber;
+  let columnName = '';
+
+  while (dividend > 0) {
+    const modulo = (dividend - 1) % 26;
+    columnName = String.fromCharCode(65 + modulo) + columnName;
+    dividend = Math.floor((dividend - modulo) / 26);
+  }
+
+  return columnName;
+}
+
+function cellAddress(rowNumber: number, columnNumber: number): string {
+  return `${encodeColumnName(columnNumber)}${rowNumber}`;
+}
+
+function normalizedUsedRangeA1(worksheet: ExcelJS.Worksheet): string {
+  if (worksheet.actualRowCount === 0 || worksheet.actualColumnCount === 0) {
     return 'A1:A1';
   }
-  const decoded = XLSX.utils.decode_range(ref);
-  return XLSX.utils.encode_range(decoded);
+
+  let minRow = Number.POSITIVE_INFINITY;
+  let minColumn = Number.POSITIVE_INFINITY;
+  let maxRow = 0;
+  let maxColumn = 0;
+
+  worksheet.eachRow((row, rowNumber) => {
+    row.eachCell((cell, columnNumber) => {
+      if (cell.type === ExcelJS.ValueType.Null) {
+        return;
+      }
+      minRow = Math.min(minRow, rowNumber);
+      minColumn = Math.min(minColumn, columnNumber);
+      maxRow = Math.max(maxRow, rowNumber);
+      maxColumn = Math.max(maxColumn, columnNumber);
+    });
+  });
+
+  if (!Number.isFinite(minRow) || !Number.isFinite(minColumn)) {
+    return 'A1:A1';
+  }
+
+  return `${cellAddress(minRow, minColumn)}:${cellAddress(maxRow, maxColumn)}`;
+}
+
+function decodedRangeFromA1(range: string): {
+  startRow: number;
+  startColumn: number;
+  endRow: number;
+  endColumn: number;
+} {
+  const match = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+  if (!match) {
+    throw new Error(`Invalid worksheet range: ${range}`);
+  }
+
+  const decodeColumn = (columnName: string): number =>
+    [...columnName].reduce(
+      (sum, char) => sum * 26 + char.charCodeAt(0) - 64,
+      0
+    );
+
+  return {
+    startColumn: decodeColumn(match[1]),
+    startRow: Number(match[2]),
+    endColumn: decodeColumn(match[3]),
+    endRow: Number(match[4]),
+  };
+}
+
+function formatDateCell(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function excelCellValueToString(cell: ExcelJS.Cell): string {
+  if (cell.type === ExcelJS.ValueType.Null || cell.type === ExcelJS.ValueType.Merge) {
+    return '';
+  }
+
+  const value = cell.value;
+  if (value == null) {
+    return '';
+  }
+  if (value instanceof Date) {
+    return formatDateCell(value);
+  }
+  if (typeof value === 'object') {
+    if ('result' in value) {
+      const result = value.result;
+      if (result instanceof Date) {
+        return formatDateCell(result);
+      }
+      return result == null ? '' : String(result);
+    }
+    if ('text' in value && typeof value.text === 'string') {
+      return value.text;
+    }
+    if ('richText' in value && Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text).join('');
+    }
+    if ('error' in value && typeof value.error === 'string') {
+      return value.error;
+    }
+  }
+
+  return String(value);
 }
 
 function rowsFromUsedRange(
-  worksheet: XLSX.WorkSheet,
+  worksheet: ExcelJS.Worksheet,
   usedRangeA1: string
 ): string[][] {
-  const ref = worksheet['!ref'];
-  if (typeof ref !== 'string' || ref.trim() === '') {
+  if (worksheet.actualRowCount === 0 || worksheet.actualColumnCount === 0) {
     return [];
   }
 
-  const range = XLSX.utils.decode_range(usedRangeA1);
+  const range = decodedRangeFromA1(usedRangeA1);
   const rows: string[][] = [];
 
-  for (let r = range.s.r; r <= range.e.r; r += 1) {
+  for (let r = range.startRow; r <= range.endRow; r += 1) {
     const row: string[] = [];
-    for (let c = range.s.c; c <= range.e.c; c += 1) {
-      const address = XLSX.utils.encode_cell({ r, c });
-      const cell = worksheet[address] as XLSX.CellObject | undefined;
-      if (cell === undefined) {
-        row.push('');
-        continue;
-      }
-
-      const formatted = XLSX.utils.format_cell(cell);
-      if (formatted !== undefined && formatted !== null) {
-        row.push(String(formatted));
-        continue;
-      }
-
-      row.push(cell.v == null ? '' : String(cell.v));
+    for (let c = range.startColumn; c <= range.endColumn; c += 1) {
+      row.push(excelCellValueToString(worksheet.getCell(r, c)));
     }
     rows.push(row);
   }
@@ -125,28 +211,27 @@ function stableChunkId(docId: string, sheetName: string, range: string): string 
   return `${docId}:xlsx:${sheetName}:${range}`;
 }
 
-function readWorkbookFromXlsxContent(
+async function readWorkbookFromXlsxContent(
   content: Buffer | Uint8Array
-): XLSX.WorkBook {
+): Promise<ExcelJS.Workbook> {
   const binary = toBuffer(content);
   if (binary[0] !== 0x50 || binary[1] !== 0x4b) {
     throw new Error('XLSX content must be an OOXML zip package.');
   }
-  return XLSX.read(binary, {
-    type: 'buffer',
-    cellDates: false,
-    raw: false,
-  });
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(
+    binary as unknown as Parameters<typeof workbook.xlsx.load>[0]
+  );
+  return workbook;
 }
 
-export function xlsxToMarkdownSheets(
+export async function xlsxToMarkdownSheets(
   content: Buffer | Uint8Array
-): XlsxMarkdownSheet[] {
-  const workbook = readWorkbookFromXlsxContent(content);
+): Promise<XlsxMarkdownSheet[]> {
+  const workbook = await readWorkbookFromXlsxContent(content);
 
-  return workbook.SheetNames.map((sheetName, index) => {
-    const worksheet = workbook.Sheets[sheetName];
-    const effectiveSheetName = sheetName.trim() || `Sheet${index + 1}`;
+  return workbook.worksheets.map((worksheet, index) => {
+    const effectiveSheetName = worksheet.name.trim() || `Sheet${index + 1}`;
     const range = normalizedUsedRangeA1(worksheet);
     const rows = rowsFromUsedRange(worksheet, range);
     const markdownTable = rowsToMarkdownTable(rows);
@@ -160,22 +245,24 @@ export function xlsxToMarkdownSheets(
   });
 }
 
-export function xlsxToNormalizedMarkdown(content: Buffer | Uint8Array): string {
-  return xlsxToMarkdownSheets(content)
+export async function xlsxToNormalizedMarkdown(
+  content: Buffer | Uint8Array
+): Promise<string> {
+  return (await xlsxToMarkdownSheets(content))
     .map((sheet) => sheet.text)
     .join('\n\n');
 }
 
-export function extractXlsx(input: {
+export async function extractXlsx(input: {
   docId: string;
   fileName: string;
   content: Buffer | Uint8Array;
   documentSensitivity: Sensitivity;
   documentAiUsePolicy: AiUsePolicy;
-}): XlsxExtractionResult {
+}): Promise<XlsxExtractionResult> {
   const now = new Date().toISOString();
   const binary = toBuffer(input.content);
-  const sheets = xlsxToMarkdownSheets(binary);
+  const sheets = await xlsxToMarkdownSheets(binary);
   const extractorInput = binary.toString('base64');
   const warnings =
     sheets.length > CHUNK_WARNING_THRESHOLD

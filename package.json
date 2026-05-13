@@ -11,6 +11,8 @@
     "test:e2e:smoke": "vitest run --config vitest.e2e.smoke.config.ts",
     "test:e2e:live": "vitest run --config vitest.e2e.live.config.ts",
     "test:watch": "vitest",
+    "security:ioc:mini-shai-hulud": "tsx scripts/scanMiniShaiHuludIocs.ts",
+    "security:audit": "npm audit --omit=dev",
     "curator": "tsx scripts/runCurator.ts",
     "curator:all": "tsx scripts/runCuratorAll.ts",
     "masker:risk": "tsx scripts/runMaskerRisk.ts",
@@ -27,15 +29,15 @@
   "dependencies": {
     "@genkit-ai/google-genai": "^1.33.0",
     "@google-cloud/dlp": "^6.6.1",
-    "@google-cloud/firestore": "^7.11.6",
+    "@google-cloud/firestore": "^8.6.0",
     "@google-cloud/storage": "^7.18.0",
     "csv-parse": "^6.2.1",
+    "exceljs": "^4.4.0",
     "genkit": "^1.33.0",
     "googleapis": "^171.4.0",
     "next": "^16.0.10",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "xlsx": "^0.18.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {

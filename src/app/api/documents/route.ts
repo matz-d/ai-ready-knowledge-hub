@@ -119,7 +119,7 @@ export async function POST(request: Request) {
   let content: string;
   if (extCheck === '.xlsx') {
     try {
-      content = xlsxToNormalizedMarkdown(buffer);
+      content = await xlsxToNormalizedMarkdown(buffer);
     } catch {
       return NextResponse.json(
         { error: '.xlsx ファイルを解析できませんでした。' },
