@@ -13,15 +13,27 @@ Checks performed:
 - Searched `package.json` and `package-lock.json` for affected package namespaces and named packages.
 - Searched the installed dependency tree with `npm ls` for high-signal affected packages.
 - Searched the repository and `node_modules` for payload markers:
+  - `execution.js`
+  - `setup.mjs`
   - `router_init.js`
   - `router_runtime.js`
   - `tanstack_runner.js`
   - `@tanstack/setup`
   - `github:tanstack/router#79ac49eedf774dd4b0cfa308722bc463cfe5885c`
+- Searched repository-level injection points:
+  - `.claude/setup.mjs`
+  - `.claude/router_runtime.js`
+  - `.vscode/setup.mjs`
+  - `.vscode/tasks.json`
+  - `.github/workflows/codeql_analysis.yml`
+- Searched user-level persistence files:
+  - `~/Library/LaunchAgents/com.user.gh-token-monitor.plist`
+  - `~/.config/systemd/user/gh-token-monitor.service`
 
 ## Repository action taken
 
 - Added `npm run security:ioc:mini-shai-hulud` for repeatable IOC scanning.
+- Extended the IOC scan for the second-wave persistence and exfiltration markers documented by GMO Flatt Security.
 - Removed vulnerable `xlsx` usage from production code and tests.
 - Replaced XLSX parsing/generation with `exceljs`.
 - Updated direct Firestore dependency to `@google-cloud/firestore` 8.x.
@@ -36,6 +48,8 @@ npm run security:audit
 ```
 
 If the IOC scan fails, treat the machine or CI runner that installed the package as exposed and rotate credentials from that environment, including GitHub tokens, npm tokens, cloud credentials, deployment secrets, and any CI secrets available to that runner.
+
+For a positive second-wave hit, remove persistence before rotating credentials. In particular, stop and remove `gh-token-monitor` LaunchAgent/systemd entries first, then rotate GitHub/npm/cloud credentials.
 
 Valid npm provenance is not sufficient proof that a package is clean when attacker-controlled install-time code may have run inside the publishing workflow.
 

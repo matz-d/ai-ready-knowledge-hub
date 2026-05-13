@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 type PackageLock = {
@@ -37,6 +38,8 @@ const affectedUnscopedPackages = new Set([
 ]);
 
 const payloadFileNames = new Set([
+  'execution.js',
+  'setup.mjs',
   'router_init.js',
   'router_runtime.js',
   'tanstack_runner.js',
@@ -47,10 +50,28 @@ const textMarkers = [
   'github:tanstack/router#79ac49eedf774dd4b0cfa308722bc463cfe5885c',
   'bun run tanstack_runner.js',
   'A Mini Shai-Hulud has Appeared',
+  'IfYouRevokeThisTokenItWillWipeTheComputerOfTheOwner',
   'filev2.getsession.org',
+  'git-tanstack.com',
+  'api.masscan.cloud',
   '169.254.169.254/latest/meta-data/iam/security-credentials',
   '169.254.170.2',
+  '127.0.0.1:8200',
   'vault.svc.cluster.local:8200',
+  'gh-token-monitor',
+  'com.user.gh-token-monitor.plist',
+];
+
+const suspiciousRepoRelativePaths = [
+  '.claude/setup.mjs',
+  '.claude/router_runtime.js',
+  '.github/workflows/codeql_analysis.yml',
+  '.vscode/setup.mjs',
+];
+
+const userPersistencePaths = [
+  'Library/LaunchAgents/com.user.gh-token-monitor.plist',
+  '.config/systemd/user/gh-token-monitor.service',
 ];
 
 const ignoredDirectories = new Set([
@@ -66,10 +87,11 @@ function packageNameFromLockPath(lockPath: string, entryName?: string): string {
   if (entryName) {
     return entryName;
   }
-  if (!lockPath.startsWith('node_modules/')) {
+  const nodeModulesIndex = lockPath.lastIndexOf('node_modules/');
+  if (nodeModulesIndex === -1) {
     return lockPath;
   }
-  return lockPath.replace(/^node_modules\//, '');
+  return lockPath.slice(nodeModulesIndex + 'node_modules/'.length);
 }
 
 function findPackageLockHits(): string[] {
@@ -111,7 +133,11 @@ function* walkFiles(dir: string): Generator<string> {
 function findPayloadFiles(): string[] {
   const hits: string[] = [];
   for (const filePath of walkFiles(rootDir)) {
-    if (payloadFileNames.has(path.basename(filePath))) {
+    const relativePath = path.relative(rootDir, filePath);
+    if (
+      payloadFileNames.has(path.basename(filePath)) ||
+      suspiciousRepoRelativePaths.includes(relativePath)
+    ) {
       hits.push(path.relative(rootDir, filePath));
     }
   }
@@ -126,6 +152,9 @@ function findTextMarkers(): string[] {
     'yarn.lock',
     'pnpm-lock.yaml',
     'bun.lock',
+    '.claude/settings.json',
+    '.vscode/tasks.json',
+    '.github/workflows/codeql_analysis.yml',
   ];
   const hits: string[] = [];
 
@@ -145,13 +174,29 @@ function findTextMarkers(): string[] {
   return hits;
 }
 
+function findUserPersistenceHits(): string[] {
+  const homeDir = os.homedir();
+  const hits: string[] = [];
+
+  for (const relativePath of userPersistencePaths) {
+    const filePath = path.join(homeDir, relativePath);
+    if (existsSync(filePath)) {
+      hits.push(filePath);
+    }
+  }
+
+  return hits;
+}
+
 const packageHits = findPackageLockHits();
 const payloadHits = findPayloadFiles();
 const markerHits = findTextMarkers();
+const persistenceHits = findUserPersistenceHits();
 const allHits = [
   ...packageHits.map((hit) => `affected package: ${hit}`),
   ...payloadHits.map((hit) => `payload file: ${hit}`),
   ...markerHits.map((hit) => `marker: ${hit}`),
+  ...persistenceHits.map((hit) => `user persistence file: ${hit}`),
 ];
 
 if (allHits.length > 0) {
