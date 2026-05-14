@@ -1,0 +1,136 @@
+# Phase 3-D completion verification
+
+Verified at: 2026-05-14 15:29 JST
+Project: ai-ready-knowledge-hub
+Region: asia-northeast1
+Cloud Run service: ai-ready-knowledge-hub
+Service URL: https://ai-ready-knowledge-hub-mrvutsz24a-an.a.run.app
+
+## Commit / CI / deploy
+
+Commit:
+- a57713ec15dafd2ff54c1d8ddf73c3767a1f8094
+- short tag: a57713e
+
+GitHub Actions:
+- Run: https://github.com/matz-d/ai-ready-knowledge-hub/actions/runs/25845188187
+- Status: completed
+- Conclusion: success
+- Test, Typecheck, Build: success
+- Deploy to Cloud Run: success
+- Created: 2026-05-14T06:17:33Z
+- Updated: 2026-05-14T06:21:05Z
+
+Artifact Registry:
+- asia-northeast1-docker.pkg.dev/ai-ready-knowledge-hub/knowledge-hub/ai-ready-knowledge-hub:a57713e
+- latest also points to the pushed image set updated at 2026-05-14T15:20:48 JST
+
+Cloud Run:
+- run.googleapis.com/iap-enabled: "true"
+- latestReadyRevisionName: ai-ready-knowledge-hub-00003-2jt
+- traffic: 100% latest revision
+- image: asia-northeast1-docker.pkg.dev/ai-ready-knowledge-hub/knowledge-hub/ai-ready-knowledge-hub:a57713e
+- AUTH_MODE=iap
+- IAP_JWT_AUDIENCE=/projects/127729019743/locations/asia-northeast1/services/ai-ready-knowledge-hub
+- GOOGLE_CLOUD_PROJECT=ai-ready-knowledge-hub
+- KNOWLEDGE_HUB_BUCKET=ai-ready-knowledge-hub-uploads
+- MASKER_PROVIDER=simple-rule
+- FIRESTORE_PREFER_REST=true
+
+## IAP / IAM
+
+IAP accessor policy:
+- user:makoto@m-grow-ai.com -> roles/iap.httpsResourceAccessor
+
+Cloud Run invoker policy:
+- serviceAccount:service-127729019743@gcp-sa-iap.iam.gserviceaccount.com -> roles/run.invoker
+
+No domain-wide IAP accessor binding was present in the checked policy.
+
+## Anonymous / non-IAP access
+
+Unauthenticated curl to `/`:
+- HTTP/2 302
+- x-goog-iap-generated-response: true
+- body: Invalid IAP credentials: empty token
+
+Invalid bearer curl to service-account-email endpoint:
+- HTTP/2 401
+- x-goog-iap-generated-response: true
+- body: Invalid IAP credentials: Unable to parse JWT
+
+## Authorized browser / API checks
+
+Authorized browser session:
+- UI loaded successfully at `/`
+- Inventory rendered live Firestore documents.
+
+Authorized browser-origin API calls:
+- POST /api/documents -> 200
+- POST /api/import/google-sheets -> success audit event recorded
+- POST /api/context-package -> 200
+
+Cloud Run log excerpt:
+- 2026-05-14T06:26:38Z POST https://ai-ready-knowledge-hub-mrvutsz24a-an.a.run.app/api/documents 200
+- 2026-05-14T06:28:35Z POST https://ai-ready-knowledge-hub-mrvutsz24a-an.a.run.app/api/context-package 200
+
+## tenantId / actor propagation evidence
+
+Firestore auditEvents created from the authorized IAP browser session:
+
+- action: document.import
+  - tenantId: m-grow-ai.com
+  - actor.userId: makoto@m-grow-ai.com
+  - target.docId: 39103724-5007-4b28-9e27-c49d0db37b90
+  - target.fileName: phase-3d-audit-evidence.txt
+  - result: success
+  - occurredAt: 2026-05-14T06:26:46.487Z
+
+- action: document.reimport
+  - tenantId: m-grow-ai.com
+  - actor.userId: makoto@m-grow-ai.com
+  - target.docId: 1d0623d6-a070-464e-a0ac-faa332078c71
+  - target.fileName: aiknh-drive-export-fixture-20260512-v2.xlsx
+  - target.sourceKind: google_workspace
+  - target.externalSourceFileId: 1BEgJdyg8muyJYuXjnTLO41EibTjCDcjUsGdP_lb4RJM
+  - result: success
+  - occurredAt: 2026-05-14T06:26:56.294Z
+
+- action: document.export
+  - tenantId: m-grow-ai.com
+  - actor.userId: makoto@m-grow-ai.com
+  - target.docId: 1d0623d6-a070-464e-a0ac-faa332078c71
+  - target.fileName: aiknh-drive-export-fixture-20260512-v2.xlsx
+  - result: success
+  - occurredAt: 2026-05-14T06:27:14.151Z
+
+- action: document.export
+  - tenantId: m-grow-ai.com
+  - actor.userId: makoto@m-grow-ai.com
+  - target.docId: 39103724-5007-4b28-9e27-c49d0db37b90
+  - target.fileName: phase-3d-audit-evidence.txt
+  - result: success
+  - occurredAt: 2026-05-14T06:28:46.766Z
+
+Because the audit events are written by route handlers using the request auth context, these entries confirm that the IAP identity was resolved by middleware and propagated downstream as tenantId and actor.
+
+## Screenshot evidence files
+
+- docs/iap-evidence/iap-settings-console.png
+- docs/iap-evidence/unauthenticated-login.png
+- docs/iap-evidence/authorized-api-200.png
+- docs/iap-evidence/authorized-ui.png
+- docs/iap-evidence/verification.txt
+
+## Completion judgment
+
+Phase 3-D DoD is satisfied:
+- main push triggers test/typecheck/build and deployment.
+- Docker image is pushed to Artifact Registry.
+- Cloud Run revision is updated and Ready.
+- Cloud Run is protected by direct Cloud IAP.
+- Anonymous access cannot reach the app.
+- Authorized user can access UI and principal APIs through IAP.
+- middleware resolves tenantId and actor from IAP identity.
+- AuditEvent success events exist for document.import, document.reimport, and document.export.
+- Firestore rules / firebase.json / docs decision evidence for append-only AuditEvent discipline are committed.
