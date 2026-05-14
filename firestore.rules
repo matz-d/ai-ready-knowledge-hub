@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /auditEvents/{eventId} {
+      allow create: if false; // Admin SDK は Rules 非経由なので create は実質 Admin SDK 限定
+      allow read: if false; // Phase 3-D では client SDK 経路を持たない
+      allow update, delete: if false; // append-only 保証
+    }
+  }
+}

@@ -5,6 +5,7 @@ const {
   buildStrategistContextPackageMock,
   NoInventoryDocumentsErrorMock,
   NoKnowledgeChunksErrorMock,
+  recordAuditEventMock,
 } = vi.hoisted(() => {
   class NoInventoryDocumentsErrorMock extends Error {
     constructor(message = 'No terminal inventory documents found.') {
@@ -25,6 +26,7 @@ const {
     buildStrategistContextPackageMock: vi.fn(),
     NoInventoryDocumentsErrorMock,
     NoKnowledgeChunksErrorMock,
+    recordAuditEventMock: vi.fn().mockResolvedValue('audit-event-1'),
   };
 });
 
@@ -34,6 +36,14 @@ vi.mock('../../../../services/strategistOrchestrator', () => ({
   NoInventoryDocumentsError: NoInventoryDocumentsErrorMock,
   NoKnowledgeChunksError: NoKnowledgeChunksErrorMock,
 }));
+
+vi.mock('../../../../lib/audit/auditEvent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../lib/audit/auditEvent')>();
+  return {
+    ...actual,
+    recordAuditEvent: recordAuditEventMock,
+  };
+});
 
 import { POST } from '../route';
 
@@ -49,13 +59,70 @@ async function parseJson(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
 
+const STUB_PARENT = {
+  id: 'doc-1',
+  fileName: 'Runbook.md',
+  documentType: 'メモ' as const,
+  businessDomain: '社内手順' as const,
+  freshness: 'current' as const,
+  isAuthoritativeCandidate: true,
+  updatedAt: '2026-05-14T00:00:00.000Z',
+};
+
+const STUB_CHUNK_BASE = {
+  docId: 'doc-1',
+  schemaVersion: 1 as const,
+  sourceType: 'text' as const,
+  structureType: 'paragraph' as const,
+  locator: { kind: 'paragraph' as const },
+  text: 'stub',
+  sensitivity: 'Internal' as const,
+  aiUsePolicy: 'direct' as const,
+  sensitivitySource: 'inherited' as const,
+  extractionProvider: 'text' as const,
+  sourceHash: 'stub-hash',
+  createdAt: '2026-05-14T00:00:00.000Z',
+};
+
 const STUB_RESULT = {
   purpose: 'テスト用途',
   generatedAt: '2026-05-14T00:00:00.000Z',
   sourceDocumentsReviewed: 3,
-  included: [{ docId: 'doc-1', chunkId: 'chunk-1', rationale: '目的に合致', confidence: 0.9 }],
-  excluded: [{ docId: 'doc-1', chunkId: 'chunk-2', rationale: '古い', reason: 'superseded_or_stale' }],
-  safetyExcluded: [{ docId: 'doc-1', chunkId: 'chunk-3', rationale: 'Restricted', reason: 'restricted_sensitivity' }],
+  included: [
+    {
+      docId: 'doc-1',
+      chunkId: 'chunk-1',
+      rationale: '目的に合致',
+      confidence: 0.9,
+      chunk: { ...STUB_CHUNK_BASE, id: 'chunk-1' },
+      parent: STUB_PARENT,
+    },
+  ],
+  excluded: [
+    {
+      docId: 'doc-1',
+      chunkId: 'chunk-2',
+      rationale: '古い',
+      reason: 'superseded_or_stale' as const,
+      chunk: { ...STUB_CHUNK_BASE, id: 'chunk-2' },
+      parent: STUB_PARENT,
+    },
+  ],
+  safetyExcluded: [
+    {
+      docId: 'doc-1',
+      chunkId: 'chunk-3',
+      rationale: 'Restricted',
+      reason: 'restricted_sensitivity' as const,
+      chunk: {
+        ...STUB_CHUNK_BASE,
+        id: 'chunk-3',
+        sensitivity: 'Restricted' as const,
+        aiUsePolicy: 'blocked' as const,
+      },
+      parent: STUB_PARENT,
+    },
+  ],
   missing: ['最新の運用責任者'],
   humanReviewQuestions: ['旧ルールは廃止済みですか？'],
 };
@@ -97,6 +164,19 @@ describe('POST /api/context-package', () => {
         humanReviewQuestions: 1,
       },
     });
+    expect(recordAuditEventMock).toHaveBeenCalledTimes(1);
+    expect(recordAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'document.export',
+        result: 'success',
+        target: {
+          docId: 'doc-1',
+          fileName: 'Runbook.md',
+          sourceKind: 'upload',
+          sensitivity: 'Internal',
+        },
+      })
+    );
   });
 
   it('uses default limit of 100 when limit is omitted', async () => {
@@ -165,6 +245,7 @@ describe('POST /api/context-package', () => {
 
     expect(response.status).toBe(409);
     expect(body.error).toBe('no_inventory_documents');
+    expect(recordAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('returns 409 for NoKnowledgeChunksError', async () => {
@@ -175,6 +256,7 @@ describe('POST /api/context-package', () => {
 
     expect(response.status).toBe(409);
     expect(body.error).toBe('no_knowledge_chunks');
+    expect(recordAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('returns 502 for unexpected orchestrator error', async () => {
@@ -185,5 +267,6 @@ describe('POST /api/context-package', () => {
 
     expect(response.status).toBe(502);
     expect(body.error).toBe('upstream_failure');
+    expect(recordAuditEventMock).not.toHaveBeenCalled();
   });
 });

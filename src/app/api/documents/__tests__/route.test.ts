@@ -7,6 +7,7 @@ const {
   getKnowledgeHubBucketNameMock,
   curatorPhaseErrorClass,
   maskerPhaseErrorClass,
+  recordAuditEventMock,
 } = vi.hoisted(() => {
   class CuratorPhaseErrorMock extends Error {
     docId: string;
@@ -32,6 +33,7 @@ const {
     getKnowledgeHubBucketNameMock: vi.fn(),
     curatorPhaseErrorClass: CuratorPhaseErrorMock,
     maskerPhaseErrorClass: MaskerPhaseErrorMock,
+    recordAuditEventMock: vi.fn().mockResolvedValue('audit-event-1'),
   };
 });
 
@@ -52,6 +54,14 @@ vi.mock('../../../../lib/uploadOrchestrator', () => ({
 vi.mock('../../../../lib/chunkRegenerator', () => ({
   replaceChunksForDoc: replaceChunksForDocMock,
 }));
+
+vi.mock('../../../../lib/audit/auditEvent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../lib/audit/auditEvent')>();
+  return {
+    ...actual,
+    recordAuditEvent: recordAuditEventMock,
+  };
+});
 
 import { POST } from '../route';
 
@@ -134,6 +144,22 @@ describe('POST /api/documents', () => {
     expect(
       orchestrateUploadProcessingMock.mock.invocationCallOrder[0]
     ).toBeLessThan(replaceChunksForDocMock.mock.invocationCallOrder[0]);
+    expect(
+      replaceChunksForDocMock.mock.invocationCallOrder[0]
+    ).toBeLessThan(recordAuditEventMock.mock.invocationCallOrder[0]);
+    expect(recordAuditEventMock).toHaveBeenCalledTimes(1);
+    expect(recordAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'document.import',
+        result: 'success',
+        target: {
+          docId: 'doc-1',
+          fileName: 'sample.txt',
+          sourceKind: 'upload',
+          sensitivity: 'Internal',
+        },
+      })
+    );
   });
 
   it('generates chunks after .csv upload and returns curated document', async () => {
@@ -578,6 +604,7 @@ describe('POST /api/documents', () => {
         error: 'アップロード処理に失敗しました。',
       })
     );
+    expect(recordAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('returns 500 chunk_generation_failed when chunk generation fails', async () => {
@@ -593,6 +620,7 @@ describe('POST /api/documents', () => {
     });
     expect(orchestrateUploadProcessingMock).toHaveBeenCalledTimes(1);
     expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-1');
+    expect(recordAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('returns 500 with docId for curator phase failure', async () => {
@@ -610,6 +638,7 @@ describe('POST /api/documents', () => {
         docId: 'doc-curator',
       })
     );
+    expect(recordAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('returns 500 with docId for masker phase failure', async () => {
@@ -627,5 +656,6 @@ describe('POST /api/documents', () => {
         docId: 'doc-masker',
       })
     );
+    expect(recordAuditEventMock).not.toHaveBeenCalled();
   });
 });

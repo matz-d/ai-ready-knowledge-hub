@@ -100,6 +100,7 @@ docs/
   open-questions.md                      # 未決定事項・次フェーズ候補
   phase-3-c-5-source-coverage.md         # Phase 3-C-5 source coverage 確認結果
   phase-3-c-direction.md                 # Phase 3-C 認証・デプロイ方針
+  phase-3-d-direction.md                 # Phase 3-D CI/CD + IAP 実装方針
   architecture.md / tech-stack.md / concept.md / scope.md
   firestore-schema.md / setup-gcp.md
   demo-runbook.md / demo-scenario.md / hackathon.md
@@ -174,8 +175,7 @@ sample-data/
 
 ### 次にやること
 
-- **Phase 3-D**: GitHub Actions CI/CD（commit → test → build → Artifact Registry → Cloud Run）。採点軸「まわす」「とどける」の主要エビデンス。
-- Cloud IAP + tenantId middleware（フェーズ設計は [docs/phase-3-c-direction.md](docs/phase-3-c-direction.md) 参照）。
+- **Phase 3-D**: GitHub Actions CI/CD（commit → test → build → Artifact Registry → Cloud Run）+ Cloud IAP + AuditEvent。実装方針は [docs/phase-3-d-direction.md](docs/phase-3-d-direction.md) を参照。
 - Curator / Masker eval パイプライン。
 
 ---
@@ -191,6 +191,7 @@ sample-data/
 | [docs/architecture.md](docs/architecture.md) | システム構成、4エージェント、データフロー |
 | [docs/firestore-schema.md](docs/firestore-schema.md) | Firestore document shape の正本 |
 | [docs/phase-3-c-direction.md](docs/phase-3-c-direction.md) | Phase 3-C 認証・デプロイ方針（Cloud IAP / GitHub Actions / BYOC 戦略） |
+| [docs/phase-3-d-direction.md](docs/phase-3-d-direction.md) | Phase 3-D CI/CD + IAP + AuditEvent 実装方針 |
 | [docs/phase-3-c-5-source-coverage.md](docs/phase-3-c-5-source-coverage.md) | Phase 3-C-5 source coverage 確認結果（全 source 確認済み） |
 | [docs/phase-3-b-workspace-resync.md](docs/phase-3-b-workspace-resync.md) | Phase 3-B 正本（Workspace resync・schemaVersion 2・鮮度バッジ） |
 | [docs/phase-2-design.md](docs/phase-2-design.md) | KnowledgeChunk / CSV・xlsx extractor / chunk-aware Context Package の設計正本 |
@@ -208,7 +209,7 @@ sample-data/
 1. このREADMEの「現在のステータス」
 2. [docs/open-questions.md](docs/open-questions.md) — 次フェーズ候補と未決定事項
 3. [docs/decisions.md](docs/decisions.md) — Phase 3-C の採用判断（`D-P3-C` セクション）
-4. [docs/phase-3-c-direction.md](docs/phase-3-c-direction.md) — 次フェーズ（CI/CD + IAP）の設計方針
+4. [docs/phase-3-d-direction.md](docs/phase-3-d-direction.md) — Phase 3-D（CI/CD + IAP + AuditEvent）の実装方針
 
 ---
 

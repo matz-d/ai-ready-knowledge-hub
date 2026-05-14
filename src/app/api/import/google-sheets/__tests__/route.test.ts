@@ -12,6 +12,7 @@ const {
   gcsUploadErrorClass,
   curatorPhaseErrorClass,
   maskerPhaseErrorClass,
+  recordAuditEventMock,
 } = vi.hoisted(() => {
   class InvalidGoogleSheetsInputErrorMock extends Error {
     constructor(message = 'invalid sheets input') {
@@ -87,6 +88,7 @@ const {
     gcsUploadErrorClass: GcsUploadErrorMock,
     curatorPhaseErrorClass: CuratorPhaseErrorMock,
     maskerPhaseErrorClass: MaskerPhaseErrorMock,
+    recordAuditEventMock: vi.fn().mockResolvedValue('audit-event-1'),
   };
 });
 
@@ -106,17 +108,30 @@ vi.mock('../../../../../lib/googleWorkspaceClient', () => ({
   getServiceAccountEmail: getServiceAccountEmailMock,
 }));
 
-vi.mock('../../../../../lib/googleSheetsSnapshotImporter', () => ({
-  InvalidGoogleSheetsInputError: invalidGoogleSheetsInputErrorClass,
-  GoogleSheetShareError: googleSheetShareErrorClass,
-  UnsupportedMimeTypeError: unsupportedMimeTypeErrorClass,
-  DriveExportError: driveExportErrorClass,
-}));
+vi.mock('../../../../../lib/googleSheetsSnapshotImporter', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../../../lib/googleSheetsSnapshotImporter')>();
+  return {
+    ...actual,
+    InvalidGoogleSheetsInputError: invalidGoogleSheetsInputErrorClass,
+    GoogleSheetShareError: googleSheetShareErrorClass,
+    UnsupportedMimeTypeError: unsupportedMimeTypeErrorClass,
+    DriveExportError: driveExportErrorClass,
+  };
+});
 
 vi.mock('../../../../../lib/uploadOrchestrator', () => ({
   CuratorPhaseError: curatorPhaseErrorClass,
   MaskerPhaseError: maskerPhaseErrorClass,
 }));
+
+vi.mock('../../../../../lib/audit/auditEvent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../../lib/audit/auditEvent')>();
+  return {
+    ...actual,
+    recordAuditEvent: recordAuditEventMock,
+  };
+});
 
 import { InvalidGoogleDocsInputError } from '../../../../../lib/googleDocsSnapshotImporter';
 import { POST } from '../route';
@@ -206,6 +221,19 @@ describe('POST /api/import/google-sheets', () => {
         byteSize: 512,
       })
     );
+    expect(recordAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'document.reimport',
+        result: 'success',
+        target: {
+          docId: 'doc-docs',
+          fileName: 'Notes.md',
+          sourceKind: 'google_workspace',
+          externalSourceFileId: '1abc12345678901234567',
+          sensitivity: 'Internal',
+        },
+      })
+    );
   });
 
   it('routes Google Sheets spreadsheet URLs to the Sheets orchestrator', async () => {
@@ -221,6 +249,19 @@ describe('POST /api/import/google-sheets', () => {
       displayName: undefined,
     });
     expect(orchestrateImportedDocsSnapshotProcessingMock).not.toHaveBeenCalled();
+    expect(recordAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'document.reimport',
+        result: 'success',
+        target: expect.objectContaining({
+          docId: 'doc-1',
+          fileName: 'Revenue.xlsx',
+          sourceKind: 'google_workspace',
+          externalSourceFileId: '1abc12345678901234567',
+          sensitivity: 'Internal',
+        }),
+      })
+    );
   });
 
   it('routes bare file IDs to the Sheets orchestrator', async () => {
@@ -364,11 +405,12 @@ describe('POST /api/import/google-sheets', () => {
     );
 
     const response = await POST(
-      buildRequest({ urlOrFileId: '  ', displayName: 'Revenue.xlsx' })
+      buildRequest({ urlOrFileId: 'sheet-file-id-1234567890123' })
     );
 
     expect(response.status).toBe(400);
     await expect(parseJson(response)).resolves.toEqual({ error: 'invalid_url' });
+    expect(recordAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('returns 400 invalid_url for InvalidGoogleSheetsInputError regardless of message text', async () => {

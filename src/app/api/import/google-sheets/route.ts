@@ -25,6 +25,9 @@ import {
   CuratorPhaseError,
   MaskerPhaseError,
 } from '../../../../lib/uploadOrchestrator';
+import { auditActorFromRequest, recordAuditEvent } from '../../../../lib/audit/auditEvent';
+import { parseGoogleDocsInput } from '../../../../lib/googleDocsSnapshotImporter';
+import { parseGoogleSheetsInput } from '../../../../lib/googleSheetsSnapshotImporter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -140,6 +143,28 @@ export async function POST(request: Request) {
         ...(result.skipped === true ? { skipped: true } : {}),
       },
     });
+
+    const { fileId: externalSourceFileId } = useGoogleDocsImporter
+      ? parseGoogleDocsInput(urlOrFileId)
+      : parseGoogleSheetsInput(urlOrFileId);
+    try {
+      const { tenantId, actor } = auditActorFromRequest(request);
+      await recordAuditEvent({
+        tenantId,
+        actor,
+        action: 'document.reimport',
+        target: {
+          docId: result.docId,
+          fileName: result.fileName,
+          sourceKind: 'google_workspace',
+          externalSourceFileId,
+          sensitivity: result.curator.sensitivity,
+        },
+        result: 'success',
+      });
+    } catch (auditErr) {
+      console.error('[import/google-sheets] recordAuditEvent failed', auditErr);
+    }
 
     return NextResponse.json(body);
   } catch (e) {

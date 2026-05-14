@@ -98,23 +98,22 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - Phase 3-C-5 バグ修正 6 件（malformed doc skip、txt/md chunk 生成、upload 後 auto-chunk、Docs route 分岐、Docs error mapping、backfill usage）
 - CodeRabbit review: 5 件 apply / 11 件 skip（[docs/decisions.md D-P3-C](decisions.md) に根拠記録）
 
-**次フェーズ（未確定）:**
+**次フェーズ（2026-05-14 決定）:**
 
 | 候補 | 内容 | 優先度 |
 |---|---|---|
-| Phase 3-D | Cloud IAP + CI/CD（GitHub Actions → Cloud Run）| 採点軸「まわす」「とどける」 |
+| Phase 3-D | Cloud IAP + CI/CD（GitHub Actions → Cloud Run）| **着手決定**。採点軸「まわす」「とどける」 |
 | Phase 3-E | Cloud DLP 本格統合（W3 予定だったもの）| 技術的深度 |
 | Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | 発表準備 |
-| Phase 3-G | AuditEvent collection | セキュリティ観点 |
 
-**次のアクション**: 次セッション開始時に Phase 3-D（CI/CD + IAP）の着手判断をする。
+**次のアクション**: [docs/phase-3-d-direction.md](phase-3-d-direction.md) に沿って、Dockerfile → GCP resources → GitHub Actions workflow → IAP → AuditEvent の順で実装する。AuditEvent collection は Phase 3-D に統合する。
 
 ---
 
 ## 細かい未決定事項
 
 ### Genkit 設定の詳細
-- Cloud Run へのデプロイ方式 (Next.js統合 vs 別Cloud Run)
+- **決定済み**: Cloud Run へのデプロイ方式は Next.js standalone + multi-stage Dockerfile。正本は [docs/phase-3-d-direction.md](phase-3-d-direction.md)。
 - Genkit Flow の Server Action からの呼び出し方
 - 環境変数 (Vertex AIプロジェクトID、リージョン等) の管理
 
@@ -142,9 +141,21 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - vector index はMVPでは作らない (将来拡張)
 
 ### CI/CD認証
-- Workload Identity Federation の設定
-- GitHub Secrets の管理範囲
-- Cloud Run サービスアカウントの権限
+
+**2026-05-14 決定済み。正本は [docs/decisions.md](decisions.md) の `D-P3-D` と [docs/phase-3-d-direction.md](phase-3-d-direction.md)。**
+
+| 論点 | 決定 |
+|---|---|
+| GH Actions の GCP 認証方式 | Workload Identity Federation（WIF）。Service Account JSON key は使わない。 |
+| GitHub Secrets の管理範囲 | GCP 認証用 JSON key は置かない。project / region / service name / WIF provider / service account は GitHub Variables で管理する。 |
+| Cloud Run サービスアカウント | deploy service account と runtime service account を分ける。deploy SA は Artifact Registry push と Cloud Run deploy、runtime SA は Firestore / GCS / Vertex AI / DLP / Drive への実行時アクセスを担当する。 |
+| tenantId | IAP email domain 由来。`KNOWLEDGE_HUB_TENANT_ID` override を許容。 |
+| Cloud Run public access | IAP 必須。`allow-unauthenticated` は使わない。 |
+| Dockerfile | `output: 'standalone'` + multi-stage Dockerfile。 |
+
+**残タスク:**
+- 実 project number / WIF provider resource name / service account email を作成後に `docs/setup-gcp.md` または deploy workflow に反映する。
+- IAP JWT audience の実値を Cloud Run/IAP 構成に合わせて確認する。
 
 ### サンプルデータの中身
 

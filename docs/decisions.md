@@ -737,9 +737,92 @@ sample-data/
 
 ---
 
+## D-P3-D: Phase 3-D CI/CD + IAP 方針確定（2026-05-14）
+
+**決定**: Phase 3-D は「commit push → test/typecheck/build → Artifact Registry push → Cloud Run deploy → Cloud IAP で社内ユーザだけが利用」のパイプラインを作るフェーズとする。実装正本は [docs/phase-3-d-direction.md](phase-3-d-direction.md)。
+
+### Q1: GitHub Actions の GCP 認証方式
+
+**決定**: Workload Identity Federation（WIF）を採用する。Service Account JSON key は採用しない。
+
+**理由:**
+- 長寿命の秘密鍵を GitHub Secrets に置かず、GitHub OIDC token と GCP 側の trust 設定で短命 credential を発行できる。
+- 「顧客機密文書を扱う前提」のプロダクト説明と整合する。
+- WIF provider には `assertion.repository == "matz-d/ai-ready-knowledge-hub"` と `assertion.ref == "refs/heads/main"` 相当の attribute condition を付け、trusted repo / branch 以外の impersonation を拒否する。
+
+**代替案:**
+- Service Account JSON key: セットアップは速いが、漏洩・ローテーション・監査の負債が大きいため不採用。
+
+### Q2: tenantId の発生源
+
+**決定**: MVP/SaaS 初期は IAP の authenticated email の domain 部分を tenantId とする。`KNOWLEDGE_HUB_TENANT_ID` が設定されている場合は env override を優先する。actor identity は email 全体を audit log に残す。
+
+**理由:**
+- 既存 `src/lib/auth/resolveTenantIdFromAuth.ts` と `src/middleware.ts` がこの形で実装済み。
+- 初期顧客を Google Workspace domain 単位で許可する Cloud IAP 方針と自然に対応する。
+- 将来の tenant master lookup / BYOC OIDC へ移行する場合も、呼び出し側は `resolveTenantIdFromAuth()` のままにできる。
+
+**撤退条件:**
+- 同一 email domain 内に複数 tenant を切りたい、または顧客の認証 domain と契約 tenant が一致しない場合は、Firestore の tenant master lookup へ移行する。
+
+### Q3: Cloud Run public access の扱い
+
+**決定**: Cloud Run は Cloud IAP 必須とし、発表時も `allow-unauthenticated` による一時公開はしない。
+
+**理由:**
+- プロダクトの中心価値が「AI に渡す前の情報を安全に準備する」ことであり、公開デモ都合で匿名アクセスを許すと説明が弱くなる。
+- IAP の 401/403、IAP 設定画面、許可ユーザだけが UI に到達できる証跡を「とどける」の evidence として使える。
+- Cloud Run IAM と IAP の両方が効く構成では、IAP 通過後に IAP service agent が Cloud Run invoker として呼び出せるようにする。
+
+**代替案:**
+- `allow-unauthenticated` で発表時のみ一時開放: 速度は出るが、セキュリティ主張と逆行するため不採用。
+
+### Q4: AuditEvent を先に書く範囲
+
+**決定**: Phase 3-D の対象 action は `document.import` / `document.reimport` / `document.export` とする。実装順は `document.import` を最初に通し、その後 reimport/export を接続する。
+
+**理由:**
+- `docs/phase-3-c-direction.md` の監査ログ設計にある最低限の 5W1H に対応する。
+- 実装済みの `src/lib/audit/auditEvent.ts` が `recordAuditEvent()` と `auditActorFromRequest()` を提供しているため、route ごとの配線に集中できる。
+- `auditEvents/{eventId}` は `.create()` で append-only に書く。Firestore Security Rules でも client からの update/delete（本 repo では read/create も含む）拒否を `firestore.rules` で明文化する。
+- **append-only の実効防御**は Rules ではなく、`recordAuditEvent()` が **`.create()` だけ**を使い既存ドキュメントを更新しないアプリ規律が正本である。Rules は Admin SDK 非経由の将来経路向けの規範・ガードレール。
+
+**やらない判断:**
+- Phase 3-D では `document.view` / `chunk.access` / `mask.override` の全面配線はしない。
+
+### Q5: Dockerfile の Next.js build mode
+
+**決定**: `next.config.ts` の `output: 'standalone'` を維持し、multi-stage Dockerfile で standalone server を Cloud Run に載せる。
+
+**理由:**
+- 既に `next.config.ts` が standalone 出力になっており、Docker image を軽くできる。
+- Artifact Registry に image を push し、`latest` と GitHub Actions の `$SHORT_SHA` tag を残すことで、commit と Cloud Run revision の対応を追跡できる。
+- `docs/tech-stack.md` の「Buildpacks に任せる」方針は W1/W2 の初期デプロイ速度を優先したもの。Phase 3-D では CI/CD と Artifact Registry の evidence を優先し、Dockerfile 方針で上書きする。
+
+**代替案:**
+- Buildpacks: 初期 PoC には速いが、今回の「build artifact を見せる」目的では evidence が弱い。
+- 通常 Next.js build: image が大きくなりやすく、standalone の既存設定を捨てる理由がない。
+
+### Phase 3-D の境界
+
+**触る領域:**
+- deployment 層: `Dockerfile`, `.dockerignore`, `.github/workflows/deploy.yml`
+- auth 層: `src/middleware.ts`, `src/lib/auth/*`
+- audit 層: `src/lib/audit/*`, 対象 API routes, Firestore rules
+- docs: setup/runbook/evidence checklist
+
+**触らない領域:**
+- Curator / Masker / Strategist の LLM 判断ロジック
+- KnowledgeChunk / Context Package の選定ロジック
+- Firestore document shape の大幅変更
+- BYOC / Terraform / multi-region / microservices
+
+---
+
 ## 関連ドキュメント
 
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
+- [docs/phase-3-d-direction.md](phase-3-d-direction.md) — Phase 3-D CI/CD + IAP 実装方針（正本）
 - [docs/phase-3-c-5-source-coverage.md](phase-3-c-5-source-coverage.md) — Phase 3-C-5 source coverage 確認結果
 - [docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) — Phase 3-B（Drive 再取り込み・schemaVersion 2・鮮度バッジ・完了条件の正本）
 - [docs/concept.md](concept.md) — プロダクトコンセプト

@@ -25,6 +25,7 @@ import {
 import { documentUploadSuccessBodyFromOrchestrate } from '../../../lib/documentUploadResponseMapper';
 import { xlsxToNormalizedMarkdown } from '../../../lib/extractors/xlsxExtractor';
 import { replaceChunksForDoc } from '../../../lib/chunkRegenerator';
+import { auditActorFromRequest, recordAuditEvent } from '../../../lib/audit/auditEvent';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -179,6 +180,24 @@ export async function POST(request: Request) {
       result,
       ingestMeta: { kind: 'created' },
     });
+
+    try {
+      const { tenantId, actor } = auditActorFromRequest(request);
+      await recordAuditEvent({
+        tenantId,
+        actor,
+        action: 'document.import',
+        target: {
+          docId: result.docId,
+          fileName: displayName,
+          sourceKind: 'upload',
+          sensitivity: result.curator.sensitivity,
+        },
+        result: 'success',
+      });
+    } catch (auditErr) {
+      console.error('[documents] recordAuditEvent failed', auditErr);
+    }
 
     return NextResponse.json(body);
   } catch (e) {

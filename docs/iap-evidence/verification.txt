@@ -1,0 +1,54 @@
+# IAP verification evidence
+
+Thu May 14 14:58:52 JST 2026
+
+## Cloud Run IAP enabled
+metadata:
+  annotations:
+    run.googleapis.com/iap-enabled: 'true'
+status:
+  latestReadyRevisionName: ai-ready-knowledge-hub-00002-c84
+  url: https://ai-ready-knowledge-hub-mrvutsz24a-an.a.run.app
+
+## IAP IAM policy
+bindings:
+- members:
+  - user:makoto@m-grow-ai.com
+  role: roles/iap.httpsResourceAccessor
+etag: BwZRwK9Mgvo=
+version: 1
+
+## Cloud Run IAM policy
+bindings:
+- members:
+  - serviceAccount:service-127729019743@gcp-sa-iap.iam.gserviceaccount.com
+  role: roles/run.invoker
+etag: BwZRwK4mA8w=
+version: 1
+
+## Unauthenticated curl
+HTTP/2 302 
+set-cookie: GCP_IAP_XSRF_NONCE_c-5w28qx5yaVe6HNu-Gl-A=1; expires=Thu, 14-May-2026 06:08:56 GMT; path=/; Secure; HttpOnly
+location: https://accounts.google.com/o/oauth2/v2/auth?client_id=369001918367-t5qrahnqdaasaifvk6akpqkpjk9vli58.apps.googleusercontent.com&response_type=code&scope=openid+email&redirect_uri=https://iap.googleapis.com/v1/oauth/clientIds/369001918367-t5qrahnqdaasaifvk6akpqkpjk9vli58.apps.googleusercontent.com:handleRedirect&code_challenge=OZAqicqbcqXTRd1V4w4MKXRgxFKlQCpzabDUoqgcvvc&code_challenge_method=S256&cred_ref=true&state=AROixzkE7MpHJBn6-vJEECsPg1QMPLCPwKZ1mjVdTXggW9l7M_TgqlJOmjB3zlR-L0kinkgrIx9pc4hParE0Rx3OqZ1lE-oIqqmnHPdsxs7zWeTpCEC2BaoqrzIXlyNPT7_98cYB2cDmUSQNk5qlmMYbuaSzqeFwZNwUbZTrLzCcgLWjgf5Sgl53jKgX4_EEDLJyoKXJkYR5eEtfyJ5qy0lGToq6pDeYRwhNsSLdASxdEidwOpq5dFLAia4AzRM4u5_Zzi4rP95yHdnd6vo_YiY9GVHRWNXnn2wyUkt91enbu493vSRwzaiMNv2mF2LkwLINdZOHuu99oJ2mxnQFoYDnF5A9_BnLs44fsWX8mMujADT-M2cDgBgGf649s7IKX_YVwxyz8HD1GUcQrpE7gFWzUxprvDf9_jUM6qkaQ9wer12bRoPczEGIwOAx_n3dG0v3Qawrmbya3jNhWb9pYIwFKNi4nnjdRFGNbJ9pw-1bgp835Ovpzzi7Kq4-7HQzxnL5h_-UWaj7rAEdcDMk38GEVLS6xkKoxraeI6VI6PmBzEqAlWxGPKMaCP8KUm27o9Ci8DPrTVC6exdjAMsd_l3HCCIXfXEIjdE-VBQ2sON8d46Ea3NJ4yjduxVfmYr1Qbxf_A0mVua7V_eiDqDDlZALFX1LuzW4Fs1mX24UgbfDiMIuyekkA-mHz4ufzcs9QfX_St0fhQJS5mOHinB77hmPLUEiiwF3Z0Xh_9kPnhsuu9w4qQdrh7ssXFt7NH2fHuMfCiQbKvr7OC_RX-STUc8YF_gaJT9toflpdCuounrIKRSU7qo69H-BaybvDwEy3XbVqTRfnI3n9W2N3n8zVCZ9FbYC1faeWqCUzhWhAFZRZRxsAS25uGJTlXG9N-c8ACOqCln8A-UQ7S1LSfN_C8YCJjQ_CI9dvdJipo7PMXdVeDZMNcOSoAFFckmMO5mIE_p2WNOkC7iQ1-neSzfYSGYJTHFV9Un6wp-RnB7LbaA_aGYa6KUV0L_dqaKcJBcA9F6fe5bPHBY84oCkUeTcdd5dh7xUw2mOd_pgWlA_BfTLkfPd1f8VZtoPcn9yrlYZ3DEyvuVFOmHw3TTSLsYz9SakfJ7S8CwaT54525fHGyiGsbGgOVuF4KehUCfCeTjgP0JJbk3W_Ad0nu0BZs2y8ykqSUQN4csezZTCHk4x_RKkVCCaic5PrakhDkRJsN2jqIMsNJ4mJBkCulV0REsqFJnJEF1opnv2hjrcxpvbgzV1v-tkeg82Succ68dtauglaf7SxCRbLx57zyoKnakh3hc
+x-goog-iap-generated-response: true
+date: Thu, 14 May 2026 05:58:56 GMT
+content-type: text/html
+server: Google Frontend
+content-length: 36
+alt-svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+
+Body:
+Invalid IAP credentials: empty token
+## Invalid bearer curl (401)
+HTTP/2 401 
+x-goog-iap-generated-response: true
+date: Thu, 14 May 2026 05:58:57 GMT
+content-type: text/html
+server: Google Frontend
+content-length: 68
+alt-svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+
+Body:
+Invalid IAP credentials: Invalid bearer token. Invalid JWT audience.
+## Authorized API Cloud Run log
+2026-05-14T05:52:48.202556Z	GET	https://ai-ready-knowledge-hub-mrvutsz24a-an.a.run.app/api/import/google-sheets/service-account-email	200

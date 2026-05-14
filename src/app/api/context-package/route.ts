@@ -6,15 +6,45 @@
  */
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import type { Sensitivity } from '../../../agents/curator/schema';
 import {
   buildStrategistContextPackage,
   NoInventoryDocumentsError,
   NoKnowledgeChunksError,
   runStrategistOrchestrator,
+  type StrategistOrchestratorResult,
 } from '../../../services/strategistOrchestrator';
+import { auditActorFromRequest, recordAuditEvent } from '../../../lib/audit/auditEvent';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+function contextPackageAuditTarget(result: StrategistOrchestratorResult): {
+  docId: string;
+  fileName: string;
+  sourceKind: 'upload';
+  sensitivity: Sensitivity | 'Unknown';
+} {
+  const row =
+    result.included[0] ?? result.excluded[0] ?? result.safetyExcluded[0];
+  if (row) {
+    return {
+      docId: row.chunk.docId,
+      fileName: row.parent.fileName,
+      sourceKind: 'upload',
+      sensitivity: row.chunk.sensitivity,
+    };
+  }
+  return {
+    docId: 'context-package',
+    fileName:
+      result.purpose.trim().length > 0
+        ? result.purpose.slice(0, 200)
+        : 'Context Package',
+    sourceKind: 'upload',
+    sensitivity: 'Unknown',
+  };
+}
 
 const RequestSchema = z.object({
   purpose: z.string().min(1).max(2000),
@@ -45,6 +75,19 @@ export async function POST(request: Request) {
   try {
     const result = await runStrategistOrchestrator({ purpose, limit });
     const { markdown } = buildStrategistContextPackage(result);
+
+    try {
+      const { tenantId, actor } = auditActorFromRequest(request);
+      await recordAuditEvent({
+        tenantId,
+        actor,
+        action: 'document.export',
+        target: contextPackageAuditTarget(result),
+        result: 'success',
+      });
+    } catch (auditErr) {
+      console.error('[context-package] recordAuditEvent failed', auditErr);
+    }
 
     return NextResponse.json({
       purpose: result.purpose,
