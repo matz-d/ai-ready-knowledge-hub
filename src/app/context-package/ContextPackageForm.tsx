@@ -57,7 +57,8 @@ function downloadMarkdown(markdown: string, purpose: string) {
   a.href = url;
   a.download = `context-package_${slug}.md`;
   a.click();
-  URL.revokeObjectURL(url);
+  // 一部ブラウザで click() 直後に revoke すると download が取り消されることがあるため遅延する。
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 export function ContextPackageForm() {
@@ -302,7 +303,7 @@ export function ContextPackageForm() {
               </h2>
               <ul className="cp-text-list">
                 {result.missing.map((item, i) => (
-                  <li key={i}>{item}</li>
+                  <li key={`${i}-${item}`}>{item}</li>
                 ))}
               </ul>
             </section>
@@ -315,7 +316,7 @@ export function ContextPackageForm() {
               </h2>
               <ul className="cp-text-list">
                 {result.humanReviewQuestions.map((q, i) => (
-                  <li key={i}>{q}</li>
+                  <li key={`${i}-${q}`}>{q}</li>
                 ))}
               </ul>
             </section>

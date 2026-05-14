@@ -72,7 +72,15 @@
 - [x] Firestore ドキュメント作成確認
 - [x] knowledgeChunks 生成確認
 - [x] Purpose Query で到達確認
-- 備考: Google Docs live fixture で確認済み。`/api/import/google-sheets` は HTTP 200、docId `40a2a599-dad6-42d3-ae85-d252b835ae13`、fileName `BizFlow Phase 3-C-5 fixes review 2026-05-14.md`、contentType `text/markdown`、status `curated`。Firestore は `sourceKind: google_workspace`、`externalSource.workspaceMimeType: application/vnd.google-apps.document`。chunk は `40a2a599-dad6-42d3-ae85-d252b835ae13:text:paragraph` の 1 件。`POST /api/context-package` も HTTP 200、対象 Docs chunk は Included に出た（counts: included `1`, excluded `19`, safetyExcluded `0`）。未共有時は Drive 側 404 File not found により `drive_export_failed` になったため、サービスアカウント `aiknh-runner@ai-ready-knowledge-hub.iam.gserviceaccount.com` への reader 共有が必須。
+- 備考: Google Docs live fixture で確認済み
+  - `/api/import/google-sheets`: HTTP 200
+  - docId: `40a2a599-dad6-42d3-ae85-d252b835ae13`
+  - fileName: `BizFlow Phase 3-C-5 fixes review 2026-05-14.md`
+  - contentType: `text/markdown`、status: `curated`
+  - Firestore: `sourceKind: google_workspace`、`externalSource.workspaceMimeType: application/vnd.google-apps.document`
+  - chunk: `40a2a599-dad6-42d3-ae85-d252b835ae13:text:paragraph` の 1 件
+  - `POST /api/context-package`: HTTP 200、対象 Docs chunk は Included に出た（counts: included `1`, excluded `19`, safetyExcluded `0`）
+  - 未共有時は Drive 側 404 File not found により `drive_export_failed` になったため、サービスアカウント `aiknh-runner@ai-ready-knowledge-hub.iam.gserviceaccount.com` への reader 共有が必須
 
 ---
 

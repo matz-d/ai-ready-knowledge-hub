@@ -35,6 +35,9 @@ const CURATOR_FAILURE_CLIENT_MESSAGE =
 const MASKER_FAILURE_CLIENT_MESSAGE =
   'マスク処理に失敗しました。設定またはログを確認してください。';
 
+const CHUNK_GENERATION_FAILURE_CLIENT_MESSAGE =
+  'チャンク生成に失敗しました。設定またはログを確認してください。';
+
 /** Whole mebibytes for client-facing copy (limit is defined in binary units). */
 function formatBytesAsMB(bytes: number): string {
   return `${Math.floor(bytes / (1024 * 1024))} MB`;
@@ -163,7 +166,7 @@ export async function POST(request: Request) {
     } catch (chunkError) {
       console.error('[documents] chunk generation failed', chunkError);
       return NextResponse.json(
-        { error: 'chunk_generation_failed', docId: result.docId },
+        { error: CHUNK_GENERATION_FAILURE_CLIENT_MESSAGE, docId: result.docId },
         { status: 500 }
       );
     }

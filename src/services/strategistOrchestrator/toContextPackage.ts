@@ -34,13 +34,22 @@ function chunkRequiresMasking(chunk: KnowledgeChunk): boolean {
   return chunk.aiUsePolicy === 'requires_masking';
 }
 
+/**
+ * Defense-in-depth: `requires_masking` の chunk は safety gate が
+ * `masking_required_unavailable` で必ず除外するため、ここに到達した時点で
+ * `maskedText` は実質的に存在する想定。万一 maskedText が無い chunk が
+ * included に流れてきた場合、unmasked text を露出させないために throw する。
+ */
 function includedBodyForChunk(chunk: KnowledgeChunk): string {
   if (chunkRequiresMasking(chunk)) {
     const masked = chunk.maskedText?.trim();
     if (masked) {
       return masked;
     }
-    return chunk.text.trim();
+    throw new Error(
+      `Chunk ${chunk.docId}/${chunk.id} requires masking but maskedText is unavailable. ` +
+        `Safety gate should have excluded this chunk.`,
+    );
   }
   return chunk.text.trim();
 }

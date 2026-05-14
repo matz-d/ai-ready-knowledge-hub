@@ -140,26 +140,22 @@ describe('buildStrategistContextPackage', () => {
     expect(input.includedDocuments[0]?.aiSafeViaMasking).toBe(true);
   });
 
-  it('when requires_masking but maskedText is empty, falls back to text and does not mark aiSafeViaMasking', () => {
+  it('throws when requires_masking chunk reaches included without maskedText (defense-in-depth; safety gate should have excluded)', () => {
     const chunk = baseChunk({
-      id: 'fallback',
+      id: 'no-mask',
       aiUsePolicy: 'requires_masking',
       sensitivity: 'Confidential',
-      text: 'fallback plain',
+      text: 'DO_NOT_LEAK_RAW_BODY',
       maskedText: '   ',
     });
 
-    const { input, markdown } = buildStrategistContextPackage(
-      minimalResult({
-        included: [selection(chunk, 'no mask yet')],
-      }),
-    );
-
-    expect(input.includedDocuments[0]?.aiSafeContent).toBe('fallback plain');
-    expect(input.includedDocuments[0]?.aiSafeViaMasking).toBe(false);
-
-    const fullIdx = markdown.indexOf('# Full AI-Ready Sources');
-    expect(markdown.slice(fullIdx)).toContain('fallback plain');
+    expect(() =>
+      buildStrategistContextPackage(
+        minimalResult({
+          included: [selection(chunk, 'should never reach here')],
+        }),
+      ),
+    ).toThrow(/requires masking but maskedText is unavailable/);
   });
 
   it('maps strategist excluded chunks to excludedDocuments and lists them in markdown', () => {

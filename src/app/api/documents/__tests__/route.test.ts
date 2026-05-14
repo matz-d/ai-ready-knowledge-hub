@@ -588,7 +588,7 @@ describe('POST /api/documents', () => {
 
     expect(response.status).toBe(500);
     await expect(parseJson(response)).resolves.toEqual({
-      error: 'chunk_generation_failed',
+      error: 'チャンク生成に失敗しました。設定またはログを確認してください。',
       docId: 'doc-1',
     });
     expect(orchestrateUploadProcessingMock).toHaveBeenCalledTimes(1);
