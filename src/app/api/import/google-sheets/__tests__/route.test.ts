@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   orchestrateImportedSnapshotProcessingMock,
+  orchestrateImportedDocsSnapshotProcessingMock,
   getServiceAccountEmailMock,
   invalidGoogleSheetsInputErrorClass,
   googleSheetShareErrorClass,
@@ -76,6 +77,7 @@ const {
 
   return {
     orchestrateImportedSnapshotProcessingMock: vi.fn(),
+    orchestrateImportedDocsSnapshotProcessingMock: vi.fn(),
     getServiceAccountEmailMock: vi.fn(),
     invalidGoogleSheetsInputErrorClass: InvalidGoogleSheetsInputErrorMock,
     googleSheetShareErrorClass: GoogleSheetShareErrorMock,
@@ -94,6 +96,8 @@ vi.mock('../../../../../agents/_shared/genkitClient', () => ({
 
 vi.mock('../../../../../lib/importedSnapshotOrchestrator', () => ({
   orchestrateImportedSnapshotProcessing: orchestrateImportedSnapshotProcessingMock,
+  orchestrateImportedDocsSnapshotProcessing:
+    orchestrateImportedDocsSnapshotProcessingMock,
   ImportTooLargeError: importTooLargeErrorClass,
   GcsUploadError: gcsUploadErrorClass,
 }));
@@ -114,6 +118,7 @@ vi.mock('../../../../../lib/uploadOrchestrator', () => ({
   MaskerPhaseError: maskerPhaseErrorClass,
 }));
 
+import { InvalidGoogleDocsInputError } from '../../../../../lib/googleDocsSnapshotImporter';
 import { POST } from '../route';
 
 function buildRequest(body: unknown): Request {
@@ -141,6 +146,24 @@ beforeEach(() => {
   getServiceAccountEmailMock.mockResolvedValue(
     'importer-sa@example.iam.gserviceaccount.com'
   );
+  orchestrateImportedDocsSnapshotProcessingMock.mockResolvedValue({
+    kind: 'curated',
+    docId: 'doc-docs',
+    storagePath: 'raw/doc-docs/Notes.md',
+    fileName: 'Notes.md',
+    ingestKind: 'created',
+    curator: {
+      documentType: 'メモ',
+      businessDomain: '一般',
+      sensitivity: 'Internal',
+      freshness: 'current',
+      isAuthoritativeCandidate: false,
+      aiUsePolicy: 'direct',
+      rationale: 'direct',
+    },
+    curatorCompletedAt: new Date('2026-05-12T00:00:00.000Z'),
+    snapshotByteSize: 512,
+  });
   orchestrateImportedSnapshotProcessingMock.mockResolvedValue({
     kind: 'curated',
     docId: 'doc-1',
@@ -162,6 +185,58 @@ beforeEach(() => {
 });
 
 describe('POST /api/import/google-sheets', () => {
+  it('routes Google Docs document URLs to the Docs orchestrator', async () => {
+    const docsUrl =
+      'https://docs.google.com/document/d/1abc12345678901234567/edit';
+
+    const response = await POST(buildRequest({ urlOrFileId: docsUrl }));
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(200);
+    expect(orchestrateImportedDocsSnapshotProcessingMock).toHaveBeenCalledWith({
+      urlOrFileId: docsUrl,
+      displayName: undefined,
+    });
+    expect(orchestrateImportedSnapshotProcessingMock).not.toHaveBeenCalled();
+    expect(body).toEqual(
+      expect.objectContaining({
+        docId: 'doc-docs',
+        fileName: 'Notes.md',
+        contentType: 'text/markdown',
+        byteSize: 512,
+      })
+    );
+  });
+
+  it('routes Google Sheets spreadsheet URLs to the Sheets orchestrator', async () => {
+    const sheetsUrl =
+      'https://docs.google.com/spreadsheets/d/1abc12345678901234567/edit';
+
+    const response = await POST(buildRequest({ urlOrFileId: sheetsUrl }));
+    await parseJson(response);
+
+    expect(response.status).toBe(200);
+    expect(orchestrateImportedSnapshotProcessingMock).toHaveBeenCalledWith({
+      urlOrFileId: sheetsUrl,
+      displayName: undefined,
+    });
+    expect(orchestrateImportedDocsSnapshotProcessingMock).not.toHaveBeenCalled();
+  });
+
+  it('routes bare file IDs to the Sheets orchestrator', async () => {
+    const fileId = 'sheet-file-id-1234567890123';
+
+    const response = await POST(buildRequest({ urlOrFileId: fileId }));
+    await parseJson(response);
+
+    expect(response.status).toBe(200);
+    expect(orchestrateImportedSnapshotProcessingMock).toHaveBeenCalledWith({
+      urlOrFileId: fileId,
+      displayName: undefined,
+    });
+    expect(orchestrateImportedDocsSnapshotProcessingMock).not.toHaveBeenCalled();
+  });
+
   it('returns documents-route-compatible success body', async () => {
     const response = await POST(
       buildRequest({
@@ -379,7 +454,7 @@ describe('POST /api/import/google-sheets', () => {
     });
   });
 
-  it('returns 415 not_a_spreadsheet on unsupported mime type', async () => {
+  it('returns 415 unsupported_mime_type on unsupported mime type', async () => {
     orchestrateImportedSnapshotProcessingMock.mockRejectedValue(
       new unsupportedMimeTypeErrorClass('application/pdf')
     );
@@ -390,7 +465,61 @@ describe('POST /api/import/google-sheets', () => {
 
     expect(response.status).toBe(415);
     await expect(parseJson(response)).resolves.toEqual({
-      error: 'not_a_spreadsheet',
+      error: 'unsupported_mime_type',
+    });
+  });
+
+  it('returns 400 invalid_docs_url when Docs orchestration throws InvalidGoogleDocsInputError', async () => {
+    orchestrateImportedDocsSnapshotProcessingMock.mockRejectedValue(
+      new InvalidGoogleDocsInputError()
+    );
+
+    const response = await POST(
+      buildRequest({
+        urlOrFileId:
+          'https://docs.google.com/document/d/short-id/edit',
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'invalid_docs_url',
+    });
+  });
+
+  it('returns 415 unsupported_mime_type from Docs orchestration path', async () => {
+    orchestrateImportedDocsSnapshotProcessingMock.mockRejectedValue(
+      new unsupportedMimeTypeErrorClass('application/vnd.google-apps.spreadsheet')
+    );
+
+    const response = await POST(
+      buildRequest({
+        urlOrFileId:
+          'https://docs.google.com/document/d/1abc12345678901234567/edit',
+      })
+    );
+
+    expect(response.status).toBe(415);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'unsupported_mime_type',
+    });
+  });
+
+  it('returns 502 drive_export_failed from Docs orchestration path', async () => {
+    orchestrateImportedDocsSnapshotProcessingMock.mockRejectedValue(
+      new driveExportErrorClass()
+    );
+
+    const response = await POST(
+      buildRequest({
+        urlOrFileId:
+          'https://docs.google.com/document/d/1abc12345678901234567/edit',
+      })
+    );
+
+    expect(response.status).toBe(502);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'drive_export_failed',
     });
   });
 

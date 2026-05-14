@@ -44,6 +44,7 @@ export type KnowledgeChunkLocator = z.infer<typeof KnowledgeChunkLocatorSchema>;
 const ExtractionProviderSchema = z.enum([
   'csv',
   'xlsx',
+  'text',
   'pdf',
   'slides',
   'image',

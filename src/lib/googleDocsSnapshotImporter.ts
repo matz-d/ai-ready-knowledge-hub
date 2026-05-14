@@ -5,6 +5,12 @@ import {
   UnsupportedMimeTypeError,
   exportDataToBuffer,
 } from './googleSheetsSnapshotImporter';
+
+export {
+  DriveExportError,
+  GoogleSheetShareError,
+  UnsupportedMimeTypeError,
+} from './googleSheetsSnapshotImporter';
 import type { WorkspaceImportAdapter } from './workspaceImport/types';
 
 export const GOOGLE_DOCS_MIME_TYPE = 'application/vnd.google-apps.document';

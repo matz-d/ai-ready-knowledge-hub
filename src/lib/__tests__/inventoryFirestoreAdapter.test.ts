@@ -266,7 +266,8 @@ describe('adaptFirestoreDocumentToInventory', () => {
     );
   });
 
-  it('throws parse error for schemaVersion 1 raw Firestore documents', async () => {
+  it('skips schemaVersion 1 raw Firestore documents and logs a warning', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const rawData = {
       ...buildDoc(),
       schemaVersion: 1,
@@ -286,7 +287,50 @@ describe('adaptFirestoreDocumentToInventory', () => {
       collection,
     } as unknown as ReturnType<typeof getFirestoreClient>);
 
-    await expect(listInventoryDocumentsFromFirestore()).rejects.toThrow();
+    await expect(listInventoryDocumentsFromFirestore()).resolves.toEqual([]);
     expect(collection).toHaveBeenCalledWith('documents');
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[inventoryFirestore] skipping malformed document',
+      expect.objectContaining({ docId: 'legacy-v1-doc' })
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('returns only valid rows when one snapshot fails parse, and warns with docId', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const malformed = {
+      id: 'malformed-年末調整',
+      data: () => ({
+        fileName: '年末調整_案内文.txt',
+      }),
+    };
+    const validA = {
+      id: 'valid-a',
+      data: () => buildDoc({ fileName: 'good-a.txt', storagePath: 'raw/valid-a/good-a.txt' }),
+    };
+    const validB = {
+      id: 'valid-b',
+      data: () => buildDoc({ fileName: 'good-b.txt', storagePath: 'raw/valid-b/good-b.txt' }),
+    };
+    const get = vi.fn().mockResolvedValue({
+      docs: [malformed, validA, validB],
+    });
+    const limit = vi.fn(() => ({ get }));
+    const orderBy = vi.fn(() => ({ limit }));
+    const collection = vi.fn(() => ({ orderBy }));
+    vi.mocked(getFirestoreClient).mockReturnValue({
+      collection,
+    } as unknown as ReturnType<typeof getFirestoreClient>);
+
+    const rows = await listInventoryDocumentsFromFirestore();
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.id).sort()).toEqual(['valid-a', 'valid-b']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[inventoryFirestore] skipping malformed document',
+      expect.objectContaining({
+        docId: 'malformed-年末調整',
+      })
+    );
+    warnSpy.mockRestore();
   });
 });

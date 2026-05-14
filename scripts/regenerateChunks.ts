@@ -22,6 +22,9 @@ function parseCliArgs(argv: string[]): CliArgs {
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
+    if (arg === '--') {
+      continue;
+    }
     if (arg === '--dry-run') {
       dryRun = true;
       continue;

@@ -20,6 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <nav className="site-header__nav" aria-label="主要ナビゲーション">
               <Link href="/upload">アップロード</Link>
               <Link href="/import/google-sheets">Google Sheets 取り込み</Link>
+              <Link href="/context-package">Context Package</Link>
             </nav>
           </div>
         </header>

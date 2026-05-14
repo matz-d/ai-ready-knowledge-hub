@@ -8,6 +8,7 @@ import type { MaskingProvider } from '../agents/masker/maskingSchema';
 import { resolveMaskingProvider } from '../agents/masker/provider';
 import { DOCUMENTS_COLLECTION } from './documents';
 import { extractCsv } from './extractors/csvExtractor';
+import { extractPlainTextDocument } from './extractors/plainTextExtractor';
 import { extractXlsx } from './extractors/xlsxExtractor';
 import { getFirestoreClient } from './firestore';
 import type { FirestoreDocumentStatus } from './firestoreSchema';
@@ -30,9 +31,9 @@ const CHUNKS_SUBCOLLECTION = 'chunks';
 const FIRESTORE_BATCH_LIMIT = 500;
 
 type ExtractorResult = {
-  extractorName: 'csv' | 'xlsx';
+  extractorName: 'csv' | 'xlsx' | 'text';
   extractorInput: string;
-  chunks: ReturnType<typeof extractCsv>['chunks'];
+  chunks: KnowledgeChunk[];
 };
 
 type StoredChunkSnapshot = {
@@ -46,7 +47,7 @@ export type RegenerateChunksOptions = {
 };
 
 export type RegenerateChunksResult = {
-  extractorName: 'csv' | 'xlsx';
+  extractorName: 'csv' | 'xlsx' | 'text';
   maskedChunkCount: number;
   maskingProvider: MaskingProvider;
 };
@@ -97,7 +98,7 @@ async function loadDocument(docId: string): Promise<{
   return { inventoryDocument, status: firestoreDocument.status };
 }
 
-async function extractChunks(args: {
+export async function extractChunks(args: {
   docId: string;
   fileName: string;
   content: Buffer;
@@ -145,6 +146,30 @@ async function extractChunks(args: {
     return {
       extractorName: 'xlsx',
       extractorInput: args.content.toString('base64'),
+      chunks: extracted.chunks,
+    };
+  }
+
+  if (extension === '.txt' || extension === '.md') {
+    let text: string;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(args.content);
+    } catch (cause: unknown) {
+      throw new Error(
+        'Plain-text object bytes are not valid UTF-8. Re-save the file as UTF-8 or remove invalid sequences.',
+        { cause }
+      );
+    }
+    const extracted = extractPlainTextDocument({
+      docId: args.docId,
+      fileName: args.fileName,
+      content: text,
+      documentSensitivity: args.documentSensitivity,
+      documentAiUsePolicy: args.documentAiUsePolicy,
+    });
+    return {
+      extractorName: 'text',
+      extractorInput: text,
       chunks: extracted.chunks,
     };
   }

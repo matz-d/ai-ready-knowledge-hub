@@ -1,20 +1,24 @@
 /**
- * `POST /api/import/google-sheets` — Google Sheets URL / fileId から Drive export 経由で取り込む。
+ * `POST /api/import/google-sheets` — Google Sheets URL / fileId、または Google Docs の
+ * `docs.google.com/document/d/…` URL から Drive export 経由で取り込む。
  */
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { modelId } from '../../../../agents/_shared/genkitClient';
 import { documentUploadSuccessBodyFromOrchestrate } from '../../../../lib/documentUploadResponseMapper';
+import { InvalidGoogleSheetsInputError } from '../../../../lib/googleSheetsSnapshotImporter';
 import {
   DriveExportError,
   GoogleSheetShareError,
-  InvalidGoogleSheetsInputError,
+  InvalidGoogleDocsInputError,
+  MARKDOWN_EXPORT_MIME_TYPE,
   UnsupportedMimeTypeError,
-} from '../../../../lib/googleSheetsSnapshotImporter';
+} from '../../../../lib/googleDocsSnapshotImporter';
 import { getServiceAccountEmail } from '../../../../lib/googleWorkspaceClient';
 import {
   GcsUploadError,
   ImportTooLargeError,
+  orchestrateImportedDocsSnapshotProcessing,
   orchestrateImportedSnapshotProcessing,
 } from '../../../../lib/importedSnapshotOrchestrator';
 import {
@@ -83,6 +87,10 @@ function isLikelyDriveError(err: unknown): boolean {
   );
 }
 
+function shouldUseGoogleDocsImporter(urlOrFileId: string): boolean {
+  return /docs\.google\.com\/document\/d\//i.test(urlOrFileId.trim());
+}
+
 export async function POST(request: Request) {
   let rawBody: unknown;
   try {
@@ -106,17 +114,24 @@ export async function POST(request: Request) {
   }
 
   const { urlOrFileId, displayName } = parsed.data;
+  const useGoogleDocsImporter = shouldUseGoogleDocsImporter(urlOrFileId);
 
   try {
-    const result = await orchestrateImportedSnapshotProcessing({
-      urlOrFileId,
-      displayName,
-    });
+    const result = useGoogleDocsImporter
+      ? await orchestrateImportedDocsSnapshotProcessing({
+          urlOrFileId,
+          displayName,
+        })
+      : await orchestrateImportedSnapshotProcessing({
+          urlOrFileId,
+          displayName,
+        });
 
     const body = documentUploadSuccessBodyFromOrchestrate({
       displayName: result.fileName,
-      contentType:
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      contentType: useGoogleDocsImporter
+        ? MARKDOWN_EXPORT_MIME_TYPE
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       byteSize: result.snapshotByteSize,
       modelId,
       result,
@@ -132,6 +147,10 @@ export async function POST(request: Request) {
 
     if (e instanceof InvalidGoogleSheetsInputError) {
       return NextResponse.json({ error: 'invalid_url' }, { status: 400 });
+    }
+
+    if (e instanceof InvalidGoogleDocsInputError) {
+      return NextResponse.json({ error: 'invalid_docs_url' }, { status: 400 });
     }
 
     if (e instanceof GoogleSheetShareError) {
@@ -157,7 +176,10 @@ export async function POST(request: Request) {
     }
 
     if (e instanceof UnsupportedMimeTypeError) {
-      return NextResponse.json({ error: 'not_a_spreadsheet' }, { status: 415 });
+      return NextResponse.json(
+        { error: 'unsupported_mime_type' },
+        { status: 415 }
+      );
     }
 
     if (e instanceof CuratorPhaseError) {

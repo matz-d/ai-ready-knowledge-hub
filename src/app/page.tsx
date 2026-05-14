@@ -196,6 +196,9 @@ export default async function Home() {
           <p className="home-upload-cta">
             <Link href="/upload">文書をアップロードして分類（Walking Skeleton）</Link>
           </p>
+          <p className="home-upload-cta">
+            <Link href="/context-package">Context Package を生成する →</Link>
+          </p>
         </div>
         <div className="status-panel" aria-label="実装ステータス">
           <span>Current build</span>

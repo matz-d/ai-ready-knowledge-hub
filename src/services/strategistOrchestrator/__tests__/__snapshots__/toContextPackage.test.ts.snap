@@ -1,0 +1,51 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildStrategistContextPackage > matches markdown snapshot for a stable strategist-shaped payload 1`] = `
+"# AI-Ready Context Package
+
+## Package Manifest
+
+- Purpose: demo purpose
+- Generated at: 2026-05-14T12:00:00.000Z
+- Source documents reviewed: 2
+- Included documents: 1
+- Excluded documents: 0
+- Human review required: 0
+
+## Instructions for Downstream AI
+
+Use only the included AI-ready sources below.
+Do not use excluded documents.
+Do not infer missing operational rules.
+If required information is missing, ask the human owner.
+
+## Included Documents
+
+- policy.xlsx
+  - Reason: rationale line
+  - Source type: 表
+  - Sensitivity: Internal
+
+## Excluded Documents
+
+- None
+
+## Missing Knowledge
+
+- gap
+
+## Questions for Human Owner
+
+1. confirm?
+
+---
+
+# Full AI-Ready Sources
+
+## Source: policy.xlsx
+
+\`\`\`text
+hello
+\`\`\`
+"
+`;

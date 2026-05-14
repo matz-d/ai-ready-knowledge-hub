@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 
 const {
   orchestrateUploadProcessingMock,
+  replaceChunksForDocMock,
   getKnowledgeHubBucketNameMock,
   curatorPhaseErrorClass,
   maskerPhaseErrorClass,
@@ -27,6 +28,7 @@ const {
 
   return {
     orchestrateUploadProcessingMock: vi.fn(),
+    replaceChunksForDocMock: vi.fn(),
     getKnowledgeHubBucketNameMock: vi.fn(),
     curatorPhaseErrorClass: CuratorPhaseErrorMock,
     maskerPhaseErrorClass: MaskerPhaseErrorMock,
@@ -45,6 +47,10 @@ vi.mock('../../../../lib/uploadOrchestrator', () => ({
   orchestrateUploadProcessing: orchestrateUploadProcessingMock,
   CuratorPhaseError: curatorPhaseErrorClass,
   MaskerPhaseError: maskerPhaseErrorClass,
+}));
+
+vi.mock('../../../../lib/chunkRegenerator', () => ({
+  replaceChunksForDoc: replaceChunksForDocMock,
 }));
 
 import { POST } from '../route';
@@ -82,6 +88,7 @@ async function parseJson(response: Response): Promise<Record<string, unknown>> {
 beforeEach(() => {
   vi.clearAllMocks();
   getKnowledgeHubBucketNameMock.mockReturnValue('bucket-1');
+  replaceChunksForDocMock.mockResolvedValue(undefined);
   orchestrateUploadProcessingMock.mockResolvedValue({
     kind: 'curated',
     docId: 'doc-1',
@@ -123,6 +130,52 @@ describe('POST /api/documents', () => {
     );
     expect(body).not.toHaveProperty('masker');
     expect(body).not.toHaveProperty('aiSafeStoragePath');
+    expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-1');
+    expect(
+      orchestrateUploadProcessingMock.mock.invocationCallOrder[0]
+    ).toBeLessThan(replaceChunksForDocMock.mock.invocationCallOrder[0]);
+  });
+
+  it('generates chunks after .csv upload and returns curated document', async () => {
+    const file = new File(['name,amount\nAcme,10\n'], 'sample.csv', {
+      type: 'text/csv',
+    });
+
+    const response = await POST(buildRequestWithFile(file));
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual(
+      expect.objectContaining({
+        docId: 'doc-1',
+        status: 'curated',
+        kind: 'created',
+      })
+    );
+    expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-1');
+    expect(
+      orchestrateUploadProcessingMock.mock.invocationCallOrder[0]
+    ).toBeLessThan(replaceChunksForDocMock.mock.invocationCallOrder[0]);
+  });
+
+  it('generates chunks after .txt upload', async () => {
+    const file = new File(['plain memo'], 'memo.txt', { type: 'text/plain' });
+
+    const response = await POST(buildRequestWithFile(file));
+
+    expect(response.status).toBe(200);
+    expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-1');
+  });
+
+  it('generates chunks after .md upload', async () => {
+    const file = new File(['# Runbook\n\n- check stock'], 'runbook.md', {
+      type: 'text/markdown',
+    });
+
+    const response = await POST(buildRequestWithFile(file));
+
+    expect(response.status).toBe(200);
+    expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-1');
   });
 
   it('fills contentType from extension when MIME type is empty', async () => {
@@ -179,6 +232,7 @@ describe('POST /api/documents', () => {
     expect(Buffer.compare(uploadInput.buffer, workbookBuffer)).toBe(0);
     expect(uploadInput.content).toContain('| 顧客名 | 数量 |');
     expect(uploadInput.content).toContain('| Acme | 10 |');
+    expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-1');
   });
 
   it('fills .xlsx contentType from extension when MIME type is empty', async () => {
@@ -524,6 +578,21 @@ describe('POST /api/documents', () => {
         error: 'アップロード処理に失敗しました。',
       })
     );
+  });
+
+  it('returns 500 chunk_generation_failed when chunk generation fails', async () => {
+    replaceChunksForDocMock.mockRejectedValue(new Error('chunk replace failed'));
+    const file = new File(['hello'], 'sample.txt', { type: 'text/plain' });
+
+    const response = await POST(buildRequestWithFile(file));
+
+    expect(response.status).toBe(500);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'chunk_generation_failed',
+      docId: 'doc-1',
+    });
+    expect(orchestrateUploadProcessingMock).toHaveBeenCalledTimes(1);
+    expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-1');
   });
 
   it('returns 500 with docId for curator phase failure', async () => {

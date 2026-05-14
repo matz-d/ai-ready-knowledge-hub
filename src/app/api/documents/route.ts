@@ -5,6 +5,7 @@
  * - サイズ / 拡張子 / MIME / UTF-8 または XLSX 解析 / バケット設定（`getKnowledgeHubBucketName()`）検証
  * - `orchestrateUploadProcessing` への委譲（GCS / Firestore / Curator / Masker の副作用順序は
  *   `src/lib/uploadOrchestrator.ts` 側の単一責務）
+ * - upload 完了後の `documents/{docId}/chunks` 同期生成
  * - 成功・失敗レスポンスの整形（Curator/Masker 段の失敗は `docId` 付き 500、その他基盤は 502）
  */
 import { NextResponse } from 'next/server';
@@ -23,6 +24,7 @@ import {
 } from '../../../lib/documents';
 import { documentUploadSuccessBodyFromOrchestrate } from '../../../lib/documentUploadResponseMapper';
 import { xlsxToNormalizedMarkdown } from '../../../lib/extractors/xlsxExtractor';
+import { replaceChunksForDoc } from '../../../lib/chunkRegenerator';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -155,6 +157,16 @@ export async function POST(request: Request) {
       buffer,
       content,
     });
+
+    try {
+      await replaceChunksForDoc(result.docId);
+    } catch (chunkError) {
+      console.error('[documents] chunk generation failed', chunkError);
+      return NextResponse.json(
+        { error: 'chunk_generation_failed', docId: result.docId },
+        { status: 500 }
+      );
+    }
 
     const body = documentUploadSuccessBodyFromOrchestrate({
       displayName,

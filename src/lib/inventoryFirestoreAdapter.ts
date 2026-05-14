@@ -134,11 +134,34 @@ export async function listInventoryDocumentsFromFirestore(
     .get();
 
   return snapshot.docs.flatMap((docSnapshot) => {
-    const parsed = parseFirestoreDocumentSnapshot(docSnapshot);
-    const row = adaptFirestoreDocumentToInventory(
-      docSnapshot.id,
-      parsed
-    );
-    return row ? [row] : [];
+    try {
+      const parsed = parseFirestoreDocumentSnapshot(docSnapshot);
+      const row = adaptFirestoreDocumentToInventory(docSnapshot.id, parsed);
+      return row ? [row] : [];
+    } catch (error: unknown) {
+      const isZodError =
+        error instanceof Error &&
+        error.name === 'ZodError' &&
+        'issues' in error &&
+        Array.isArray((error as { issues: unknown[] }).issues);
+      if (isZodError) {
+        const zodError = error as { name: string; issues: Array<{ path: unknown[]; message: string }> };
+        const firstIssue = zodError.issues[0];
+        console.warn('[inventoryFirestore] skipping malformed document', {
+          docId: docSnapshot.id,
+          errorName: zodError.name,
+          issueCount: zodError.issues.length,
+          firstIssuePath: firstIssue?.path,
+          firstIssueMessage: firstIssue?.message,
+        });
+      } else {
+        console.warn('[inventoryFirestore] skipping malformed document', {
+          docId: docSnapshot.id,
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return [];
+    }
   });
 }
