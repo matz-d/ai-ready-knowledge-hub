@@ -79,23 +79,35 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 
 ---
 
-### Week 2 以降 (5/12-7/10) — 仮置き、要再調整
+### Week 2 以降 (5/12-) — 2026-05-14 時点の実績・見通し
 
-Week 1 を「技術リスク検証」に絞ったため、Walking Skeleton の構築は Week 2 に移動。下記は元の仮置きで、**Week 1 終了時 (5/11) に再調整する**。
+**2026-05-14 更新**: Phase 3-C（App Loop Foundation）が Week 2 初週で完了。以下を達成済み。
 
-| 週 | 期間 | マイルストーン (仮置き) |
+| Phase | 完了日 | 内容 |
 |---|---|---|
-| Week 2 | 5/12-5/18 | Task1/2/3 接続、Inventory 実 Firestore UI、Purpose Query の入口 |
-| Week 3 | 5/19-5/25 | Masker + Cloud DLP 統合、A8 逆feedback を実データに繋ぎ込み |
-| Week 4 | 5/26-6/1 | Strategist + Interviewer 実装、A9 を実Context Packageに繋ぎ込み |
-| Week 5 | 6/2-6/8 | Knowledge Inventory UI、Purpose Query UI |
-| Week 6 | 6/9-6/15 | Curator評価パイプライン、サンプルデータ整備 |
-| Week 7 | 6/16-6/22 | デモ動画撮影・編集、Proto Pedia登録 |
-| Week 8 | 6/23-6/29 | 磨き込み、UIブラッシュアップ |
-| Week 9 | 6/30-7/6 | バグ修正、ドキュメント整備 |
-| Week 10 | 7/7-7/10 | 最終調整、提出 |
+| Phase 3-A | 5/10 以前 | Google Sheets Snapshot Import |
+| Phase 3-B | 5/13 | Workspace resync・schemaVersion 2・鮮度バッジ |
+| Phase 3-C | 5/14 | Purpose → Strategist → Context Package アプリ一巡 |
 
-**次のアクション:** Week 1 終了時 (5/11) に Week 2 以降を再調整。
+**Phase 3-C 達成内容（2026-05-14）:**
+- 3-C-1: `strategistFlow` 固定 + `pnpm strategist` smoke script
+- 3-C-2: `StrategistOrchestrator` service 層（Firestore + safety gate + Strategist、stub DI 対応）
+- 3-C-3: `buildStrategistContextPackage()` — StrategistOrchestratorResult → ContextPackageExportInput + markdown
+- 3-C-4: `POST /api/context-package` 同期 API
+- 3-C-5: `/context-package` UI + source coverage 全 source 確認済み（upload `.txt` / `.md` / `.csv` / `.xlsx` + Google Sheets + Google Docs）
+- Phase 3-C-5 バグ修正 6 件（malformed doc skip、txt/md chunk 生成、upload 後 auto-chunk、Docs route 分岐、Docs error mapping、backfill usage）
+- CodeRabbit review: 5 件 apply / 11 件 skip（[docs/decisions.md D-P3-C](decisions.md) に根拠記録）
+
+**次フェーズ（未確定）:**
+
+| 候補 | 内容 | 優先度 |
+|---|---|---|
+| Phase 3-D | Cloud IAP + CI/CD（GitHub Actions → Cloud Run）| 採点軸「まわす」「とどける」 |
+| Phase 3-E | Cloud DLP 本格統合（W3 予定だったもの）| 技術的深度 |
+| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | 発表準備 |
+| Phase 3-G | AuditEvent collection | セキュリティ観点 |
+
+**次のアクション**: 次セッション開始時に Phase 3-D（CI/CD + IAP）の着手判断をする。
 
 ---
 

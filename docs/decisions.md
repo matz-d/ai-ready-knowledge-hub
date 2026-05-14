@@ -685,9 +685,62 @@ sample-data/
 
 ---
 
+---
+
+## D-P3-C: Phase 3-C App Loop 完了（2026-05-14）
+
+**決定**: Phase 3-C を「Purpose → Strategist → Context Package までアプリを一巡させる」フェーズとして完了した（認証・CI/CD・AuditEvent はスコープ外）。
+
+### 3-C で確定した設計採用判断
+
+**StrategistOrchestratorResult を C-4 API response の正本とする**
+- `src/services/strategistOrchestrator/types.ts` に `StrategistOrchestratorResult` を export し、API route は markdown と counts を足すだけにする。
+- 理由: service 層の型が API response の形状を決めることで、API route が薄くなり、service 層のテストが API 仕様のテストを兼ねる。
+
+**Safety gate の defense-in-depth: masking unavailable で throw**
+- `toContextPackage.ts` の `includedBodyForChunk()` は、`requires_masking` chunk に `maskedText` が無い場合、rawtext を fallback で出すのではなく `throw` する。
+- 理由: safety gate がすでに `masking_required_unavailable` で除外しているので通常到達不可。ただし safety gate のルールが変わった際に無音でPII を流すより、크래시して警報する方が安全。defense-in-depth として throw が正しい。
+- **代替案として検討したもの**: `[Content redacted]` placeholder への置換。採用しなかった理由は、「なぜ exclude されなかったか」の原因を隠すより、壊れた前提を loudly fail させた方が将来的な安全性が高い。
+
+**Malformed Inventory document は skip-and-warn、全体を落とさない**
+- `listInventoryDocumentsFromFirestore()` の flatMap 内で parse error を catch し、`console.warn` して skip。
+- 理由: legacy document 1件で全 Inventory（= Context Package）を落とすのは read path としての方針として誤り。修復不能な document は skip して観測可能にしておくのが正しい。
+
+**Upload 直後に chunk 自動生成（同期、失敗時 500）**
+- `POST /api/documents` の `orchestrateUploadProcessing` 完了直後に `replaceChunksForDoc` を同期で呼ぶ。失敗時は 500 で返す。
+- 理由: upload 成功なのに Purpose Query に出ない中途半端な状態を作らないことを優先（PoC 段階で「アプリ一巡」を DoD とするため）。warning-and-continue よりも fail-fast が体験として強い。
+
+**Google Docs import route: URL でルーティング分岐**
+- `POST /api/import/google-sheets` に Docs URL（`docs.google.com/document/d/`）判定を追加し、`orchestrateImportedDocsSnapshotProcessing` へ振り分ける。bare fileId は Sheets 扱いのまま（Drive metadata fetch コストを避ける）。
+- 理由: UI 文言がすでに Docs URL を案内しており、route behavior の不一致を解消する最小コストの実装として URL pattern マッチが適切。
+
+**ContextPackageExportInput を Strategist 経路でも流用**
+- 新しい export 型は作らず、既存 `ContextPackageExportInput` に map する。
+- `safetyExcluded` → `humanReviewDocuments`、`strategist.excluded` → `excludedDocuments`。
+- 理由: export ロジック（Markdown 生成）の正本を1本に保つ。Strategist 経路と全 chunk 経路の出力フォーマットを同一に保証できる。
+
+### コードレビュー（CodeRabbit）採用・不採用の記録（2026-05-14）
+
+**採用（5件）:**
+- React key: index → `${i}-${item}` 組み合わせ（`missing` / `humanReviewQuestions`）
+- `URL.revokeObjectURL` 前の `setTimeout(100)` 追加（download race 対策）
+- `chunk_generation_failed` → 日本語ユーザ文言定数に統一（ファイル内の他エラーと揃える）
+- `includedBodyForChunk` の masking fallback を throw に変更（上記 defense-in-depth と連動）
+- docs の 700文字超行を bullet 化（読みやすさ）
+
+**不採用（主な理由別）:**
+- **ハルシネーション**: `await runSafetyGate` 追加 → `runSafetyGate` は同期関数。CodeRabbit が実装を確認せずに推測して誤検知。
+- **誤検知**: `next-env.d.ts` 手動編集警告 → Next.js typed routes が自動生成する行であり手動編集ではない。
+- **デバッグ性の低下**: `console.error` でエラー全体を log しない → stack trace を捨てるとデバッグ困難になり、orchestrator error に PII が混入する具体的根拠もない。
+- **フェーズ範囲外**: skip 件数の metric/alert 追加 → Phase 3-C スコープ外（監視は後フェーズ）。
+- **スタイル / 波及大**: discriminated union（included/excluded 型分離）→ `reason?:` で意味的に分離されており、リファクタリングコストに対してメリットが小さい。
+
+---
+
 ## 関連ドキュメント
 
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
+- [docs/phase-3-c-5-source-coverage.md](phase-3-c-5-source-coverage.md) — Phase 3-C-5 source coverage 確認結果
 - [docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) — Phase 3-B（Drive 再取り込み・schemaVersion 2・鮮度バッジ・完了条件の正本）
 - [docs/concept.md](concept.md) — プロダクトコンセプト
 - [docs/architecture.md](architecture.md) — 技術構成
