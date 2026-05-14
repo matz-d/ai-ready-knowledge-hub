@@ -1,0 +1,149 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  IMAGE_NAME: ai-ready-knowledge-hub
+
+jobs:
+  ci:
+    name: Test, Typecheck, Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: ci
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_PROJECT_NUMBER: ${{ vars.GCP_PROJECT_NUMBER }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      ARTIFACT_REGISTRY_REPO: ${{ vars.ARTIFACT_REGISTRY_REPO }}
+      WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
+      DEPLOY_SERVICE_ACCOUNT: ${{ vars.DEPLOY_SERVICE_ACCOUNT }}
+      RUNTIME_SERVICE_ACCOUNT: ${{ vars.RUNTIME_SERVICE_ACCOUNT }}
+      KNOWLEDGE_HUB_BUCKET: ${{ vars.KNOWLEDGE_HUB_BUCKET }}
+      KNOWLEDGE_HUB_TENANT_ID: ${{ vars.KNOWLEDGE_HUB_TENANT_ID }}
+      IAP_JWT_AUDIENCE: ${{ vars.IAP_JWT_AUDIENCE }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy variables
+        shell: bash
+        run: |
+          required_vars=(
+            GCP_PROJECT_ID
+            GCP_PROJECT_NUMBER
+            GCP_REGION
+            CLOUD_RUN_SERVICE
+            ARTIFACT_REGISTRY_REPO
+            WIF_PROVIDER
+            DEPLOY_SERVICE_ACCOUNT
+            RUNTIME_SERVICE_ACCOUNT
+            KNOWLEDGE_HUB_BUCKET
+            IAP_JWT_AUDIENCE
+          )
+
+          for var_name in "${required_vars[@]}"; do
+            if [[ -z "${!var_name}" ]]; then
+              echo "Missing required GitHub Variable: ${var_name}" >&2
+              exit 1
+            fi
+          done
+
+          if [[ "${CLOUD_RUN_SERVICE}" != "ai-ready-knowledge-hub" ]]; then
+            echo "CLOUD_RUN_SERVICE must be ai-ready-knowledge-hub, got ${CLOUD_RUN_SERVICE}" >&2
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker asia-northeast1-docker.pkg.dev --quiet
+
+      - name: Build Docker image
+        id: image
+        shell: bash
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE="asia-northeast1-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REGISTRY_REPO}/${IMAGE_NAME}"
+
+          docker build \
+            -t "${IMAGE}:${SHORT_SHA}" \
+            -t "${IMAGE}:latest" \
+            .
+
+          echo "short_sha=${SHORT_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "image=${IMAGE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Push Docker image
+        run: |
+          docker push "${{ steps.image.outputs.image }}:${{ steps.image.outputs.short_sha }}"
+          docker push "${{ steps.image.outputs.image }}:latest"
+
+      - name: Deploy to Cloud Run
+        shell: bash
+        run: |
+          ENV_VARS="AUTH_MODE=iap,GOOGLE_CLOUD_PROJECT=${GCP_PROJECT_ID},KNOWLEDGE_HUB_BUCKET=${KNOWLEDGE_HUB_BUCKET},IAP_JWT_AUDIENCE=${IAP_JWT_AUDIENCE},MASKER_PROVIDER=simple-rule,FIRESTORE_PREFER_REST=true"
+
+          if [[ -n "${KNOWLEDGE_HUB_TENANT_ID}" ]]; then
+            ENV_VARS="${ENV_VARS},KNOWLEDGE_HUB_TENANT_ID=${KNOWLEDGE_HUB_TENANT_ID}"
+          fi
+
+          gcloud run deploy "${CLOUD_RUN_SERVICE}" \
+            --image="${{ steps.image.outputs.image }}:${{ steps.image.outputs.short_sha }}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --service-account="${RUNTIME_SERVICE_ACCOUNT}" \
+            --no-allow-unauthenticated \
+            --set-env-vars="${ENV_VARS}" \
+            --quiet
