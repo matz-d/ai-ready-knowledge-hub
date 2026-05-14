@@ -2,8 +2,11 @@
 export type {
   IncludedChunkRef,
   ExcludedChunkRef,
+  StrategistExclusionReason,
+  StrategistExcludedChunkRefCore,
   MissingInfo,
   HumanReviewQuestion,
+  StrategistOutputCore,
   StrategistChunkInput,
   StrategistParentInventoryMetadata,
   StrategistInput,

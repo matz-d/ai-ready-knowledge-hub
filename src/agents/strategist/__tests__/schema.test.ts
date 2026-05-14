@@ -8,7 +8,9 @@ import {
 import {
   StrategistChunkInputSchema,
   StrategistInputSchema,
+  StrategistOutputCoreSchema,
   StrategistOutputSchema,
+  strategistOutputUnknownChunkRefMessage,
 } from '../schema';
 
 const EXTRACTOR_INPUT = 'fixture-extractor-bytes';
@@ -154,5 +156,111 @@ describe('StrategistOutputSchema', () => {
       ],
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('StrategistOutputCoreSchema vs StrategistOutputSchema (safety_gate reasons)', () => {
+  const outputWithSafetyGateReason = {
+    included: [] as {
+      docId: string;
+      chunkId: string;
+      rationale: string;
+      confidence: number;
+    }[],
+    excluded: [
+      {
+        docId: 'd1',
+        chunkId: 'c1',
+        rationale: '構造上は旧 Core では safety_gate 理由も列挙値として通った。',
+        reason: 'restricted_sensitivity' as const,
+      },
+    ],
+    missing: [] as { topic: string; whyNeeded: string }[],
+    humanReviewQuestions: [] as { question: string }[],
+  };
+
+  it('StrategistOutputCoreSchema rejects safety_gate-origin reasons at parse time', () => {
+    const result = StrategistOutputCoreSchema.safeParse(outputWithSafetyGateReason);
+    expect(result.success).toBe(false);
+  });
+
+  it('StrategistOutputSchema rejects safety_gate-origin reasons (final contract)', () => {
+    const result = StrategistOutputSchema.safeParse(outputWithSafetyGateReason);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('strategistOutputUnknownChunkRefMessage', () => {
+  const parentD1 = { ...validParent, docId: 'd1' };
+
+  const strategistInput = StrategistInputSchema.parse({
+    purpose: 'fixture purpose',
+    chunkInputs: [
+      {
+        chunk: buildChunk({ id: 'c1', docId: 'd1' }),
+        parent: parentD1,
+      },
+    ],
+  });
+
+  const matchingOutput = StrategistOutputSchema.parse({
+    included: [
+      {
+        docId: 'd1',
+        chunkId: 'c1',
+        rationale: '「plain」と本文にあり Purpose に合う根拠となる。',
+        confidence: 0.9,
+      },
+    ],
+    excluded: [],
+    missing: [],
+    humanReviewQuestions: [
+      { question: 'この chunk の前提は正しいか？', relatedChunkIds: ['c1'] },
+    ],
+  });
+
+  it('returns undefined when included, excluded, and relatedChunkIds align with chunkInputs', () => {
+    expect(strategistOutputUnknownChunkRefMessage(strategistInput, matchingOutput)).toBeUndefined();
+  });
+
+  it('rejects included row whose docId+chunkId is not in chunkInputs', () => {
+    const bad = StrategistOutputSchema.parse({
+      ...matchingOutput,
+      included: [
+        {
+          docId: 'phantom-doc',
+          chunkId: 'c1',
+          rationale: '「plain」と本文にあり Purpose に合う根拠となる。',
+          confidence: 0.9,
+        },
+      ],
+    });
+    expect(strategistOutputUnknownChunkRefMessage(strategistInput, bad)).toMatch(/included\[0\]/);
+  });
+
+  it('rejects excluded row whose docId+chunkId is not in chunkInputs', () => {
+    const bad = StrategistOutputSchema.parse({
+      ...matchingOutput,
+      included: [],
+      excluded: [
+        {
+          docId: 'd1',
+          chunkId: 'ghost-chunk',
+          rationale: '除外根拠。',
+          reason: 'purpose_mismatch',
+        },
+      ],
+    });
+    expect(strategistOutputUnknownChunkRefMessage(strategistInput, bad)).toMatch(/excluded\[0\]/);
+  });
+
+  it('rejects humanReviewQuestions.relatedChunkIds not in input chunk ids', () => {
+    const bad = StrategistOutputSchema.parse({
+      ...matchingOutput,
+      humanReviewQuestions: [{ question: 'q', relatedChunkIds: ['not-a-chunk'] }],
+    });
+    expect(strategistOutputUnknownChunkRefMessage(strategistInput, bad)).toMatch(
+      /humanReviewQuestions\[0\]\.relatedChunkIds\[0\]/,
+    );
   });
 });

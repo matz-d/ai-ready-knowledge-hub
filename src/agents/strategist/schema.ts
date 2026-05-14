@@ -26,10 +26,10 @@ import { KnowledgeChunkSchema } from '../../lib/knowledgeChunkSchema';
  *      - missing info
  *      - human review questions
  *      ↓
- *   StrategistOutput (このスキーマ)
- *      - excluded には safety_gate と strategist の両方の理由が混在
- *      - prompt 側で「safety_gate が除外した chunk は Strategist が覆してはいけない」
- *        と明記する
+ *   StrategistOutput (このスキーマの final 層)
+ *      - `excluded` は strategist-origin の除外理由のみ（LLM が safety_gate 系を返してはいけない）
+ *      - safety_gate で落とした excluded 行は orchestrator が後段で Strategist 出力とマージする
+ *      - prompt 側で「safety_gate が除外した chunk は Strategist が覆してはいけない」と明記する
  *
  * 出力4ブロック (CLAUDE.md の製品コンセプトに対応):
  *   1. included            — このPurposeに「使える」chunk
@@ -119,38 +119,64 @@ export const StrategistAllowedExclusionReasons = (
 
 /** 個別 chunk への参照（include/exclude 共通） */
 const ChunkRefBaseSchema = z.object({
-  docId: z.string().min(1),
-  chunkId: z.string().min(1),
-  /** AIの判断根拠（自由記述、prompt が必ず埋める） */
-  rationale: z.string().min(1).max(400),
+  docId: z.string().min(1).describe('Knowledge Inventory のドキュメント ID'),
+  chunkId: z.string().min(1).describe('チャンク識別子'),
+  rationale: z
+    .string()
+    .min(1)
+    .max(400)
+    .describe('AI の判断根拠（自由記述、prompt が必ず埋める）'),
 });
 
 /** 採用された chunk */
 export const IncludedChunkRefSchema = ChunkRefBaseSchema.extend({
-  /** 0.0〜1.0: AIが「このPurposeに本当に使えるか」の自信度 */
-  confidence: z.number().min(0).max(1),
+  confidence: z
+    .number()
+    .min(0)
+    .max(1)
+    .describe('0.0〜1.0: この Purpose に本当に使えるかの自信度'),
 });
 
-/** 除外された chunk */
+/** 除外された chunk（safety gate / orchestrator マージ後の契約向け。理由は taxonomy 全件） */
 export const ExcludedChunkRefSchema = ChunkRefBaseSchema.extend({
-  reason: ExclusionReasonEnum,
+  reason: ExclusionReasonEnum.describe('除外理由（taxonomy の stable ID）'),
+});
+
+/**
+ * Strategist の structured output（Core）専用: LLM が列挙してよい除外理由のみ。
+ * safety_gate 由来の理由は JSON Schema 段階で弾き、不要な再試行を減らす。
+ */
+export const StrategistExclusionReasonEnum = z.enum([
+  'superseded_or_stale',
+  'purpose_mismatch',
+  'insufficient_evidence_quality',
+  'human_confirmation_required',
+]);
+
+export const StrategistExcludedChunkRefCoreSchema = ChunkRefBaseSchema.extend({
+  reason: StrategistExclusionReasonEnum.describe(
+    'Strategist が判断する除外理由（safety_gate 系は列挙に含めない）',
+  ),
 });
 
 /** 足りない情報の項目 */
 export const MissingInfoSchema = z.object({
-  /** 何が足りないかの短いラベル（例:「直近12ヶ月の助成金支給実績」） */
-  topic: z.string().min(1).max(120),
-  /** なぜそれが必要か（Purpose との関係） */
-  whyNeeded: z.string().min(1).max(400),
-  /** 探す場所のヒント（任意） */
-  whereToLookHint: z.string().max(200).optional(),
+  topic: z
+    .string()
+    .min(1)
+    .max(120)
+    .describe('何が足りないかの短いラベル（例: 直近12ヶ月の助成金支給実績）'),
+  whyNeeded: z.string().min(1).max(400).describe('なぜ必要か（Purpose との関係）'),
+  whereToLookHint: z.string().max(200).optional().describe('探す場所のヒント（任意）'),
 });
 
 /** 人間への確認質問 */
 export const HumanReviewQuestionSchema = z.object({
-  question: z.string().min(1).max(400),
-  /** どの chunk についての質問か（任意、全体への質問の場合は省略） */
-  relatedChunkIds: z.array(z.string()).optional(),
+  question: z.string().min(1).max(400).describe('人間への確認質問文'),
+  relatedChunkIds: z
+    .array(z.string())
+    .optional()
+    .describe('どの chunk についての質問か（任意、全体への質問の場合は省略）'),
 });
 
 /**
@@ -199,81 +225,132 @@ export const StrategistInputSchema = z.object({
   safetyExcludedCount: z.number().int().nonnegative().default(0),
 });
 
-/** Strategist 出力全体 */
-export const StrategistOutputSchema = z
-  .object({
-    included: z.array(IncludedChunkRefSchema),
-    excluded: z.array(ExcludedChunkRefSchema),
-    missing: z.array(MissingInfoSchema),
-    humanReviewQuestions: z.array(HumanReviewQuestionSchema),
-  })
-  /**
-   * Strategist (LLM) は safety_gate 由来の除外理由を出力してはいけない。
-   * prompt で禁止したうえで、ここでも schema レベルで二重に縛る。
-   * safety_gate の除外結果は orchestrator が後段でマージする。
-   */
-  .superRefine((value, ctx) => {
-    const chunkRefKey = (docId: string, chunkId: string) => `${docId}\u0000${chunkId}`;
+/**
+ * Vertex AI structured output の `responseJsonSchema` 等に渡す object 部。
+ * `.refine` / `.superRefine` は JSON Schema に載らないため **Core には載せない**。
+ * 重複・overlap は `StrategistOutputSchema` の superRefine で検証する。
+ * 除外理由の strategist 限定は Core の `StrategistExcludedChunkRefCoreSchema` で表現する
+ *（最終層でも defense in depth で二重に検証する）。
+ */
+export const StrategistOutputCoreSchema = z.object({
+  included: z.array(IncludedChunkRefSchema).describe('採用する chunk のリスト'),
+  excluded: z
+    .array(StrategistExcludedChunkRefCoreSchema)
+    .describe('Strategist が目的不一致などで除外する chunk のリスト（strategist-origin の理由のみ）'),
+  missing: z.array(MissingInfoSchema).describe('Purpose 達成に足りない情報'),
+  humanReviewQuestions: z.array(HumanReviewQuestionSchema).describe('人間に確認すべき質問'),
+});
 
-    const reportDup = (
-      side: 'included' | 'excluded',
-      index: number,
-      message: string,
-    ) => {
+/**
+ * Strategist (LLM) 最終出力の契約: 重複参照・included/excluded 重複・
+ * safety_gate 由来の除外理由を reject する。
+ * `generateValidated` の `validate` や手元パースはこちらを通す。
+ */
+export const StrategistOutputSchema = StrategistOutputCoreSchema.superRefine((value, ctx) => {
+  const chunkRefKey = (docId: string, chunkId: string) => `${docId}\u0000${chunkId}`;
+
+  const reportDup = (
+    side: 'included' | 'excluded',
+    index: number,
+    message: string,
+  ) => {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [side, index, 'chunkId'],
+      message,
+    });
+  };
+
+  const seenIncluded = new Map<string, number>();
+  value.included.forEach((row, index) => {
+    const key = chunkRefKey(row.docId, row.chunkId);
+    const first = seenIncluded.get(key);
+    if (first !== undefined) {
+      reportDup(
+        'included',
+        index,
+        `duplicate chunk ref (docId + chunkId) also at included[${first}]`,
+      );
+    } else {
+      seenIncluded.set(key, index);
+    }
+  });
+
+  const seenExcluded = new Map<string, number>();
+  value.excluded.forEach((row, index) => {
+    const key = chunkRefKey(row.docId, row.chunkId);
+    const first = seenExcluded.get(key);
+    if (first !== undefined) {
+      reportDup(
+        'excluded',
+        index,
+        `duplicate chunk ref (docId + chunkId) also at excluded[${first}]`,
+      );
+    } else {
+      seenExcluded.set(key, index);
+    }
+    if (seenIncluded.has(key)) {
+      reportDup(
+        'excluded',
+        index,
+        'chunk ref must not appear in both included and excluded',
+      );
+    }
+  });
+
+  value.excluded.forEach((excluded, index) => {
+    if (ExclusionReasonOrigin[excluded.reason] !== 'strategist') {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: [side, index, 'chunkId'],
-        message,
+        path: ['excluded', index, 'reason'],
+        message: `Strategist must not emit safety_gate-origin reason: ${excluded.reason}`,
       });
-    };
-
-    const seenIncluded = new Map<string, number>();
-    value.included.forEach((row, index) => {
-      const key = chunkRefKey(row.docId, row.chunkId);
-      const first = seenIncluded.get(key);
-      if (first !== undefined) {
-        reportDup(
-          'included',
-          index,
-          `duplicate chunk ref (docId + chunkId) also at included[${first}]`,
-        );
-      } else {
-        seenIncluded.set(key, index);
-      }
-    });
-
-    const seenExcluded = new Map<string, number>();
-    value.excluded.forEach((row, index) => {
-      const key = chunkRefKey(row.docId, row.chunkId);
-      const first = seenExcluded.get(key);
-      if (first !== undefined) {
-        reportDup(
-          'excluded',
-          index,
-          `duplicate chunk ref (docId + chunkId) also at excluded[${first}]`,
-        );
-      } else {
-        seenExcluded.set(key, index);
-      }
-      if (seenIncluded.has(key)) {
-        reportDup(
-          'excluded',
-          index,
-          'chunk ref must not appear in both included and excluded',
-        );
-      }
-    });
-
-    value.excluded.forEach((excluded, index) => {
-      if (ExclusionReasonOrigin[excluded.reason] !== 'strategist') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['excluded', index, 'reason'],
-          message: `Strategist must not emit safety_gate-origin reason: ${excluded.reason}`,
-        });
-      }
-    });
+    }
   });
+});
+
+/**
+ * `included` / `excluded` の docId+chunkId が入力 `chunkInputs` に存在するか、
+ * `humanReviewQuestions.relatedChunkIds` が入力の chunk.id のいずれかに一致するか。
+ * Context Package マージ前に hallucinated ID を弾く。
+ */
+export function strategistOutputUnknownChunkRefMessage(
+  input: StrategistInput,
+  output: StrategistOutput,
+): string | undefined {
+  const chunkRefKey = (docId: string, chunkId: string) => `${docId}\u0000${chunkId}`;
+  const allowedPairKeys = new Set<string>();
+  const allowedChunkIds = new Set<string>();
+  for (const row of input.chunkInputs) {
+    allowedPairKeys.add(chunkRefKey(row.chunk.docId, row.chunk.id));
+    allowedChunkIds.add(row.chunk.id);
+  }
+
+  for (let i = 0; i < output.included.length; i++) {
+    const row = output.included[i]!;
+    if (!allowedPairKeys.has(chunkRefKey(row.docId, row.chunkId))) {
+      return `included[${i}]: docId+chunkId is not in chunkInputs (copy IDs exactly from input)`;
+    }
+  }
+  for (let i = 0; i < output.excluded.length; i++) {
+    const row = output.excluded[i]!;
+    if (!allowedPairKeys.has(chunkRefKey(row.docId, row.chunkId))) {
+      return `excluded[${i}]: docId+chunkId is not in chunkInputs (copy IDs exactly from input)`;
+    }
+  }
+  for (let qi = 0; qi < output.humanReviewQuestions.length; qi++) {
+    const q = output.humanReviewQuestions[qi]!;
+    const related = q.relatedChunkIds;
+    if (!related?.length) continue;
+    for (let j = 0; j < related.length; j++) {
+      const cid = related[j]!;
+      if (!allowedChunkIds.has(cid)) {
+        return `humanReviewQuestions[${qi}].relatedChunkIds[${j}]: chunk id is not in chunkInputs`;
+      }
+    }
+  }
+  return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // 型エクスポート
@@ -283,6 +360,8 @@ export type ExclusionReason = z.infer<typeof ExclusionReasonEnum>;
 export type ExclusionReasonLabel = (typeof ExclusionReasonLabels)[ExclusionReason];
 export type IncludedChunkRef = z.infer<typeof IncludedChunkRefSchema>;
 export type ExcludedChunkRef = z.infer<typeof ExcludedChunkRefSchema>;
+export type StrategistExclusionReason = z.infer<typeof StrategistExclusionReasonEnum>;
+export type StrategistExcludedChunkRefCore = z.infer<typeof StrategistExcludedChunkRefCoreSchema>;
 export type MissingInfo = z.infer<typeof MissingInfoSchema>;
 export type HumanReviewQuestion = z.infer<typeof HumanReviewQuestionSchema>;
 export type StrategistParentInventoryMetadata = z.infer<
@@ -290,4 +369,5 @@ export type StrategistParentInventoryMetadata = z.infer<
 >;
 export type StrategistChunkInput = z.infer<typeof StrategistChunkInputSchema>;
 export type StrategistInput = z.infer<typeof StrategistInputSchema>;
+export type StrategistOutputCore = z.infer<typeof StrategistOutputCoreSchema>;
 export type StrategistOutput = z.infer<typeof StrategistOutputSchema>;
