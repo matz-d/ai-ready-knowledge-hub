@@ -16,7 +16,7 @@
 
 ## 現在のステータス (2026-05-14)
 
-**フェーズ**: Phase 3-C（App Loop Foundation）完了。Purpose → Strategist → Context Package のアプリ一巡が動いている。
+**フェーズ**: Phase 3-D（CI/CD + IAP + AuditEvent）完了。commit push → 自動 CI → Artifact Registry → Cloud Run の継続デプロイと Cloud IAP による社内限定公開が稼働中。
 
 ### 完了済み
 
@@ -36,8 +36,17 @@
   - upload 直後の chunk 自動生成（`replaceChunksForDoc`、失敗時 500）。
   - malformed Inventory document は skip-and-warn で全体を落とさない。
   - source coverage 確認済み: upload `.txt` / `.md` / `.csv` / `.xlsx` + Google Sheets + Google Docs のすべてが Purpose Query まで到達。
+- **Phase 3-D (CI/CD + IAP + AuditEvent)**:
+  - `Dockerfile`（multi-stage / pnpm / Node 22 / standalone / 非 root）と `.dockerignore` を追加。image サイズ 442MB。
+  - `.github/workflows/deploy.yml`：`main` push で test / typecheck / build → Docker build/push → `gcloud run deploy`。WIF 認証（Service Account JSON key 不使用）。
+  - Artifact Registry `knowledge-hub` repo に `:latest` と `:<SHORT_SHA>` の 2 tag で push。
+  - Cloud Run IAP 直接保護。`--no-allow-unauthenticated` 固定。IAP service agent に `roles/run.invoker` 付与済み。
+  - `src/lib/auth/verifyIapJwt.ts` で `x-goog-iap-jwt-assertion` を検証し、signature OK 後のみ `x-goog-authenticated-user-email` を信頼。
+  - `document.import` / `document.reimport` / `document.export` の AuditEvent を対象 route の成功後に append-only で記録（`auditEvents/{eventId}`）。
+  - `firestore.rules` で `auditEvents` の update/delete を拒否（Admin SDK 規律が正本）。
+  - deploy 3 分 32 秒。証跡 screenshot: `docs/iap-evidence/`。
 
-### コードの位置 (Phase 3-C 完了時点)
+### コードの位置 (Phase 3-D 完了時点)
 
 ```
 src/
@@ -69,6 +78,12 @@ src/
     workspaceFreshness.ts / workspaceImport/types.ts
     extractors/{csvExtractor,xlsxExtractor,plainTextExtractor}.ts
     firestoreSchema.ts / parseFirestoreDocumentData.ts
+    auth/
+      resolveTenantIdFromAuth.ts         # IAP email → tenantId/actor 解決（Phase 3-D）
+      verifyIapJwt.ts                    # x-goog-iap-jwt-assertion の JWT 検証（Phase 3-D）
+    audit/
+      auditEvent.ts                      # AuditEvent 型・recordAuditEvent()（Phase 3-D）
+  middleware.ts                          # AUTH_MODE=iap で IAP JWT 検証 + auth header 注入
   app/
     api/
       context-package/route.ts           # POST /api/context-package（同期 Purpose Query）
@@ -100,11 +115,18 @@ docs/
   open-questions.md                      # 未決定事項・次フェーズ候補
   phase-3-c-5-source-coverage.md         # Phase 3-C-5 source coverage 確認結果
   phase-3-c-direction.md                 # Phase 3-C 認証・デプロイ方針
-  phase-3-d-direction.md                 # Phase 3-D CI/CD + IAP 実装方針
+  phase-3-d-direction.md                 # Phase 3-D CI/CD + IAP + AuditEvent 実装方針（完了）
+  iap-evidence/                          # Phase 3-D 完了証跡（screenshot + verification.txt）
+    iap-settings-console.png / unauthenticated-login.png / authorized-api-200.png / authorized-ui.png
+    phase-3d-completion-verification.txt
   architecture.md / tech-stack.md / concept.md / scope.md
   firestore-schema.md / setup-gcp.md
   demo-runbook.md / demo-scenario.md / hackathon.md
   w1-artifacts/inventory.snapshot.json
+Dockerfile                               # multi-stage / pnpm / Node 22 / standalone（Phase 3-D）
+.dockerignore                            # Phase 3-D
+firestore.rules                          # auditEvents append-only 規則（Phase 3-D）
+.github/workflows/deploy.yml             # CI + Cloud Run deploy（Phase 3-D）
 sample-data/
   accounting-office/                     # 原本 10 件
   masked/                                # Masker A8 評価のマスク済み入力 2 件
@@ -164,10 +186,14 @@ sample-data/
 | `POST /api/workspace/freshness` | Workspace document の再取り込みトリガー。 |
 | `POST /api/curator` | **UI 非使用。** Curator 単体の curl / eval / smoke 専用。 |
 
-### セキュリティ境界の現状 (MVP)
+### セキュリティ境界の現状 (Phase 3-D 完了時点)
 
+- **Cloud IAP**: Cloud Run を直接 IAP で保護。`allow-unauthenticated` 不使用。匿名アクセスは IAP が 302/401 で遮断。
+- **IAP JWT 検証**: `src/lib/auth/verifyIapJwt.ts` が `x-goog-iap-jwt-assertion` を Google public keys で検証。検証通過後のみ `x-goog-authenticated-user-email` を信頼する。
+- **tenantId / actor 解決**: `src/lib/auth/resolveTenantIdFromAuth.ts` が IAP email の domain から tenantId を生成。`KNOWLEDGE_HUB_TENANT_ID` override 可。
+- **AuditEvent**: `document.import` / `document.reimport` / `document.export` を `auditEvents/{eventId}` に append-only で記録。Firestore Security Rules で update/delete を拒否。
 - **Safety gate**: Strategist へ渡す前に決定論的ルールで chunk を除外（Restricted / blocked / masking 未完了 / クロス顧客機密）。LLM に依存しない。
-- **Masking defense-in-depth**: `requires_masking` chunk に `maskedText` がない場合、`toContextPackage` は raw text を fallback で出さず throw する（safety gate がすでに `masking_required_unavailable` で除外しているため通常到達不可だが、将来のロジック変更に対する二重防御）。
+- **Masking defense-in-depth**: `requires_masking` chunk に `maskedText` がない場合、`toContextPackage` は raw text を fallback で出さず throw する。
 - **Cloud DLP**: Masker provider として導入済み。未指定は `simple-rule` fallback、`MASKER_PROVIDER=cloud-dlp` で明示。
 - **Malformed document**: `listInventoryDocumentsFromFirestore` は parse エラーの document を skip-and-warn し、全体を落とさない。
 - **Sheets / Docs 共有**: Google Workspace import の対象は、UI に表示される service account email への reader 共有が必要。
@@ -175,7 +201,8 @@ sample-data/
 
 ### 次にやること
 
-- **Phase 3-D**: GitHub Actions CI/CD（commit → test → build → Artifact Registry → Cloud Run）+ Cloud IAP + AuditEvent。実装方針は [docs/phase-3-d-direction.md](docs/phase-3-d-direction.md) を参照。
+- **Phase 3-E**: Cloud DLP 本格統合（`minLikelihood` 調整 / replacement token 統一 / 日本向け custom dictionary）。W3 予定だったもの。
+- **Phase 3-F**: デモ polish・動画シナリオ・見栄え調整。発表準備。
 - Curator / Masker eval パイプライン。
 
 ---
@@ -191,7 +218,8 @@ sample-data/
 | [docs/architecture.md](docs/architecture.md) | システム構成、4エージェント、データフロー |
 | [docs/firestore-schema.md](docs/firestore-schema.md) | Firestore document shape の正本 |
 | [docs/phase-3-c-direction.md](docs/phase-3-c-direction.md) | Phase 3-C 認証・デプロイ方針（Cloud IAP / GitHub Actions / BYOC 戦略） |
-| [docs/phase-3-d-direction.md](docs/phase-3-d-direction.md) | Phase 3-D CI/CD + IAP + AuditEvent 実装方針 |
+| [docs/phase-3-d-direction.md](docs/phase-3-d-direction.md) | Phase 3-D CI/CD + IAP + AuditEvent 実装方針（**完了**） |
+| [docs/iap-evidence/](docs/iap-evidence/) | Phase 3-D 完了証跡（screenshot + verification.txt） |
 | [docs/phase-3-c-5-source-coverage.md](docs/phase-3-c-5-source-coverage.md) | Phase 3-C-5 source coverage 確認結果（全 source 確認済み） |
 | [docs/phase-3-b-workspace-resync.md](docs/phase-3-b-workspace-resync.md) | Phase 3-B 正本（Workspace resync・schemaVersion 2・鮮度バッジ） |
 | [docs/phase-2-design.md](docs/phase-2-design.md) | KnowledgeChunk / CSV・xlsx extractor / chunk-aware Context Package の設計正本 |
@@ -208,8 +236,8 @@ sample-data/
 
 1. このREADMEの「現在のステータス」
 2. [docs/open-questions.md](docs/open-questions.md) — 次フェーズ候補と未決定事項
-3. [docs/decisions.md](docs/decisions.md) — Phase 3-C の採用判断（`D-P3-C` セクション）
-4. [docs/phase-3-d-direction.md](docs/phase-3-d-direction.md) — Phase 3-D（CI/CD + IAP + AuditEvent）の実装方針
+3. [docs/decisions.md](docs/decisions.md) — Phase 3-D の採用判断（`D-P3-D` セクション）
+4. Cloud Run URL: `https://ai-ready-knowledge-hub-mrvutsz24a-an.a.run.app`（IAP 保護済み、許可ユーザのみアクセス可）
 
 ---
 

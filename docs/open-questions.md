@@ -98,15 +98,15 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - Phase 3-C-5 バグ修正 6 件（malformed doc skip、txt/md chunk 生成、upload 後 auto-chunk、Docs route 分岐、Docs error mapping、backfill usage）
 - CodeRabbit review: 5 件 apply / 11 件 skip（[docs/decisions.md D-P3-C](decisions.md) に根拠記録）
 
-**次フェーズ（2026-05-14 決定）:**
+**次フェーズ（2026-05-14 現在）:**
 
 | 候補 | 内容 | 優先度 |
 |---|---|---|
-| Phase 3-D | Cloud IAP + CI/CD（GitHub Actions → Cloud Run）| **着手決定**。採点軸「まわす」「とどける」 |
-| Phase 3-E | Cloud DLP 本格統合（W3 予定だったもの）| 技術的深度 |
+| ~~Phase 3-D~~ | ~~Cloud IAP + CI/CD（GitHub Actions → Cloud Run）~~ | **完了** (2026-05-14) |
+| Phase 3-E | Cloud DLP 本格統合（`minLikelihood` / replacement token / custom dictionary）| 技術的深度 |
 | Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | 発表準備 |
 
-**次のアクション**: [docs/phase-3-d-direction.md](phase-3-d-direction.md) に沿って、Dockerfile → GCP resources → GitHub Actions workflow → IAP → AuditEvent の順で実装する。AuditEvent collection は Phase 3-D に統合する。
+**次のアクション**: Phase 3-E（Cloud DLP 本格化）または Phase 3-F（デモ polish）から着手。優先度は次セッション開始時に判断する。
 
 ---
 
@@ -142,20 +142,18 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 
 ### CI/CD認証
 
-**2026-05-14 決定済み。正本は [docs/decisions.md](decisions.md) の `D-P3-D` と [docs/phase-3-d-direction.md](phase-3-d-direction.md)。**
+**Phase 3-D 完了（2026-05-14）。正本は [docs/decisions.md](decisions.md) の `D-P3-D` と [docs/phase-3-d-direction.md](phase-3-d-direction.md)。**
 
 | 論点 | 決定 |
 |---|---|
-| GH Actions の GCP 認証方式 | Workload Identity Federation（WIF）。Service Account JSON key は使わない。 |
-| GitHub Secrets の管理範囲 | GCP 認証用 JSON key は置かない。project / region / service name / WIF provider / service account は GitHub Variables で管理する。 |
-| Cloud Run サービスアカウント | deploy service account と runtime service account を分ける。deploy SA は Artifact Registry push と Cloud Run deploy、runtime SA は Firestore / GCS / Vertex AI / DLP / Drive への実行時アクセスを担当する。 |
-| tenantId | IAP email domain 由来。`KNOWLEDGE_HUB_TENANT_ID` override を許容。 |
-| Cloud Run public access | IAP 必須。`allow-unauthenticated` は使わない。 |
-| Dockerfile | `output: 'standalone'` + multi-stage Dockerfile。 |
-
-**残タスク:**
-- 実 project number / WIF provider resource name / service account email を作成後に `docs/setup-gcp.md` または deploy workflow に反映する。
-- IAP JWT audience の実値を Cloud Run/IAP 構成に合わせて確認する。
+| GH Actions の GCP 認証方式 | Workload Identity Federation（WIF）実装済み。Service Account JSON key 不使用。 |
+| GitHub Secrets の管理範囲 | GCP 認証用 JSON key なし。project / region / WIF provider / SA は GitHub Variables で管理済み。 |
+| Cloud Run サービスアカウント | deploy SA `github-deployer` / runtime SA `aiknh-runner` で分離済み。 |
+| tenantId | IAP email domain 由来。`KNOWLEDGE_HUB_TENANT_ID` override 対応済み。 |
+| Cloud Run public access | IAP 直接保護済み。匿名 302/401 確認済み。`allow-unauthenticated` 不使用。 |
+| Dockerfile | multi-stage / Node 22 / pnpm / standalone 実装済み（442MB）。 |
+| verifyIapJwt | `src/lib/auth/verifyIapJwt.ts` 実装済み・middleware 統合済み。 |
+| AuditEvent | import / reimport / export の 3 action を Firestore に記録済み。 |
 
 ### サンプルデータの中身
 

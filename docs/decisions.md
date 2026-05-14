@@ -737,9 +737,18 @@ sample-data/
 
 ---
 
-## D-P3-D: Phase 3-D CI/CD + IAP 方針確定（2026-05-14）
+## D-P3-D: Phase 3-D CI/CD + IAP 完了（2026-05-14）
 
-**決定**: Phase 3-D は「commit push → test/typecheck/build → Artifact Registry push → Cloud Run deploy → Cloud IAP で社内ユーザだけが利用」のパイプラインを作るフェーズとする。実装正本は [docs/phase-3-d-direction.md](phase-3-d-direction.md)。
+**決定・完了**: Phase 3-D は「commit push → test/typecheck/build → Artifact Registry push → Cloud Run deploy → Cloud IAP で社内ユーザだけが利用」のパイプラインを構築し、**DoD 全 15 項目を達成した**。実装正本は [docs/phase-3-d-direction.md](phase-3-d-direction.md)。証跡は [docs/iap-evidence/](iap-evidence/)。
+
+**完了事実（commit a57713e / 2026-05-14）:**
+- GitHub Actions run `25845188187` green（ci + deploy）
+- Artifact Registry に `:a57713e` / `:latest` push 済み
+- Cloud Run revision `ai-ready-knowledge-hub-00003-2jt` Ready、image `:a57713e`
+- Cloud IAP 直接保護。匿名 302/401 確認済み。許可ユーザ `makoto@m-grow-ai.com` のみ通過
+- `document.import` / `document.reimport` / `document.export` の AuditEvent を `tenantId=m-grow-ai.com` で記録済み
+- `verifyIapJwt.ts` 実装・middleware 統合済み（hardening 完了）
+- deploy 3 分 32 秒（5 分以内目標達成）
 
 ### Q1: GitHub Actions の GCP 認証方式
 

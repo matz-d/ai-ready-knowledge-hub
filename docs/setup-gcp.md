@@ -1,4 +1,4 @@
-# GCP Setup Notes (W1/W2)
+# GCP Setup Notes (W1/W2/Phase 3-D)
 
 このドキュメントは、W1-1 (`PLAN_w1.md` §2) で確定した Google Cloud 初期設定と、
 W2 Walking Skeleton で追加した Firestore / Cloud Storage 設定の記録。
@@ -84,6 +84,57 @@ gcloud auth application-default print-access-token >/dev/null && echo "ADC_ACCES
 # quota project recorded in ADC file
 rg '"quota_project_id": "ai-ready-knowledge-hub"' ~/.config/gcloud/application_default_credentials.json
 ```
+
+## Phase 3-D リソース（CI/CD + IAP）
+
+### 追加済みリソース
+
+| リソース | 名前 | 備考 |
+|---|---|---|
+| Artifact Registry repo | `knowledge-hub` (docker, asia-northeast1) | image push 先 |
+| Deploy SA | `github-deployer@ai-ready-knowledge-hub.iam.gserviceaccount.com` | WIF impersonation 対象 |
+| Runtime SA | `aiknh-runner@ai-ready-knowledge-hub.iam.gserviceaccount.com` | 既存流用 |
+| WIF pool | `github-actions` | |
+| WIF provider | `github` | issuer: token.actions.githubusercontent.com |
+| Cloud Run service | `ai-ready-knowledge-hub` | Phase 3-D 本番。W1 `ai-ready-knowledge-hub-w1` とは別 |
+| Project number | `127729019743` | WIF provider resource name と IAP_JWT_AUDIENCE に使用 |
+
+### WIF provider attribute condition
+
+```text
+assertion.repository == "matz-d/ai-ready-knowledge-hub" && assertion.ref == "refs/heads/main"
+```
+
+### IAP_JWT_AUDIENCE
+
+```text
+/projects/127729019743/locations/asia-northeast1/services/ai-ready-knowledge-hub
+```
+
+### Cloud Run URL
+
+```text
+https://ai-ready-knowledge-hub-mrvutsz24a-an.a.run.app
+```
+
+IAP 保護済み。許可ユーザ `makoto@m-grow-ai.com` のみアクセス可。
+
+### GitHub Variables（deploy.yml が参照）
+
+| Variable | 値 |
+|---|---|
+| `GCP_PROJECT_ID` | `ai-ready-knowledge-hub` |
+| `GCP_PROJECT_NUMBER` | `127729019743` |
+| `GCP_REGION` | `asia-northeast1` |
+| `CLOUD_RUN_SERVICE` | `ai-ready-knowledge-hub` |
+| `ARTIFACT_REGISTRY_REPO` | `knowledge-hub` |
+| `WIF_PROVIDER` | `projects/127729019743/locations/global/workloadIdentityPools/github-actions/providers/github` |
+| `DEPLOY_SERVICE_ACCOUNT` | `github-deployer@ai-ready-knowledge-hub.iam.gserviceaccount.com` |
+| `RUNTIME_SERVICE_ACCOUNT` | `aiknh-runner@ai-ready-knowledge-hub.iam.gserviceaccount.com` |
+| `KNOWLEDGE_HUB_BUCKET` | `ai-ready-knowledge-hub-uploads` |
+| `IAP_JWT_AUDIENCE` | `/projects/127729019743/locations/asia-northeast1/services/ai-ready-knowledge-hub` |
+
+---
 
 ## Notes
 
