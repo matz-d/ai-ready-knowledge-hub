@@ -324,6 +324,8 @@ PDF / 画像 / Slide / Office 系の本格変換を Phase 3-H で着手する前
 
 Phase 3-E が固定するのは、**変換後の `DocumentIR` / `KnowledgeChunk` 相当の構造化結果に対する評価軸**であり、変換器そのもの（Gemini / MarkItDown / Docling 等）の比較指標ではない。
 
+また、golden eval は「完璧な `DocumentIR` 全体との完全一致」を主目的にしない。PDF / 画像 / Slide は正解構造が一意に決まりにくいため、golden fixture は **残ってほしい重要情報の recall** を測るために使う。完全一致ではなく、金額・日付・当事者・見出し・表の主要セル・画像内帳票項目・Masker / DLP が処理すべき個人情報候補などが、downstream で扱える粒度と locator つきで残っているかを見る。
+
 理由:
 
 - 変換器は今後増減する。評価対象を変換器側に置くと、軸を変換器ごとに作り直す羽目になる。
@@ -337,7 +339,7 @@ Phase 3-E が固定するのは、**変換後の `DocumentIR` / `KnowledgeChunk`
 | `schema_validity` | `DocumentIR` / `KnowledgeChunk` schema に通るか | 不要 | health check（必須） |
 | `coverage` | ページ・段落・表が十分に抽出されているか | 一部必要 | heuristic eval（chunk数 / 空 chunk / 極端な短さで近似） |
 | `locator_quality` | page / table / row / bbox など根拠位置が追えるか | 一部必要 | heuristic eval（locator 有無のみ） |
-| `semantic_retention` | 金額・日付・当事者・見出しなど重要情報が残っているか | 必要 | golden eval（Phase 3-H 以降） |
+| `semantic_retention` | 金額・日付・当事者・見出しなど重要情報が残っているか。完全一致ではなく期待フィールド recall を見る | 必要 | golden eval（Phase 3-H 以降） |
 | `safety_readiness` | DLP / Masker が効く粒度・構造で出ているか（PII が残っているかではなく、PII が来た時に Masker が捕捉・置換できる形か）| 一部必要 | heuristic eval（unmaskable PII 件数 / maskable chunk 比率） |
 | `context_package_readiness` | Strategist が採用 / 除外判断できる chunk になっているか | 一部必要 | heuristic eval（chunk 件数 / 平均長 / oversized / empty） |
 

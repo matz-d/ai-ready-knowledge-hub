@@ -939,11 +939,113 @@ sample-data/
 
 ---
 
+## D-P3-H: Phase 3-H 前倒しと提供形態の整理（2026-05-18）
+
+**決定**: Phase 3-E 完了後、Phase 3-F のデモ polish よりも Phase 3-H Document Conversion PoC を先に進める。正本は [docs/phase-3-h-direction.md](phase-3-h-direction.md)。また、将来の提供形態を [docs/offering-model.md](offering-model.md) に文書化する。
+
+### Q1: 次フェーズの優先順位
+
+**決定**: 次に着手するのは Phase 3-H。PDF / Slide / 画像 / Office 系ファイルを `DocumentIR` / `KnowledgeChunk` 相当へ変換する PoC を前倒しする。
+
+**理由:**
+- 提出まで一ヶ月以上あり、見た目の polish よりプロダクト本体価値を伸ばす時間がある。
+- SME の実際の情報源は PDF、スライド、画像化された資料、古い帳票に多く残っている。
+- 既に text / markdown / CSV / xlsx / Google Sheets / Google Docs は Purpose Query まで到達しているため、次に価値が伸びるのは source coverage の拡張である。
+- Phase 3-E で Conversion Eval 契約を固定済みなので、PoC の評価軸がある状態で着手できる。
+
+### Q2: 提供形態
+
+**決定**: Managed SaaS だけを前提にしない。ライトな顧客には Managed SaaS、士業・法人の本命には Dedicated SaaS / Private deployment、さらに慎重な顧客には Customer-managed / BYOC、最厳格な顧客には `cloud-sanitized-ingress` を将来 option として扱う。
+
+**理由:**
+- フリーランスまたは小規模事業者が運営する単一 Managed SaaS に、会社や士業が顧客情報・契約書・給与資料を入れる心理的ハードルは高い。
+- ただし最初から Customer-managed / BYOC を主戦場にすると、Terraform、監視、更新、障害対応、権限設計が重くなりすぎる。
+- Dedicated SaaS / Private deployment は、Managed SaaS より信頼境界を説明しやすく、Customer-managed より導入が軽いため、商用化時の本命になりやすい。
+- `cloud-sanitized-ingress` は Phase 3-G の高セキュリティ prototype 候補として残すが、今すぐの本体価値は Document Conversion の方が大きい。
+
+### 次の優先順位
+
+1. Phase 3-H: Document Conversion PoC
+2. Phase 3-F: Document Conversion を含むデモ polish
+3. Phase 3-G: `cloud-sanitized-ingress` prototype
+4. Phase 4: Dedicated / customer-managed 商用設計
+
+---
+
+## D-P3-H-2: Phase 3-H 組織軸を subtype 起点へ組み直し（2026-05-18）
+
+**決定**: Phase 3-H の PoC 組織軸を「変換器の並列比較」から「source subtype 起点」に組み直す。正本は [docs/phase-3-h-direction.md](phase-3-h-direction.md) v2（§2.5・§3・§4）。
+
+**前提**: D-P3-H で Phase 3-H 着手は確定済み。本決定はその **内部構造** の方針確定。
+
+### Q1: PoC の組織軸
+
+**決定**: source subtype 4 分類（`official-doc-pdf` / `slide-pdf` / `scan-pdf` / `office-native`）を組織軸に据える。変換器の選定・評価器の閾値・本線統合判断のすべてがこの軸に従う。
+
+**代替案として検討したもの:**
+- (a) 変換器並列比較（MarkItDown / Gemini 直 / MarkItDown→Gemini / pptx parser の 4 列）← v1 案
+- (b) **source subtype 起点（4 分類 × 各 subtype に first-choice 1 + fallback 1）** ← 採用
+- (c) 拡張子起点（PDF / Slide / 画像 / Office）
+
+**選定理由:**
+- PDF / Slide / 画像という拡張子グループは変換アプローチを束ねきれない。`official-doc-pdf` は決定論的 text extractor で十分、`scan-pdf` は OCR 必須、と振る舞いが正反対。拡張子起点 (c) では評価軸が立たない。
+- 変換器並列比較 (a) は「subtype X では Gemini が勝つ／subtype Y では決定論的 extractor が勝つ」という答えが出る性質。converter-first では結論を一意化できない。
+- subtype 起点 (b) は本線統合の単位（Phase 3-H-2 のフラグ gating 単位）とも自然に一致する。
+
+### Q2: 最初の縦串 subtype
+
+**決定**: `official-doc-pdf`（構造化公的文書 PDF、text layer あり）を最初に縦串で抜く。
+
+**理由:**
+- text layer ありの PDF は `pdf-parse` で決定論的に抽出できるため、DocumentIR → KnowledgeChunk → eval の縦串が最短で通る。
+- adapter の lossy 判断、`ConversionEvalResult` の暫定閾値、CI gate 雛形を最初にここで固定すれば、subtype 2 以降は runner を流用できる。
+- 公的様式（国税庁・厚労省・年金機構・中小機構）が PII フリーで取得可能で、fixture 確保コストが最低。
+
+### Q3: MarkItDown の扱い
+
+**決定**: MarkItDown を本線統合候補から外し、subtype 1 で `pdf-parse` との品質差分を見るための **PoC 内比較材料に限定** する。
+
+**理由:**
+- MarkItDown は Python ツールで、本線統合すると Dockerfile / 本線ビルドに Python ランタイムを持ち込むことになる。本リポジトリは TypeScript + pnpm 統一（CLAUDE.md 確定）で、ランタイム追加は重大決定。
+- subtype 1 の first-choice は `pdf-parse`（Node 系）で十分達成可能。MarkItDown は「決定論的 extractor の品質上限」を測る比較材料としてのみ価値がある。
+- PoC 配下に閉じる限り `uv` / `pipx` ローカル実行で済み、本線への汚染がない。
+
+**撤退条件:**
+subtype 1 の比較で `pdf-parse` の表抽出品質が `ConversionEvalResult.coverage.tableCandidates` で著しく劣り、かつ MarkItDown が大幅に上回る場合、Phase 3-H-2 で Python ランタイム導入の妥当性を再検討する。
+
+### Q4: fixture の調達方針
+
+**決定**: 自作を最小化し、公的機関の公開文書を取得して `sample-data/document-conversion/{subtype}/` に配置する。PII 入り fixture は厚労省 雇用契約書ひな型に `sample-data/accounting-office/顧問契約書_実案件サンプル.txt` 流の XXXX 形式合成 PII を埋め込んで 1〜2 件だけ自作する。
+
+**理由:**
+- 「すべて自作」は効率が悪く、かつ士業ドメインの様式リアリティを再現しきれない。
+- 国税庁・厚労省・年金機構・中小機構の様式はすべて公開・PII フリーで、士業現場の実情報源と一致する。再配布条件は各機関の利用条件を `sample-data/document-conversion/README.md` に記録する。
+- `safety_readiness` 軸は PII を含まない fixture では評価意味が立たないため、合成 PII 入り fixture を 1 件は必ず作る。subtype 2 以降は subtype 1 の PII 入り fixture を再利用または slide 化して使い回す。
+
+### Q5: 本線統合の単位
+
+**決定**: 本線統合の単位は「変換器」ではなく「subtype」とする。Phase 3-H-2 では subtype 1（`official-doc-pdf`）のみ本線 upload route に統合し、subtype 2 / 3 はフィーチャーフラグで gating する。
+
+**理由:**
+- subtype ごとに first-choice 変換器・コスト性質・評価閾値が異なるため、まとめて統合すると本線の AuditEvent / ProcessingProfile 接続が複雑化する。
+- subtype 1 は Vertex AI 呼出なしで動かせる路線が現実的で、コスト・障害面の境界が綺麗。
+- subtype 2（Gemini 直読み）以降は `inferenceDestination` の AuditEvent 拡張が必要で、別フェーズとして扱う方が安全。
+
+### 影響範囲
+
+- `docs/phase-3-h-direction.md` v2 で §3〜§9 全面差し替え済み。
+- `docs/open-questions.md` の「Document Conversion Eval（Phase 3-H に向けた未決）」は引き続き有効。各軸の閾値確定は subtype 1 で実行する。
+- 新規 npm 依存（`pdf-parse` 等）は CLAUDE.md `minimumReleaseAge: 4320` に従う。
+
+---
+
 ## 関連ドキュメント
 
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
 - [docs/phase-3-d-direction.md](phase-3-d-direction.md) — Phase 3-D CI/CD + IAP 実装方針（正本）
 - [docs/phase-3-e-direction.md](phase-3-e-direction.md) — Phase 3-E Processing Boundary + Cloud DLP Trust Modes 実装方針（正本）
+- [docs/phase-3-h-direction.md](phase-3-h-direction.md) — Phase 3-H Document Conversion PoC 方針
+- [docs/offering-model.md](offering-model.md) — 提供形態
 - [docs/phase-3-c-5-source-coverage.md](phase-3-c-5-source-coverage.md) — Phase 3-C-5 source coverage 確認結果
 - [docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) — Phase 3-B（Drive 再取り込み・schemaVersion 2・鮮度バッジ・完了条件の正本）
 - [docs/concept.md](concept.md) — プロダクトコンセプト

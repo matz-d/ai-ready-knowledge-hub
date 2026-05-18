@@ -98,15 +98,17 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - Phase 3-C-5 バグ修正 6 件（malformed doc skip、txt/md chunk 生成、upload 後 auto-chunk、Docs route 分岐、Docs error mapping、backfill usage）
 - CodeRabbit review: 5 件 apply / 11 件 skip（[docs/decisions.md D-P3-C](decisions.md) に根拠記録）
 
-**次フェーズ（2026-05-15 現在）:**
+**次フェーズ（2026-05-18 現在）:**
 
 | 候補 | 内容 | 優先度 |
 |---|---|---|
 | ~~Phase 3-D~~ | ~~Cloud IAP + CI/CD（GitHub Actions → Cloud Run）~~ | **完了** (2026-05-14) |
-| Phase 3-E | Processing Boundary + Cloud DLP Trust Modes（`cloud-managed` 標準化 / DLP polish / `purposeBinding` / AuditEvent 拡張方針）| **次に着手** |
-| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | 発表準備 |
+| ~~Phase 3-E~~ | ~~Processing Boundary + Cloud DLP Trust Modes（`cloud-managed` 標準化 / DLP polish / `purposeBinding` / AuditEvent 拡張方針）~~ | **完了** (2026-05-18) |
+| Phase 3-H | Document Conversion PoC（PDF / Slide / 画像 / Office を `DocumentIR` / `KnowledgeChunk` 相当へ変換） | **次に着手** |
+| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | Phase 3-H 後 |
+| Phase 3-G | `cloud-sanitized-ingress` prototype | 高セキュリティ顧客向け後続 |
 
-**次のアクション**: Phase 3-E に着手する。正本は [docs/phase-3-e-direction.md](phase-3-e-direction.md)。Phase 3-F は Phase 3-E 後の polish として扱う。
+**次のアクション**: Phase 3-H に着手する。正本は [docs/phase-3-h-direction.md](phase-3-h-direction.md)。提出まで一ヶ月以上あるため、Phase 3-F の polish よりも、扱える情報源を増やす Document Conversion を前倒しする。
 
 ---
 
@@ -134,10 +136,18 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - **Phase 3-E 方針（2026-05-18）**: 6 評価軸・`ConversionEvalResult` の docs 上の型案・三段階成熟度（health / heuristic / golden）・`overall.status` ロールアップ規約（案B: blocker 軸方式）を [docs/phase-3-e-direction.md](phase-3-e-direction.md) §10 と [docs/decisions.md](decisions.md) D-P3-E Q8 に固定済み。`src/` への型実装、評価器ランナー、golden fixture、`poc/document-conversion/` 作成、CI への評価器接続は Phase 3-H へ送る。
 - 残未決: 各軸の fail / warn 閾値（特に `safety_readiness.maskableChunkRate` の下限、`context_package_readiness.oversizedChunks` の許容数、`coverage.pageCoverage` の最低値）
 - 残未決: golden fixture を sample-data から何件・どの種類で作るか（士業実案件 / テンプレ / 表 / 暗黙知メモ）
+- **方針固定**: golden eval は完璧な `DocumentIR` 全体との完全一致ではなく、残ってほしい重要情報の recall として扱う。
 - 残未決: `semantic_retention.missingExpectedFields` の「必ず残ってほしいフィールド」リストをどこに置くか（fixture 横の YAML / `eval/expected-conversion.json` / Firestore）
 - 残未決: 評価器ランナーを CI に接続するタイミング（health check は必須 gate、heuristic は warning gate、golden は手動という三段は仮置き）
 - 残未決: 案C（成熟度別 blocker 軸運用）への移行条件。現状は Phase 3-H で案 B を試走した後に再評価予定。
 - 残未決: Phase 3-H 着手時点で最初に比較する変換器セット（MarkItDown 単体 / Gemini 直 PDF / MarkItDown→Gemini 補正 の 3 系統を仮置き）の最終確定
+
+### 提供形態
+
+- **2026-05-18 方針**: Managed SaaS だけを前提にせず、ライトな顧客向けの Managed SaaS、士業・法人の本命としての Dedicated SaaS / Private deployment、より慎重な顧客向けの Customer-managed / BYOC、最厳格顧客向けの `cloud-sanitized-ingress` を分けて扱う。正本は [docs/offering-model.md](offering-model.md)。
+- 残未決: Dedicated SaaS の具体的な分離単位（顧客ごと GCP project / shared project 内専用 Cloud Run / 専用 Firestore+GCS のどこまでを初期商用ラインにするか）
+- 残未決: Customer-managed を `ProcessingProfile` として `customer-managed` に分けるか、提供形態としてのみ扱うか
+- 残未決: Managed SaaS のトライアルで許可するデータ種別（匿名化済み資料、テンプレート、社内手順書、低リスク資料など）の明文化
 
 ### Spreadsheet chunk 粒度
 - **Phase 2 確定**: `.xlsx` は 1 sheet の used range を 1 chunk として扱う。used range 内に複数の論理表が並ぶ場合も、Phase 2 では空行分割などの表検出は行わない。
