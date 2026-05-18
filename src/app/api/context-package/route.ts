@@ -6,6 +6,7 @@
  */
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { modelId } from '../../../agents/_shared/genkitClient';
 import type { Sensitivity } from '../../../agents/curator/schema';
 import {
   buildStrategistContextPackage,
@@ -14,7 +15,12 @@ import {
   runStrategistOrchestrator,
   type StrategistOrchestratorResult,
 } from '../../../services/strategistOrchestrator';
-import { auditActorFromRequest, recordAuditEvent } from '../../../lib/audit/auditEvent';
+import {
+  auditActorFromRequest,
+  createPurposeBinding,
+  recordAuditEvent,
+} from '../../../lib/audit/auditEvent';
+import { PROCESSING_PROFILE_PRESETS } from '../../../lib/processingProfile';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -51,6 +57,10 @@ const RequestSchema = z.object({
   limit: z.number().int().min(1).max(100).default(100),
 });
 
+function defaultCloudRegion(): string {
+  return process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1';
+}
+
 export async function POST(request: Request) {
   let body: unknown;
   try {
@@ -78,12 +88,28 @@ export async function POST(request: Request) {
 
     try {
       const { tenantId, actor } = auditActorFromRequest(request);
+      const region = defaultCloudRegion();
       await recordAuditEvent({
         tenantId,
         actor,
         action: 'document.export',
         target: contextPackageAuditTarget(result),
         result: 'success',
+        processingProfile: PROCESSING_PROFILE_PRESETS['cloud-managed'],
+        purposeBinding: createPurposeBinding({
+          purpose: result.purpose,
+          tenantId,
+          timestamp: result.generatedAt,
+        }),
+        inferenceDestination: {
+          vendor: 'vertex',
+          region,
+          model: modelId,
+        },
+        dataResidency: {
+          storage: region,
+          processing: region,
+        },
       });
     } catch (auditErr) {
       console.error('[context-package] recordAuditEvent failed', auditErr);

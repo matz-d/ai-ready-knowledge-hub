@@ -46,6 +46,7 @@ vi.mock('../../../../lib/audit/auditEvent', async (importOriginal) => {
 });
 
 import { POST } from '../route';
+import { createPurposeBinding } from '../../../../lib/audit/auditEvent';
 
 function buildRequest(body: unknown): Request {
   return new Request('http://localhost/api/context-package', {
@@ -169,6 +170,26 @@ describe('POST /api/context-package', () => {
       expect.objectContaining({
         action: 'document.export',
         result: 'success',
+        processingProfile: {
+          profileName: 'cloud-managed',
+          ingressBoundary: 'tenant-cloud',
+          sanitizationStage: 'post-ingress',
+          inferenceScope: 'shared-cloud',
+        },
+        purposeBinding: createPurposeBinding({
+          purpose: 'テスト用途',
+          tenantId: 'local-dev',
+          timestamp: '2026-05-14T00:00:00.000Z',
+        }),
+        inferenceDestination: {
+          vendor: 'vertex',
+          region: process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1',
+          model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+        },
+        dataResidency: {
+          storage: process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1',
+          processing: process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1',
+        },
         target: {
           docId: 'doc-1',
           fileName: 'Runbook.md',

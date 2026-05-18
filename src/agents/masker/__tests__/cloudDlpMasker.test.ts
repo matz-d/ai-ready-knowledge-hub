@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyCloudDlpMask } from '../cloudDlpMasker';
+import {
+  CLOUD_DLP_RULE_SET_VERSION,
+  applyCloudDlpMask,
+} from '../cloudDlpMasker';
 
 describe('applyCloudDlpMask', () => {
   it('uses inspectContent and deidentifyContent with configured infoTypes', async () => {
@@ -23,7 +26,7 @@ describe('applyCloudDlpMask', () => {
       {
         item: {
           value:
-            'email EMAIL_ADDRESS / mynumber JAPAN_INDIVIDUAL_NUMBER',
+            'email [REDACTED:EMAIL_ADDRESS] / mynumber [REDACTED:JAPAN_INDIVIDUAL_NUMBER]',
         },
       },
     ]);
@@ -49,6 +52,7 @@ describe('applyCloudDlpMask', () => {
       expect.objectContaining({
         parent: 'projects/test-project/locations/global',
         inspectConfig: expect.objectContaining({
+          minLikelihood: 'POSSIBLE',
           infoTypes: expect.arrayContaining([
             { name: 'EMAIL_ADDRESS' },
             { name: 'JAPAN_INDIVIDUAL_NUMBER' },
@@ -60,15 +64,42 @@ describe('applyCloudDlpMask', () => {
     expect(deidentifyContent).toHaveBeenCalledWith(
       expect.objectContaining({
         parent: 'projects/test-project/locations/global',
+        inspectConfig: expect.objectContaining({
+          minLikelihood: 'POSSIBLE',
+        }),
         deidentifyConfig: expect.objectContaining({
-          infoTypeTransformations: expect.any(Object),
+          infoTypeTransformations: {
+            transformations: expect.arrayContaining([
+              {
+                infoTypes: [{ name: 'EMAIL_ADDRESS' }],
+                primitiveTransformation: {
+                  replaceConfig: {
+                    newValue: {
+                      stringValue: '[REDACTED:EMAIL_ADDRESS]',
+                    },
+                  },
+                },
+              },
+              {
+                infoTypes: [{ name: 'JAPAN_INDIVIDUAL_NUMBER' }],
+                primitiveTransformation: {
+                  replaceConfig: {
+                    newValue: {
+                      stringValue:
+                        '[REDACTED:JAPAN_INDIVIDUAL_NUMBER]',
+                    },
+                  },
+                },
+              },
+            ]),
+          },
         }),
       })
     );
     expect(result).toEqual({
       provider: 'cloud-dlp',
       maskedContent:
-        'email EMAIL_ADDRESS / mynumber JAPAN_INDIVIDUAL_NUMBER',
+        'email [REDACTED:EMAIL_ADDRESS] / mynumber [REDACTED:JAPAN_INDIVIDUAL_NUMBER]',
       maskedSpans: [
         { start: 6, end: 22, type: 'EMAIL', ruleId: 'dlp:EMAIL_ADDRESS' },
         {
@@ -82,6 +113,7 @@ describe('applyCloudDlpMask', () => {
         'dlp:EMAIL_ADDRESS': 1,
         'dlp:JAPAN_INDIVIDUAL_NUMBER': 1,
       },
+      ruleSetVersion: CLOUD_DLP_RULE_SET_VERSION,
     });
   });
 });

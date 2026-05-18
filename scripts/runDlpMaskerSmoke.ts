@@ -4,7 +4,7 @@ import path from 'node:path';
 import { applyCloudDlpMask } from '../src/agents/masker/cloudDlpMasker';
 
 async function main(): Promise<void> {
-  const fileArg = process.argv[2];
+  const fileArg = process.argv[2] === '--' ? process.argv[3] : process.argv[2];
   if (!fileArg) {
     console.error('Usage: pnpm masker:dlp:smoke -- <path-to-text-file>');
     process.exit(1);
@@ -27,6 +27,7 @@ async function main(): Promise<void> {
     JSON.stringify(
       {
         provider: result.provider,
+        ruleSetVersion: result.ruleSetVersion,
         maskedSpansCount: result.maskedSpans.length,
         ruleHits: result.ruleHits,
         maskedContentPreview: result.maskedContent.slice(0, 500),

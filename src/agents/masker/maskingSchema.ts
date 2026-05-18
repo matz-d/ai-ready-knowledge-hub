@@ -62,6 +62,7 @@ export const MaskingResult = z.object({
   maskedContent: z.string(),
   maskedSpans: z.array(MaskedSpan),
   ruleHits: z.record(z.string(), z.number()),
+  ruleSetVersion: z.string().optional(),
 });
 
 export type MaskingResult = z.infer<typeof MaskingResult>;

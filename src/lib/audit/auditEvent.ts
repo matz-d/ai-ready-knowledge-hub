@@ -1,9 +1,10 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { FieldValue as FieldValueType } from '@google-cloud/firestore';
 import type { Sensitivity } from '../../agents/curator/schema';
 import { FieldValue, getFirestoreClient } from '../firestore';
 import { resolveTenantIdFromAuth } from '../auth/resolveTenantIdFromAuth';
 import type { FirestoreSourceKind } from '../firestoreSchema';
+import type { ProcessingProfile } from '../processingProfile';
 
 export const AUDIT_EVENTS_COLLECTION = 'auditEvents';
 
@@ -17,6 +18,25 @@ export type AuditEventAction =
   | 'mask.override';
 
 export type AuditEventResult = 'success' | 'failure' | 'partial';
+
+export type AuditProcessingProfile = ProcessingProfile;
+
+export type AuditInferenceDestination = {
+  vendor: 'vertex';
+  region: string;
+  model: string;
+};
+
+export type AuditDataResidency = {
+  storage: string;
+  processing: string;
+};
+
+export type AuditMaskingMetrics = {
+  detected: number;
+  replaced: number;
+  falsePositiveReviewed: number;
+};
 
 export type AuditEventWrite = {
   eventId: string;
@@ -37,6 +57,12 @@ export type AuditEventWrite = {
   };
   result: AuditEventResult;
   errorCode?: string;
+  processingProfile?: AuditProcessingProfile;
+  purposeBinding?: string;
+  ruleSetVersion?: string;
+  maskingMetrics?: AuditMaskingMetrics;
+  inferenceDestination?: AuditInferenceDestination;
+  dataResidency?: AuditDataResidency;
 };
 
 export type RecordAuditEventInput = Omit<
@@ -48,6 +74,26 @@ function createTimeSortableEventId(now = new Date()): string {
   const timestamp = now.getTime().toString(36).padStart(9, '0');
   const entropy = randomBytes(8).toString('hex');
   return `${timestamp}-${entropy}`;
+}
+
+export function normalizePurposeForBinding(purpose: string): string {
+  return purpose.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+export function createPurposeBinding(input: {
+  purpose: string;
+  tenantId: string;
+  timestamp: string;
+}): string {
+  const normalizedPurpose = normalizePurposeForBinding(input.purpose);
+  const material = JSON.stringify({
+    version: 1,
+    purpose: normalizedPurpose,
+    tenantId: input.tenantId,
+    timestamp: input.timestamp,
+  });
+  const digest = createHash('sha256').update(material, 'utf8').digest('hex');
+  return `pb_sha256_${digest}`;
 }
 
 export function ipAddressFromHeaders(headers: Headers): string {
@@ -94,4 +140,3 @@ export async function recordAuditEvent(
   await db.collection(AUDIT_EVENTS_COLLECTION).doc(eventId).create(body);
   return eventId;
 }
-

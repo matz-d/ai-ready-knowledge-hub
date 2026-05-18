@@ -8,15 +8,17 @@
 
 ## 一行説明
 
-機密文書を扱うSMEのPDF・CSV・メモ・テンプレートなどの雑多な情報を一箇所に集約し、AIが自動で分類・意味マッピングするエージェント。さらに目的を入力すると、Gemini / NotebookLM / Codex / RAG に渡すべき情報セット、不足している暗黙知、人間に確認すべき質問を生成し、AI活用前の Context Package を作成する。
+機密文書を扱うSMEのPDF・CSV・メモ・テンプレートなどの雑多な情報を一箇所に集約し、AIが自動で分類・意味マッピングするエージェント。さらに目的を入力すると、Gemini / NotebookLM / RAG に渡すべき情報セット、不足している暗黙知、人間に確認すべき質問を生成し、AI活用前の Context Package を作成する。
 
 初期デモ題材は会計・社労士事務所。ただし本作品は士業の専門判断を代替するものではなく、機密文書と暗黙知を多く持つSMEの「AI活用前の準備」を支援する前段プラットフォームとして位置づける。
 
+Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡してよい理由を説明できる」こと。標準 profile は `cloud-managed` で、社内文書を管理されたクラウド境界で受け取り、Cloud DLP + Masker で個人情報や再識別リスクを安全化し、Context Package export には目的とのひもづきが残る。つまり NotebookLM / Gemini / RAG を置き換えるのではなく、それらへ投入する前に、使う情報・除外する情報・足りない情報を説明可能な形に整える。
+
 ---
 
-## 現在のステータス (2026-05-14)
+## 現在のステータス (2026-05-18)
 
-**フェーズ**: Phase 3-D（CI/CD + IAP + AuditEvent）完了。commit push → 自動 CI → Artifact Registry → Cloud Run の継続デプロイと Cloud IAP による社内限定公開が稼働中。
+**フェーズ**: Phase 3-E（Processing Boundary + Cloud DLP Trust Modes）完了。`cloud-managed` を標準 ProcessingProfile として固定し、Cloud DLP provider 固定値、Context Package export の `purposeBinding`、`cloud-sanitized-ingress` contract-only 方針、Document Conversion Eval 契約を docs / 型 / tests で同期済み。Phase 3-D の CI/CD + IAP + AuditEvent も完了済みで、commit push → 自動 CI → Artifact Registry → Cloud Run の継続デプロイと Cloud IAP による社内限定公開が稼働中。
 
 ### 完了済み
 
@@ -194,14 +196,29 @@ sample-data/
 - **AuditEvent**: `document.import` / `document.reimport` / `document.export` を `auditEvents/{eventId}` に append-only で記録。Firestore Security Rules で update/delete を拒否。
 - **Safety gate**: Strategist へ渡す前に決定論的ルールで chunk を除外（Restricted / blocked / masking 未完了 / クロス顧客機密）。LLM に依存しない。
 - **Masking defense-in-depth**: `requires_masking` chunk に `maskedText` がない場合、`toContextPackage` は raw text を fallback で出さず throw する。
-- **Cloud DLP**: Masker provider として導入済み。未指定は `simple-rule` fallback、`MASKER_PROVIDER=cloud-dlp` で明示。
+- **Cloud DLP**: Masker provider として導入済み。Phase 3-E の固定値は `minLikelihood=POSSIBLE`、replacement token は `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-05-15-v1`。未指定は `simple-rule` fallback、`MASKER_PROVIDER=cloud-dlp` で明示。
 - **Malformed document**: `listInventoryDocumentsFromFirestore` は parse エラーの document を skip-and-warn し、全体を落とさない。
 - **Sheets / Docs 共有**: Google Workspace import の対象は、UI に表示される service account email への reader 共有が必要。
 - **データ保管**: GCS `asia-northeast1`、raw object は `raw/{docId}/`、masked object は `masked/{docId}/`。chunk 本文（`maskedText` 含む）は Firestore subcollection に inline 保存。
 
+### Phase 3-E の説明ポイント
+
+- **標準 profile は `cloud-managed`**: 通常デモでは、文書を管理された Cloud Run / GCS / Firestore 境界に受け入れて処理する。SMEがすぐ使える標準運用として説明する。
+- **Cloud DLP + Masker で安全化**: 個人名・住所・電話番号などは Cloud DLP で検出し、さらに Masker が「マスク後も特定できそうか」を確認する。安全に変換できるものは AI 参照版へ、危ないものは Context Package 本文から外す。
+- **Context Package に目的が残る**: export は単なる文書束ではなく、「新人スタッフ向け給与計算AIを作る」などの purpose に対して、採用・除外・確認質問をまとめる。後から「この目的なら、この情報をAIに渡してよい」と説明できる。
+- **NotebookLM / Gemini / RAG の前段**: 生成AI本体を作るのではなく、投入前の情報整理と安全確認を担当する。下流AIには、マスク済み本文・除外理由・不足情報が揃った Context Package を渡す。
+- **`cloud-sanitized-ingress` は将来 profile**: 生データを当社クラウド境界に入れたくない高セキュリティ顧客向けに、顧客側でサニタイズ済み payload だけを送る構成を予約している。Phase 3-E では短く触れるだけで、デモの主役にはしない。
+
+### Phase 3-E 完了確認 (2026-05-18)
+
+- docs / 型 / AuditEvent / Cloud DLP provider の用語と preset 値が一致: `cloud-managed = tenant-cloud / post-ingress / shared-cloud`、`cloud-sanitized-ingress = tenant-edge / pre-ingress / shared-cloud`。
+- Cloud DLP 固定値が一致: `minLikelihood=POSSIBLE`、replacement token `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-05-15-v1`。
+- `local-only` / ブラウザ WASM DLP / strict local only は MVP 不採用またはスコープ外としてのみ記述。
+- Cloud DLP live smoke 済み: `顧問契約書_実案件サンプル.txt` で 25 spans（`PERSON_NAME` / `STREET_ADDRESS` / `LOCATION` / `PHONE_NUMBER` / `JAPAN_BANK_ACCOUNT`）を検出。
+- `pnpm test` / `pnpm typecheck` / `pnpm build` 通過。
+
 ### 次にやること
 
-- **Phase 3-E**: Processing Boundary + Cloud DLP Trust Modes。`cloud-managed` を標準 profile とし、Cloud DLP 本格統合、`purposeBinding`、ProcessingProfile / AuditEvent 拡張方針を固める。正本は `docs/phase-3-e-direction.md`。
 - **Phase 3-F**: デモ polish・動画シナリオ・見栄え調整。発表準備。
 - Curator / Masker eval パイプライン。
 

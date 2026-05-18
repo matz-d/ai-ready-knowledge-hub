@@ -79,14 +79,15 @@ type ProcessingProfile = {
 | 2 | ProcessingProfile の正本化 | `cloud-managed` / `cloud-sanitized-ingress` の TCB、境界、データフローを docs と型で表現する。 |
 | 3 | AuditEvent 拡張方針 | `processingProfile`、`purposeBinding`、`inferenceDestination`、`ruleSetVersion`、`maskingMetrics` を将来二重書きしやすい shape に整理する。 |
 | 4 | `document.export` の purpose binding | Context Package export 単位で purpose を監査に残し、「どの目的でどの AI-ready data を渡したか」を追えるようにする。 |
-| 5 | `cloud-sanitized-ingress` contract | マスク済み payload の受理 schema、境界証跡、未マスク疑い reject 方針を文書化する。実装はしない。 |
+| 5 | `cloud-sanitized-ingress` contract | §5.2 を正本とし、受理 payload schema、`boundaryEvidence`、`correlationId`、未マスク疑い reject 方針を文書化する。実装・endpoint はしない。 |
 | 6 | DLP / Masker eval の最小設計 | sample-data に対して、期待する masking / restricted promotion / rule hits を固定する足場を作る。 |
 | 7 | デモ説明の更新 | 営業向けに Profile-A のデータフローを 1 枚で説明できる文章へ整える。 |
 
 ### やらないこと
 
-- Edge Sanitizer の実装
-- 顧客 GCP プロジェクトへの deploy / BYOC / Terraform
+- Edge Sanitizer の実装（顧客境界で動かすサニタイザ本体のコード・バイナリ・運用スクリプトを含む）
+- 顧客 GCP プロジェクトへの deploy / BYOC / Terraform（`cloud-sanitized-ingress` を成立させるための顧客側・当社側 IaC のいずれも Phase 3-E では扱わない）
+- 当社クラウド側の **sanitized payload 受理用 HTTP endpoint**（Route Handler / Cloud Run の新ルート。契約は §5.2 で文書化のみ）
 - ブラウザ WASM DLP
 - Strict local only / ローカル LLM
 - PDF / 画像 / Slide の `cloud-sanitized-ingress` 対応
@@ -119,6 +120,76 @@ type ProcessingProfile = {
 | Storage | 当社 GCS / Firestore にはマスク済み data のみ保存する。生データは当社側に存在しない設計にする。 |
 | Inference | 当社 shared-cloud inference に渡す入力はマスク済み chunk のみ。 |
 | Audit | 顧客側 boundary evidence と当社 AuditEvent を correlation id でつなぐ。両方が揃って 1 回の処理証跡とみなす。 |
+
+### 5.2 `cloud-sanitized-ingress` contract 正本（Phase 3-E は文書のみ）
+
+本節は **将来**の当社 ingress が「マスク済みと主張される payload」のみを受け取るときの **契約（JSON の形・証跡・拒否方針）** を固定する。§5 の Profile-B 表と矛盾しない。Phase 3-E では **実装・エンドポイント・Edge デプロイは一切行わない**（§4「やらないこと」参照）。
+
+#### Phase 3-E で実装しないもの（再掲）
+
+次は本 profile を「動かす」ための要素であり、Phase 3-E のスコープ外とする。
+
+- Edge Sanitizer（顧客 GCP 内で生データを受け、マスク済み payload を組み立てるコンポーネント）の実装
+- 顧客 GCP プロジェクトへの deploy、BYOC、Terraform による環境構築
+- 当社側の **sanitized payload 受理 endpoint**（HTTP API の新設。Phase 3-G 以降の検討対象）
+
+#### 受理 payload の最小スキーマ（契約案）
+
+ingress が受理する想定 JSON は、少なくとも次を **必須** とする。フィールド名は実装時に Zod / OpenAPI に落とすが、意味はここを正とする。
+
+| フィールド | 型（概念） | 必須 | 説明 |
+|---|---|---|---|
+| `schemaVersion` | number | はい | 契約版。初期案は `1`。後から breaking change するときに増やす。 |
+| `processingProfile` | object | はい | §3.2 の `ProcessingProfile` と一致すること。`profileName` は必ず `'cloud-sanitized-ingress'`。`ingressBoundary` / `sanitizationStage` / `inferenceScope` は §3.3 の preset と一致すること。 |
+| `correlationId` | string | はい | **1 回の取り込み試行**を顧客側証跡と当社側 `AuditEvent` で結ぶ識別子。推奨は UUID v4。不透明な高エントロピー文字列でもよいが、衝突耐性とログ検索可能性を満たすこと。 |
+| `ruleSetVersion` | string | はい | Edge で適用した DLP / マスキングルール束の版（例: `dlp-ruleset-2026-05-15-v1`）。§7 の方針と整合する命名でよい。 |
+| `maskingMetrics` | object | はい | `detected` / `replaced` / `falsePositiveReviewed`（数値）。§6.1 `ProcessingRecord` の最小形と同じ意味。 |
+| `chunks` | array | はい | 当社側ストレージに載せる **マスク済みテキスト** の単位。各要素は少なくとも `text: string`（マスク後本文）を持つ。locator・metadata は Phase 3-G 以降で `KnowledgeChunk` 相当へ拡張可能。空配列は「受理しても意味がない」ため契約上は許容しない（バリデーションで弾く想定）。 |
+| `boundaryEvidence` | object | はい | 下記「境界証跡」を満たすオブジェクト。 |
+
+任意フィールド（契約の拡張ポイント、Phase 3-E では未実装）:
+
+- `purposeBinding` の先行指定（将来、export 単位の purpose と突合する場合）
+- `tenantDocumentRef`（顧客側の文書 ID。当社 `docId` とは別系統）
+
+**当社境界に生の平文を載せない:** `chunks[].text` はマスク適用後のみ。生データや「マスク前のハッシュのみ」では本文として受理しない（ハッシュは `boundaryEvidence` 側の設計次第で、平文を当社に送らない範囲に留める）。
+
+#### 境界証跡（`boundaryEvidence`）の必須内容
+
+顧客 Edge で「いつ・どのルール束で・どの程度マスキングしたか」を後から説明できる最小セット。
+
+| フィールド | 型（概念） | 必須 | 説明 |
+|---|---|---|---|
+| `evidenceVersion` | string | はい | 証跡スキーマ版。例: `edge-evidence-v1`。 |
+| `sanitizedAt` | string (ISO8601) | はい | Edge 上でサニタイズが完了した時刻（UTC 推奨）。 |
+| `ruleSetVersionApplied` | string | はい | 実際に適用したルール束の版。ルートの `ruleSetVersion` と **一致**すること（不一致は拒否方針）。 |
+| `sanitizerComponentId` | string | はい | Edge サニタイザのビルド識別子（リリースタグ、コミット SHA、顧客パッケージ版など）。人間が「どのバイナリか」を辿れる粒度。 |
+
+任意: `edgeTenantRef`（顧客側テナント・環境の表示名）、`parentCorrelationId`（バッチ分割時の親 ID）。
+
+#### `correlationId` の運用ルール（契約）
+
+- 顧客の監査ログ（Edge 側）と当社の `AuditEvent`（将来の ingress / `document.import` 相当）に **同一文字列** を記録する。
+- **再送・リトライ**では同一 `correlationId` を使うか、使わないかを契約で決める。推奨: 再送は同一 ID（冪等キー）とし、当社側は重複検知時に既処理として応答する設計を Phase 3-G で検討する。Phase 3-E では実装しない。
+- 当社が証跡として追えることのみ必須とし、顧客内部の user id を載せるかは契約・法務の対象（本節では必須にしない）。
+
+#### 未マスク疑い payload の拒否方針（契約）
+
+当社 ingress（将来実装）は **fail-closed** とする前提を固定する。次のいずれかに該当する場合、**永続化せず**拒否する（HTTP ステータスは Phase 3-G で OpenAPI に書く; 概念として 4xx）。
+
+1. **スキーマ違反**: 必須キー欠落、`processingProfile` が preset と不一致、`chunks` が空、型不正。
+2. **ルール版の不整合**: `boundaryEvidence.ruleSetVersionApplied` とルートの `ruleSetVersion` が一致しない。
+3. **未マスク疑い（自動検知）**: 受信テキスト（`chunks[].text` の連結または各要素）に対し、契約で定めた **高感度 detector**（例: クレジットカード番号の Luhn 相当、メールアドレス正規表現、日本のマイナンバー形式、国際電話の桁パターン等）が閾値を超えてヒットした場合。detector 一覧と閾値は Phase 3-G で実装に落とす; Phase 3-E では「高感度 pattern に基づき拒否しうる」ことのみ固定する。
+4. **証跡欠落**: `boundaryEvidence` が必須フィールドを欠く、または `sanitizedAt` が未来すぎる・著しく古いなど、運用で定めた鮮度ウィンドウ外（ウィンドウ値は Phase 3-G）。
+
+**故意にしないこと:** `maskingMetrics.detected === 0` **単独**を拒否理由にしない（マスク対象が本当にない文書がありうる）。PII 疑いシグナルと組み合わせたときのエスカレーションは Phase 3-G で設計する。
+
+#### Phase 3-G への引き継ぎ（実装時に決めること）
+
+- 受理 endpoint のパス・認証（IAP / mTLS / 顧客発行 JWT）の選択
+- detector 一覧・閾値・多言語・全角半角の正規化
+- 冪等性（同一 `correlationId` の再送）と Firestore 書き込みの競合解消
+- `chunks` を `KnowledgeChunk` スキーマへ写すマッピング（locator なし chunk の扱い）
 
 ---
 
@@ -178,10 +249,10 @@ Phase 3-E では `cloudDlpMasker` に次の設定を持たせる。
 
 | 項目 | 方針 |
 |---|---|
-| `minLikelihood` | デモ / MVP では `POSSIBLE` 以上を候補。検証で過剰検出が強ければ `LIKELY` に上げる。 |
-| replacement token | DLP 既定の `[INFO_TYPE]` ではなく、既存 SimpleMasker と揃えた固定長に近い token へ寄せる。例: `[REDACTED:PERSON_NAME]`。 |
+| `minLikelihood` | Phase 3-E の実装値は `POSSIBLE`。過剰検出が強い場合に `LIKELY` へ上げる余地は後続検証で扱う。 |
+| replacement token | DLP 既定の `[INFO_TYPE]` ではなく、`[REDACTED:<INFO_TYPE>]` に固定する。例: `[REDACTED:PERSON_NAME]`。 |
 | infoTypes | 既存 `EMAIL_ADDRESS` / `PHONE_NUMBER` / `PERSON_NAME` / `LOCATION` / `STREET_ADDRESS` / `DATE_OF_BIRTH` / `CREDIT_CARD_NUMBER` / `JAPAN_INDIVIDUAL_NUMBER` / `JAPAN_BANK_ACCOUNT` を初期正本にする。 |
-| ruleSetVersion | DLP config bundle として version を明示する。例: `dlp-ruleset-2026-05-15-v1`。 |
+| ruleSetVersion | DLP config bundle として `dlp-ruleset-2026-05-15-v1` を明示する。 |
 | custom dictionary | Phase 3-E では設計候補まで。顧客名 / 担当者名 / 支店名などは後続で tenant override として扱う。 |
 
 ### 7.2 LLM との役割分担
@@ -213,14 +284,22 @@ Phase 3-E では `cloudDlpMasker` に次の設定を持たせる。
 Phase 3-E は次を満たしたら完了とする。
 
 - `cloud-managed` が標準 profile としてドキュメントに固定されている。
-- `cloud-sanitized-ingress` が contract-only profile としてドキュメントに固定されている。
+- `cloud-sanitized-ingress` が contract-only profile としてドキュメントに固定されている（契約の細部は §5.2。Phase 3-E で Edge / 顧客 deploy / BYOC / Terraform / 受理 endpoint を実装しないことも §4・§5.2 で明示されている）。
 - `local-only` / ブラウザ WASM DLP を MVP の処理境界として採用しない判断が記録されている。
 - Cloud DLP provider の `minLikelihood`、replacement token、ruleSetVersion 方針が実装または実装可能な具体仕様になっている。
 - Context Package export の AuditEvent に `purposeBinding` を残す方針が実装または具体仕様になっている。
 - `ProcessingProfile` の型方針が docs と実装候補で一致している。
 - BigQuery write-once audit は後続と明記され、現時点の Firestore AuditEvent の限界が説明されている。
-- **Document Conversion Eval の評価契約（6軸 / `ConversionEvalResult` の docs 上の型案 / 三段階成熟度 / `overall.status` ロールアップ規約）が本文書に固定されている。`src/` への型実装、評価器ランナー、golden fixture 作成はいずれも Phase 3-H に送ることが明記されている。**
+- **Document Conversion Eval の評価契約（6軸 / `ConversionEvalResult` の docs 上の型案 / 三段階成熟度 / `overall.status` ロールアップ規約）が本文書に固定されている。`src/` への型実装、評価器ランナー、golden fixture 作成、`poc/document-conversion/` 作成、CI への評価器接続はいずれも Phase 3-H に送ることが明記されている。**
 - `pnpm test`、`pnpm typecheck`、必要に応じて `pnpm build` が通る。
+
+### 9.1 完了確認 (2026-05-18)
+
+- `ProcessingProfile` preset は docs / `src/lib/processingProfile.ts` / `document.export` AuditEvent で一致している。
+- Cloud DLP provider は `minLikelihood=POSSIBLE`、replacement token `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-05-15-v1` で固定済み。
+- `local-only` / ブラウザ WASM DLP / strict local only は MVP 採用ではなく、不採用・スコープ外の判断としてのみ残っている。
+- Cloud DLP live smoke は ADC を使って実行済み。`顧問契約書_実案件サンプル.txt` で 25 spans を検出し、`JAPAN_BANK_ACCOUNT` も rule hit に含まれる。
+- `pnpm test`、`pnpm typecheck`、`pnpm build` は通過済み。
 
 ---
 
@@ -235,9 +314,11 @@ PDF / 画像 / Slide / Office 系の本格変換を Phase 3-H で着手する前
 **非目的:**
 
 - 変換器そのものを Phase 3-E で実装しない。
+- `ConversionEvalResult` を `src/` に落とす型実装（Zod / OpenAPI 化を含む）を Phase 3-E では行わない。
 - golden fixture（正解データ）を Phase 3-E では作らない。
 - `poc/document-conversion/` ディレクトリも Phase 3-E では作らない（Phase 3-H で作成）。
 - 評価器ランナー（CI に組み込む scaffold）は Phase 3-E では作らない。
+- CI への評価器接続も Phase 3-E では行わない。
 
 ### 10.2 評価対象は「変換器」ではなく「変換後の構造化結果」
 
@@ -403,8 +484,9 @@ Phase 3-E では案 B で固定する。案 C は Phase 3-H 以降、golden fixt
 - `overall.status` ロールアップ規約の固定（10.6、案B）
 - A8 との哲学的整合の明文化（10.6 根拠）
 
-**やらない:**
+**やらない（いずれも Phase 3-H で着手）:**
 
+- `ConversionEvalResult` を `src/` に落とす型実装（TypeScript 正本化、Zod / OpenAPI 化を含む）
 - 評価器ランナーの実装
 - 各軸の fail / warn 閾値の確定
 - golden fixture の作成・整備
@@ -432,7 +514,7 @@ Phase 3-E 完了後の候補は次の通り。
 | 候補 | 内容 |
 |---|---|
 | Phase 3-F | デモ polish、Knowledge Inventory ヒートマップ、動画シナリオ、トップページ古い status 表示の更新。 |
-| Phase 3-G | `cloud-sanitized-ingress` の prototype。sanitized payload endpoint、schema reject、boundary evidence correlation id。 |
+| Phase 3-G | `cloud-sanitized-ingress` の prototype。§5.2 contract に沿った sanitized payload endpoint、schema / 未マスク疑い reject、`correlationId` による顧客証跡と `AuditEvent` の突合。 |
 | Phase 3-H | PDF / 画像 / Slide の document-conversion PoC。MarkItDown / Gemini / Docling 等を `poc/document-conversion` で比較する。 |
 | Phase 4 | BigQuery / Cloud Logging write-once audit、CMEK / VPC-SC、tenant policy engine。 |
 

@@ -18,16 +18,31 @@ type DlpFinding = {
   } | null;
 };
 
-export type CloudDlpClient = Pick<
-  DlpServiceClient,
-  'inspectContent' | 'deidentifyContent'
->;
+type DlpInspectResponse = {
+  result?: {
+    findings?: DlpFinding[] | null;
+  } | null;
+};
+
+type DlpDeidentifyResponse = {
+  item?: {
+    value?: string | null;
+  } | null;
+};
+
+export type CloudDlpClient = {
+  inspectContent(request: unknown): Promise<[DlpInspectResponse]>;
+  deidentifyContent(request: unknown): Promise<[DlpDeidentifyResponse]>;
+};
 
 export type CloudDlpMaskerOptions = {
   client?: CloudDlpClient;
   projectId?: string;
   location?: string;
 };
+
+export const CLOUD_DLP_RULE_SET_VERSION = 'dlp-ruleset-2026-05-15-v1';
+export const CLOUD_DLP_MIN_LIKELIHOOD = 'POSSIBLE' as const;
 
 const DLP_INFO_TYPES = [
   'EMAIL_ADDRESS',
@@ -52,6 +67,10 @@ const INFO_TYPE_TO_SPAN_TYPE: Record<string, MaskedSpanType> = {
   JAPAN_INDIVIDUAL_NUMBER: 'JP_MYNUMBER',
   JAPAN_BANK_ACCOUNT: 'BANK_ACCOUNT',
 };
+
+function replacementTokenForInfoType(infoType: string): string {
+  return `[REDACTED:${infoType}]`;
+}
 
 function coerceOffset(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
@@ -113,10 +132,12 @@ export async function applyCloudDlpMask(
   const location = options.location ?? process.env.GOOGLE_CLOUD_LOCATION ?? 'global';
   const parent = `projects/${projectId}/locations/${location}`;
   const infoTypes = DLP_INFO_TYPES.map((name) => ({ name }));
-  const client = options.client ?? new DlpServiceClient();
+  const client =
+    options.client ?? (new DlpServiceClient() as unknown as CloudDlpClient);
   const item = { value: input.content };
   const inspectConfig = {
     infoTypes,
+    minLikelihood: CLOUD_DLP_MIN_LIKELIHOOD,
     includeQuote: false,
   };
 
@@ -138,13 +159,16 @@ export async function applyCloudDlpMask(
     inspectConfig,
     deidentifyConfig: {
       infoTypeTransformations: {
-        transformations: [
-          {
-            primitiveTransformation: {
-              replaceWithInfoTypeConfig: {},
+        transformations: DLP_INFO_TYPES.map((name) => ({
+          infoTypes: [{ name }],
+          primitiveTransformation: {
+            replaceConfig: {
+              newValue: {
+                stringValue: replacementTokenForInfoType(name),
+              },
             },
           },
-        ],
+        })),
       },
     },
     item,
@@ -155,5 +179,6 @@ export async function applyCloudDlpMask(
     maskedContent: deidentifyResponse.item?.value ?? input.content,
     maskedSpans,
     ruleHits: buildRuleHits(maskedSpans),
+    ruleSetVersion: CLOUD_DLP_RULE_SET_VERSION,
   };
 }

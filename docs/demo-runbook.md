@@ -2,7 +2,21 @@
 
 Upload → Firestore/GCS → Inventory → Context Package を再現するための実行手順です。  
 この時点では **MVP デモ** であり、PDF 専用抽出は未導入です。**Google Sheets** は [Phase 3-A](phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。  
-現状のマスキング境界は **SimpleMasker または Cloud DLP + Gemini residual risk** です。
+Phase 3-E のデモ説明では、標準 profile は **`cloud-managed`** です。管理されたクラウド境界で文書を受け取り、Cloud DLP + Masker で安全化し、目的にひもづいた Context Package として NotebookLM / Gemini / RAG に渡す前段を作ります。
+
+## 0. デモで伝える Processing Boundary
+
+デモ中の言い方は、技術名の列挙よりも「この目的でAIに渡してよい理由を説明できる」に寄せます。
+
+| 見せる場面 | 話すポイント |
+|---|---|
+| Upload / Sheets import | 標準は `cloud-managed`。SMEがすぐ使える形として、Cloud Run / GCS / Firestore の管理境界で受け取る。 |
+| Masker | Cloud DLP が個人情報を検出し、Masker がマスク後も特定されそうな文書を止める。安全に変換できるものだけ AI 参照版になる。 |
+| Inventory | `ai_safe` は「この目的ならマスク済みで使える」、`restricted` は「本文は渡さず、人間確認に回す」と説明する。 |
+| Context Package export | purpose binding が残るので、単なるファイル束ではなく「この目的に対して使う理由・外す理由が揃った成果物」として渡せる。 |
+| NotebookLM / Gemini / RAG | 本アプリは代替ではなく前段。下流AIに投入する前に、情報の選別・安全化・不足質問を整える。 |
+
+`cloud-sanitized-ingress` は将来の高セキュリティ profile として短く触れるだけにします。顧客側でサニタイズ済み payload だけを送る選択肢を予約している、という説明に留め、今回の runbook では実行手順を扱いません。
 
 ## 1. 前提条件
 
@@ -177,8 +191,8 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 - 成功時は `documents/{docId}` が Firestore に保存され、`raw/{docId}/...` が GCS に保存される
 - 文書によって以下の見え方になる
   - `curated`: そのまま AI 参照候補
-  - `ai_safe`: マスク済み本文を AI 参照候補
-  - `restricted`: human review only（Context Package 本文には入れない）
+  - `ai_safe`: Cloud DLP + Masker で安全化済み。目的に合えば Context Package 本文に入る
+  - `restricted`: human review only。マスク後も危ない、またはこの目的では本文を AI に渡せない
   - `blocked`: AI 参照対象外（human review 側で扱う）
 
 ### Inventory (`/`)
@@ -187,6 +201,8 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 - Firestore 読み取り不能時のみ W1 snapshot fallback が使われる
 
 ## 7. Context Package export
+
+デモでは、export 前に Purpose Query の文言を読み上げます。ここが purpose binding の軸です。生成された Markdown は「NotebookLM / Gemini / RAG に渡す材料」ですが、同時に「なぜこの情報を渡してよいか」を説明する記録でもあります。
 
 1. live corpus から生成（Firestore + GCS）
 
@@ -220,6 +236,14 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 - **chunk が 0 件の document**: 従来どおり GCS から `aiSafeContent` を読むフォールバック（未再生成の既存 corpus も空にならない）。
 
 確認するときは、§10 の手順で chunk を生成したうえで `pnpm context:demo:live` を実行し、該当ファイルのセクションが chunk 由来になっているかを見ます。
+
+### デモで確認する export の中身
+
+- purpose または package manifest に、入力した目的が残っている
+- `Included Documents` は、その目的に対して使う理由が説明できる文書だけになっている
+- `Excluded Documents` / human review 側に、古い資料・顧客固有情報・Restricted 格上げ文書が理由付きで残っている
+- `Full AI-Ready Sources` には、必要な本文だけが入り、raw の個人情報や restricted 本文が混ざっていない
+- 最後に「これを NotebookLM / Gemini / RAG に渡す。AI本体ではなく、その前に情報を整えるところが価値」と締める
 
 ## 8. E2E test policy
 
@@ -292,7 +316,7 @@ MASKER_PROVIDER=cloud-dlp pnpm masker:pipeline -- sample-data/accounting-office/
 | `顧問契約書_実案件サンプル.txt` の `ruleHits` | `PERSON_NAME=14`, `STREET_ADDRESS=2`, `LOCATION=6`, `PHONE_NUMBER=2`, `JAPAN_BANK_ACCOUNT=1` |
 | `顧客対応メモ_匿名化.txt` pipeline | `maskingResult.provider=cloud-dlp`, DLP span 0 件、Gemini residual risk が文脈リスクを検出し `restricted_promoted` |
 
-この結果により、DLP は決定論的 PII、Gemini residual risk は文脈的な再識別リスクを見る分担が live で確認済み。
+この結果により、DLP は個人情報などの検出、Masker はマスク後も残る再識別リスクを見る分担が live で確認済み。デモでは「個人情報を落とすだけでなく、マスク後も危ないものは止める」と説明する。
 
 ## 10. Phase 2: Chunk regeneration smoke
 

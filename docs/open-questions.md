@@ -131,7 +131,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - 残未決: 日本向け custom dictionary（顧客名、社内担当者、支店名など）をどの段階で導入するか
 
 ### Document Conversion Eval（Phase 3-H に向けた未決）
-- **Phase 3-E 方針（2026-05-18）**: 6 評価軸・`ConversionEvalResult` 型・三段階成熟度・`overall.status` ロールアップ規約（案B: blocker 軸方式）を [docs/phase-3-e-direction.md](phase-3-e-direction.md) §10 と [docs/decisions.md](decisions.md) D-P3-E Q8 に固定済み。評価器ランナーや golden fixture は Phase 3-H へ送る。
+- **Phase 3-E 方針（2026-05-18）**: 6 評価軸・`ConversionEvalResult` の docs 上の型案・三段階成熟度（health / heuristic / golden）・`overall.status` ロールアップ規約（案B: blocker 軸方式）を [docs/phase-3-e-direction.md](phase-3-e-direction.md) §10 と [docs/decisions.md](decisions.md) D-P3-E Q8 に固定済み。`src/` への型実装、評価器ランナー、golden fixture、`poc/document-conversion/` 作成、CI への評価器接続は Phase 3-H へ送る。
 - 残未決: 各軸の fail / warn 閾値（特に `safety_readiness.maskableChunkRate` の下限、`context_package_readiness.oversizedChunks` の許容数、`coverage.pageCoverage` の最低値）
 - 残未決: golden fixture を sample-data から何件・どの種類で作るか（士業実案件 / テンプレ / 表 / 暗黙知メモ）
 - 残未決: `semantic_retention.missingExpectedFields` の「必ず残ってほしいフィールド」リストをどこに置くか（fixture 横の YAML / `eval/expected-conversion.json` / Firestore）
@@ -182,6 +182,18 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 ### eval ground truth の作り方
 - 手動アノテーション vs Geminiで生成→手動修正
 - ラベルの粒度
+
+### Phase 3-G 引き継ぎ（`cloud-sanitized-ingress`）
+
+**Phase 3-E で文書固定済み（実装なし）:** 将来の当社 ingress が受け取るマスク済み payload の最小 JSON 形、`boundaryEvidence` の必須キー、`correlationId` の役割、未マスク疑い時の fail-closed 拒否の考え方、および Phase 3-E に含めない範囲（Edge Sanitizer、顧客 GCP deploy、BYOC、Terraform、sanitized payload 受理 endpoint）。正本は [docs/phase-3-e-direction.md](phase-3-e-direction.md) §5.2。
+
+**Phase 3-G で検討する未決（実装に入るとき）:**
+
+- 受理 HTTP endpoint のパス・認証（IAP / mTLS / 顧客発行 JWT 等）
+- 未マスク疑い detector の一覧・閾値・正規化（全角半角・多言語）
+- 同一 `correlationId` 再送時の冪等性と Firestore 書き込みの競合解消
+- `chunks[]` を本線の `KnowledgeChunk` に写すマッピング（locator なしの扱い）
+- 拒否時の `AuditEvent`（失敗理由を残すか、サイレント drop 禁止か）
 
 ---
 

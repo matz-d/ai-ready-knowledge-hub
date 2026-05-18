@@ -878,7 +878,7 @@ sample-data/
 ### Phase 3-E の境界
 
 **触る領域:**
-- Cloud DLP provider: `minLikelihood`, replacement token, ruleSetVersion
+- Cloud DLP provider: `minLikelihood=POSSIBLE`, replacement token `[REDACTED:<INFO_TYPE>]`, `ruleSetVersion=dlp-ruleset-2026-05-15-v1`
 - ProcessingProfile / TCB docs
 - AuditEvent shape の拡張方針
 - `document.export` の purposeBinding
@@ -892,7 +892,7 @@ sample-data/
 - VPC-SC / CMEK 本格構築
 - PDF / 画像 / Slide の `cloud-sanitized-ingress` 対応
 - Strict local only / ローカル LLM
-- Document Conversion Eval ランナー実装 / golden fixture 作成 / `poc/document-conversion/` ディレクトリ作成
+- Document Conversion Eval: `src/` への `ConversionEvalResult` 型実装 / 評価器ランナー実装 / golden fixture 作成 / `poc/document-conversion/` ディレクトリ作成 / CI への評価器接続
 
 ### Q8: Document Conversion Eval の評価契約
 
@@ -926,7 +926,8 @@ sample-data/
 - 案 A（単純多数決）: safety_readiness と他軸の重みが等価になり、downstream 契約を守れない。不採用。
 - 案 C（成熟度別運用）: health / heuristic / golden で blocker 軸を変える方式。**Phase 3-H 以降の検討候補として future memo に残す**。Phase 3-E では案 B 一本で固定する。
 
-**やらない判断:**
+**やらない判断（Phase 3-H で着手）:**
+- `ConversionEvalResult` を `src/` に落とす型実装（TypeScript 正本化、Zod / OpenAPI 化を含む）。
 - 評価器ランナーの実装。
 - 各軸の fail / warn 閾値の確定。
 - golden fixture の作成。
