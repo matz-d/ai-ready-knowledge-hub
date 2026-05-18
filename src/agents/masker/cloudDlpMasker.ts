@@ -1,4 +1,5 @@
 import { DlpServiceClient } from '@google-cloud/dlp';
+import type { protos } from '@google-cloud/dlp';
 import type {
   MaskedSpan,
   MaskedSpanType,
@@ -6,33 +7,20 @@ import type {
   MaskingResult,
 } from './maskingSchema';
 
-type DlpByteRange = {
-  start?: string | number | null;
-  end?: string | number | null;
-};
-
-type DlpFinding = {
-  infoType?: { name?: string | null } | null;
-  location?: {
-    byteRange?: DlpByteRange | null;
-  } | null;
-};
-
-type DlpInspectResponse = {
-  result?: {
-    findings?: DlpFinding[] | null;
-  } | null;
-};
-
-type DlpDeidentifyResponse = {
-  item?: {
-    value?: string | null;
-  } | null;
-};
+type DlpFinding = protos.google.privacy.dlp.v2.IFinding;
+type DlpByteRange = protos.google.privacy.dlp.v2.IRange;
+type DlpInspectRequest = protos.google.privacy.dlp.v2.IInspectContentRequest;
+type DlpInspectResponse = protos.google.privacy.dlp.v2.IInspectContentResponse;
+type DlpDeidentifyRequest =
+  protos.google.privacy.dlp.v2.IDeidentifyContentRequest;
+type DlpDeidentifyResponse =
+  protos.google.privacy.dlp.v2.IDeidentifyContentResponse;
 
 export type CloudDlpClient = {
-  inspectContent(request: unknown): Promise<[DlpInspectResponse]>;
-  deidentifyContent(request: unknown): Promise<[DlpDeidentifyResponse]>;
+  inspectContent(request: DlpInspectRequest): Promise<[DlpInspectResponse]>;
+  deidentifyContent(
+    request: DlpDeidentifyRequest
+  ): Promise<[DlpDeidentifyResponse]>;
 };
 
 export type CloudDlpMaskerOptions = {
@@ -68,13 +56,29 @@ const INFO_TYPE_TO_SPAN_TYPE: Record<string, MaskedSpanType> = {
   JAPAN_BANK_ACCOUNT: 'BANK_ACCOUNT',
 };
 
+function createCloudDlpClient(sdkClient: DlpServiceClient): CloudDlpClient {
+  return {
+    async inspectContent(request) {
+      const [response] = await sdkClient.inspectContent(request);
+      return [response];
+    },
+    async deidentifyContent(request) {
+      const [response] = await sdkClient.deidentifyContent(request);
+      return [response];
+    },
+  };
+}
+
 function replacementTokenForInfoType(infoType: string): string {
   return `[REDACTED:${infoType}]`;
 }
 
-function coerceOffset(value: string | number | null | undefined): number | null {
+function coerceOffset(
+  value: DlpByteRange['start'] | DlpByteRange['end'] | undefined
+): number | null {
   if (value === null || value === undefined) return null;
-  const n = typeof value === 'string' ? Number(value) : value;
+  const n =
+    typeof value === 'object' ? Number(value.toString()) : Number(value);
   return Number.isSafeInteger(n) && n >= 0 ? n : null;
 }
 
@@ -132,8 +136,7 @@ export async function applyCloudDlpMask(
   const location = options.location ?? process.env.GOOGLE_CLOUD_LOCATION ?? 'global';
   const parent = `projects/${projectId}/locations/${location}`;
   const infoTypes = DLP_INFO_TYPES.map((name) => ({ name }));
-  const client =
-    options.client ?? (new DlpServiceClient() as unknown as CloudDlpClient);
+  const client = options.client ?? createCloudDlpClient(new DlpServiceClient());
   const item = { value: input.content };
   const inspectConfig = {
     infoTypes,
