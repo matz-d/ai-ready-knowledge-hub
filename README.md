@@ -201,7 +201,7 @@ sample-data/
 
 ### 次にやること
 
-- **Phase 3-E**: Cloud DLP 本格統合（`minLikelihood` 調整 / replacement token 統一 / 日本向け custom dictionary）。W3 予定だったもの。
+- **Phase 3-E**: Processing Boundary + Cloud DLP Trust Modes。`cloud-managed` を標準 profile とし、Cloud DLP 本格統合、`purposeBinding`、ProcessingProfile / AuditEvent 拡張方針を固める。正本は `docs/phase-3-e-direction.md`。
 - **Phase 3-F**: デモ polish・動画シナリオ・見栄え調整。発表準備。
 - Curator / Masker eval パイプライン。
 
@@ -219,6 +219,7 @@ sample-data/
 | [docs/firestore-schema.md](docs/firestore-schema.md) | Firestore document shape の正本 |
 | [docs/phase-3-c-direction.md](docs/phase-3-c-direction.md) | Phase 3-C 認証・デプロイ方針（Cloud IAP / GitHub Actions / BYOC 戦略） |
 | [docs/phase-3-d-direction.md](docs/phase-3-d-direction.md) | Phase 3-D CI/CD + IAP + AuditEvent 実装方針（**完了**） |
+| [docs/phase-3-e-direction.md](docs/phase-3-e-direction.md) | Phase 3-E Processing Boundary + Cloud DLP Trust Modes 実装方針 |
 | [docs/iap-evidence/](docs/iap-evidence/) | Phase 3-D 完了証跡（screenshot + verification.txt） |
 | [docs/phase-3-c-5-source-coverage.md](docs/phase-3-c-5-source-coverage.md) | Phase 3-C-5 source coverage 確認結果（全 source 確認済み） |
 | [docs/phase-3-b-workspace-resync.md](docs/phase-3-b-workspace-resync.md) | Phase 3-B 正本（Workspace resync・schemaVersion 2・鮮度バッジ） |

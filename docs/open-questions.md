@@ -98,15 +98,15 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - Phase 3-C-5 バグ修正 6 件（malformed doc skip、txt/md chunk 生成、upload 後 auto-chunk、Docs route 分岐、Docs error mapping、backfill usage）
 - CodeRabbit review: 5 件 apply / 11 件 skip（[docs/decisions.md D-P3-C](decisions.md) に根拠記録）
 
-**次フェーズ（2026-05-14 現在）:**
+**次フェーズ（2026-05-15 現在）:**
 
 | 候補 | 内容 | 優先度 |
 |---|---|---|
 | ~~Phase 3-D~~ | ~~Cloud IAP + CI/CD（GitHub Actions → Cloud Run）~~ | **完了** (2026-05-14) |
-| Phase 3-E | Cloud DLP 本格統合（`minLikelihood` / replacement token / custom dictionary）| 技術的深度 |
+| Phase 3-E | Processing Boundary + Cloud DLP Trust Modes（`cloud-managed` 標準化 / DLP polish / `purposeBinding` / AuditEvent 拡張方針）| **次に着手** |
 | Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | 発表準備 |
 
-**次のアクション**: Phase 3-E（Cloud DLP 本格化）または Phase 3-F（デモ polish）から着手。優先度は次セッション開始時に判断する。
+**次のアクション**: Phase 3-E に着手する。正本は [docs/phase-3-e-direction.md](phase-3-e-direction.md)。Phase 3-F は Phase 3-E 後の polish として扱う。
 
 ---
 
@@ -123,11 +123,21 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - 残未決: ライフサイクルポリシー (検証用は短期削除するか)
 
 ### Cloud DLP provider 調整
+- **Phase 3-E 方針（2026-05-15）**: `cloud-managed` を標準 ProcessingProfile とし、Cloud DLP の `minLikelihood` / replacement token / ruleSetVersion を固める。`cloud-sanitized-ingress` は contract-only profile として予約し、ブラウザ WASM DLP / strict local only は MVP では採用しない。
 - **実検証済み (2026-05-11)**: `MASKER_PROVIDER=cloud-dlp` で `maskerPipelineFlow` から provider 差し替え可能。`顧問契約書_実案件サンプル.txt` は DLP で 25 span 検出、`顧客対応メモ_匿名化.txt` は DLP span 0 件でも Gemini residual risk が `restricted_promoted` を返した。
 - 残未決: `minLikelihood` を設定するか
 - 残未決: `PERSON_NAME` / `LOCATION` / `STREET_ADDRESS` が住所周辺を細かく分割する挙動を、デモ前に token 表示・infoType 絞り込み・custom dictionary のどれで整えるか
 - 残未決: replacement token を DLP 既定の `[INFO_TYPE]` のまま使うか、既存 `SimpleMasker` と同じ `[REDACTED:TYPE]` に寄せるか
 - 残未決: 日本向け custom dictionary（顧客名、社内担当者、支店名など）をどの段階で導入するか
+
+### Document Conversion Eval（Phase 3-H に向けた未決）
+- **Phase 3-E 方針（2026-05-18）**: 6 評価軸・`ConversionEvalResult` 型・三段階成熟度・`overall.status` ロールアップ規約（案B: blocker 軸方式）を [docs/phase-3-e-direction.md](phase-3-e-direction.md) §10 と [docs/decisions.md](decisions.md) D-P3-E Q8 に固定済み。評価器ランナーや golden fixture は Phase 3-H へ送る。
+- 残未決: 各軸の fail / warn 閾値（特に `safety_readiness.maskableChunkRate` の下限、`context_package_readiness.oversizedChunks` の許容数、`coverage.pageCoverage` の最低値）
+- 残未決: golden fixture を sample-data から何件・どの種類で作るか（士業実案件 / テンプレ / 表 / 暗黙知メモ）
+- 残未決: `semantic_retention.missingExpectedFields` の「必ず残ってほしいフィールド」リストをどこに置くか（fixture 横の YAML / `eval/expected-conversion.json` / Firestore）
+- 残未決: 評価器ランナーを CI に接続するタイミング（health check は必須 gate、heuristic は warning gate、golden は手動という三段は仮置き）
+- 残未決: 案C（成熟度別 blocker 軸運用）への移行条件。現状は Phase 3-H で案 B を試走した後に再評価予定。
+- 残未決: Phase 3-H 着手時点で最初に比較する変換器セット（MarkItDown 単体 / Gemini 直 PDF / MarkItDown→Gemini 補正 の 3 系統を仮置き）の最終確定
 
 ### Spreadsheet chunk 粒度
 - **Phase 2 確定**: `.xlsx` は 1 sheet の used range を 1 chunk として扱う。used range 内に複数の論理表が並ぶ場合も、Phase 2 では空行分割などの表検出は行わない。

@@ -828,10 +828,121 @@ sample-data/
 
 ---
 
+## D-P3-E: Phase 3-E Processing Boundary + Cloud DLP Trust Modes 方針（2026-05-15）
+
+**決定**: Phase 3-E は `cloud-managed` を MVP の標準 ProcessingProfile として磨く。`cloud-sanitized-ingress` は高セキュリティ顧客向けの将来 profile として契約・スキーマ・監査仕様だけ先に定義し、Edge Sanitizer の実装は後続へ送る。正本は [docs/phase-3-e-direction.md](phase-3-e-direction.md)。
+
+### Q1: 標準 ProcessingProfile
+
+**決定**: MVP 標準は `cloud-managed` とする。属性は `tenant-cloud / post-ingress / shared-cloud`。
+
+**理由:**
+- 既存の upload / Google Workspace import / GCS / Firestore / Cloud DLP / Vertex AI 経路と最も整合する。
+- Phase 3-D で IAP と AuditEvent が入り、クラウド境界の説明材料が揃っている。
+- ハッカソン段階では Profile-A の完成度を上げる方が、複数 profile を浅く作るより「まわす」「とどける」の evidence が強い。
+
+### Q2: `local-only` という呼称
+
+**決定**: MVP の説明では `local-only` を使わない。物理境界と信頼境界が混同されるため、TCB と ProcessingProfile で表現する。
+
+**理由:**
+- ブラウザやPCで処理しても、ルール配信元・更新経路・証跡がクラウド側にある場合、監査人にとって純粋な local-only とは言いにくい。
+- 営業・契約・監査でブレない説明にするには、「どのプロセスがどのデータを見る権限を持つか」を先に固定する方が安全。
+
+### Q3: ブラウザ WASM DLP / sanitize-local-then-cloud
+
+**決定**: ブラウザ WASM DLP は Phase 3-E / MVP では採用しない。
+
+**理由:**
+- PDF / xlsx parsing + DLP を SME のPC上で安定運用する検証コストが高い。
+- WASM bundle と rule set の配信元が当社である以上、サプライチェーン証明が弱く、"local" と訴求しにくい。
+- 顧客側セットアップを増やすと、SME 向け導入容易性が落ちる。
+
+### Q4: 高セキュリティ将来 profile
+
+**決定**: `cloud-sanitized-ingress` を contract-only profile として予約する。属性は `tenant-edge / pre-ingress / shared-cloud`。
+
+**理由:**
+- 「当社クラウド境界に生データを入れない」顧客要件には、顧客 GCP プロジェクト内 Edge Sanitizer の方が説明しやすい。
+- 顧客側 Cloud Audit Logs と当社 AuditEvent を correlation id でつなげば、境界越え証跡を第三者検証しやすい。
+- Phase 3-E ではスキーマと reject 方針だけ決め、実装を後続に送ることで標準 profile の完成度を優先できる。
+
+### Q5: AuditEvent / purposeBinding
+
+**決定**: Context Package export は `purposeBinding` を監査単位として扱う。Phase 3-E では `document.export` AuditEvent への追加方針を固める。
+
+**理由:**
+- 同じ文書が複数 purpose で再利用されるため、document 単位だけでは「どの目的でAIに渡したか」を後から追えない。
+- 目的外利用を説明・検知するには、Context Package 1個 = purpose 1個の不変条件を監査メタデータに寄せる必要がある。
+
+### Phase 3-E の境界
+
+**触る領域:**
+- Cloud DLP provider: `minLikelihood`, replacement token, ruleSetVersion
+- ProcessingProfile / TCB docs
+- AuditEvent shape の拡張方針
+- `document.export` の purposeBinding
+- DLP / Masker eval の最小設計
+- Document Conversion Eval の評価契約（Q8 を参照）
+
+**触らない領域:**
+- Edge Sanitizer 実装
+- 顧客 GCP プロジェクト deploy / BYOC / Terraform
+- BigQuery write-once audit 本実装
+- VPC-SC / CMEK 本格構築
+- PDF / 画像 / Slide の `cloud-sanitized-ingress` 対応
+- Strict local only / ローカル LLM
+- Document Conversion Eval ランナー実装 / golden fixture 作成 / `poc/document-conversion/` ディレクトリ作成
+
+### Q8: Document Conversion Eval の評価契約
+
+**決定**: Phase 3-E は、PDF / 画像 / Slide / Office 変換そのものは扱わないが、**変換後の構造化結果に対する評価契約**だけは固定する。`docs/phase-3-e-direction.md` の第 10 節を正本とする。
+
+**Phase 3-E で固定するもの:**
+- 6 評価軸: `schema_validity` / `coverage` / `locator_quality` / `semantic_retention` / `safety_readiness` / `context_package_readiness`
+- `ConversionEvalResult` 型（評価器インターフェース）
+- 三段階成熟度: health check → heuristic eval → golden eval
+- `overall.status` ロールアップ規約（下記）
+
+**ロールアップ規約**: **案 B（ブロッカー軸方式）**を採用する。
+
+- `schema_validity` と `safety_readiness` を blocker 軸とし、fail 条件に該当した場合 `overall.status = 'fail'`。
+- 非 blocker 軸の fail は `'warn'` に降格し、`reasons` に「降格された fail」として残す。
+- blocker 軸の warn は `overall.status = 'warn'` に昇格する。
+- **非 blocker 軸の warn 単独は `overall.status` を昇格させず、`reasons` にも積まない**（軸ごとのフィールドにのみ反映する）。これにより `reasons.length > 0 ⇒ warn` のショートカットを安全に成立させる。
+- 軸ごとの fail / warn / pass 閾値関数は Phase 3-H で確定する。Phase 3-E では関数の存在だけ予約する。
+
+**`safety_readiness` の意味の明確化:**
+- Conversion Eval が見るのは「Masker / DLP が span 単位で捕捉・置換できる構造になっているか」であり、「Masker 適用後に PII が残るか」ではない。
+- 後者は A8 / `maskerRiskFlow` の責任領域（`recommendedSensitivity` 昇格）であり、Conversion Eval は触らない。
+- そのため `ConversionEvalResult.safetyReadiness` の主軸フィールドは `unmaskablePiiFindings`（DLP/Masker が span 化できない形で混入している PII 件数）と `maskableChunkRate`（構造上 Masker 適用可能な chunk 比率）とする。
+
+**理由（A8 との整合）:**
+- A8（Masker→Curator 逆 feedback）の「非対称リスクで安全側に倒す」哲学を、評価層にも持ち込む。
+- ただし役割は分ける: A8 は Masker 後の残存リスクで Sensitivity を昇格する。Conversion Eval は **Masker をかけられる構造になっているか** を blocker として扱う。両者が直列に並ぶことで、変換層と Masker 層がそれぞれの責任で安全側に倒せる。
+- それ以外の品質低下（locator・coverage・semantic retention）は「人間判断材料」として `reasons` で扱う。CI を red にして変換器選定を止める性質ではない。
+
+**代替案として検討したもの:**
+- 案 A（単純多数決）: safety_readiness と他軸の重みが等価になり、downstream 契約を守れない。不採用。
+- 案 C（成熟度別運用）: health / heuristic / golden で blocker 軸を変える方式。**Phase 3-H 以降の検討候補として future memo に残す**。Phase 3-E では案 B 一本で固定する。
+
+**やらない判断:**
+- 評価器ランナーの実装。
+- 各軸の fail / warn 閾値の確定。
+- golden fixture の作成。
+- `poc/document-conversion/` ディレクトリ作成。
+- CI への評価器接続。
+
+**撤退条件:**
+- Phase 3-H で複数変換器を試走した結果、案 B では downstream を守れない / 過剰に fail する事例が出た場合、案 C への移行または軸の再設計を検討する。
+
+---
+
 ## 関連ドキュメント
 
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
 - [docs/phase-3-d-direction.md](phase-3-d-direction.md) — Phase 3-D CI/CD + IAP 実装方針（正本）
+- [docs/phase-3-e-direction.md](phase-3-e-direction.md) — Phase 3-E Processing Boundary + Cloud DLP Trust Modes 実装方針（正本）
 - [docs/phase-3-c-5-source-coverage.md](phase-3-c-5-source-coverage.md) — Phase 3-C-5 source coverage 確認結果
 - [docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) — Phase 3-B（Drive 再取り込み・schemaVersion 2・鮮度バッジ・完了条件の正本）
 - [docs/concept.md](concept.md) — プロダクトコンセプト
