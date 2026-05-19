@@ -28,7 +28,6 @@ export function buildDocumentIrFromGemini(
     let blockSeq = 0;
 
     if (slide.title?.trim()) {
-      blockSeq += 1;
       blocks.push({
         blockId: `s${slide.slideNumber}-title`,
         kind: 'heading',
@@ -87,7 +86,6 @@ export function buildDocumentIrFromPdfParse(
         const row = table.rows[rowIndex];
         const trimmedCells = row.map((cell) => cell.trim());
         if (trimmedCells.every((cell) => cell.length === 0)) continue;
-        blockSeq += 1;
         blocks.push({
           blockId: `s${page.pageNumber}-t${table.tableIndex}-r${rowIndex}`,
           kind: 'table',

@@ -72,6 +72,8 @@ export {
 } from './rollupOverallStatus';
 export {
   HEALTH_CHECK_SUPPORTED_SUBTYPE,
+  HEALTH_CHECK_SUPPORTED_SUBTYPES,
+  type HealthCheckSupportedSubtype,
   runConversionEvalHealthCheck,
   type ConversionEvalHealthCheckChunk,
   type ConversionEvalHealthCheckInput,

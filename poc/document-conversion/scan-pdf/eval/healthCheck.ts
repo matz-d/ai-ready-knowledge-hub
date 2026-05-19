@@ -25,7 +25,7 @@ export function runScanPdfHealthCheck(
   schemaErrors: string[] = []
 ): ConversionEvalResult {
   const result = runConversionEvalHealthCheck({
-    sourceSubtype: 'official-doc-pdf',
+    sourceSubtype: 'scan-pdf',
     chunkDrafts,
     schemaValidity: {
       passed: schemaPassed,
@@ -43,7 +43,7 @@ export function runScanPdfHealthCheck(
       (finding) => finding.maskability === 'unmaskable'
     ).length,
     maskableChunkRate:
-      chunkDrafts.length === 0 ? 1 : nonEmptyChunks / chunkDrafts.length,
+      chunkDrafts.length === 0 ? 0 : nonEmptyChunks / chunkDrafts.length,
   };
 
   return result;

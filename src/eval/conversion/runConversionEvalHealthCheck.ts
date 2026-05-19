@@ -7,7 +7,18 @@ import type { ConversionEvalStage } from './conversionEvalStage';
 import type { DocumentSourceSubtype } from './documentIr';
 import { attachOverallStatus } from './rollupOverallStatus';
 
-export const HEALTH_CHECK_SUPPORTED_SUBTYPE = 'official-doc-pdf' as const;
+/** Subtype 1 (mainline candidate) and subtype 3 (scan-pdf PoC). */
+export const HEALTH_CHECK_SUPPORTED_SUBTYPES = [
+  'official-doc-pdf',
+  'scan-pdf',
+] as const satisfies readonly DocumentSourceSubtype[];
+
+export type HealthCheckSupportedSubtype =
+  (typeof HEALTH_CHECK_SUPPORTED_SUBTYPES)[number];
+
+/** @deprecated Prefer {@link HEALTH_CHECK_SUPPORTED_SUBTYPES} or subtype-specific callers. */
+export const HEALTH_CHECK_SUPPORTED_SUBTYPE =
+  'official-doc-pdf' satisfies HealthCheckSupportedSubtype;
 
 export type ConversionEvalHealthCheckChunk = {
   text: string;
@@ -43,14 +54,18 @@ function countOversizedChunks<TChunk extends object>(
 
 /**
  * Health-check runner for ConversionEvalResult.
- * Phase 3-H scope is subtype 1 (`official-doc-pdf`) only.
+ * Phase 3-H: subtype 1 (`official-doc-pdf`) and scan-pdf PoC metrics.
  */
 export function runConversionEvalHealthCheck<
   TChunk extends ConversionEvalHealthCheckChunk,
 >(input: ConversionEvalHealthCheckInput<TChunk>): ConversionEvalResult {
-  if (input.sourceSubtype !== HEALTH_CHECK_SUPPORTED_SUBTYPE) {
+  if (
+    !(HEALTH_CHECK_SUPPORTED_SUBTYPES as readonly string[]).includes(
+      input.sourceSubtype
+    )
+  ) {
     throw new Error(
-      `health check runner supports subtype "${HEALTH_CHECK_SUPPORTED_SUBTYPE}" only: received "${input.sourceSubtype}"`
+      `health check runner supports subtypes ${HEALTH_CHECK_SUPPORTED_SUBTYPES.join(', ')} only: received "${input.sourceSubtype}"`
     );
   }
 

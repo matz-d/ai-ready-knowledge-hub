@@ -53,13 +53,24 @@ describe('runConversionEvalHealthCheck', () => {
     expect(result.overall.reasons).toContain('schema_validity: fail');
   });
 
-  it('rejects non-subtype-1 inputs', () => {
+  it('accepts scan-pdf subtype for OCR PoC health checks', () => {
+    const result = runConversionEvalHealthCheck({
+      sourceSubtype: 'scan-pdf',
+      chunkDrafts: [{ text: 'scanned line' }],
+      schemaValidity: { passed: true },
+    });
+
+    expect(result.contextPackageReadiness.chunkCount).toBe(1);
+    expect(result.overall.status).toBe('pass');
+  });
+
+  it('rejects unsupported subtypes', () => {
     expect(() =>
       runConversionEvalHealthCheck({
         sourceSubtype: 'slide-pdf',
         chunkDrafts: [{ text: 'alpha' }],
         schemaValidity: { passed: true },
       })
-    ).toThrow(/official-doc-pdf/);
+    ).toThrow(/official-doc-pdf, scan-pdf/);
   });
 });
