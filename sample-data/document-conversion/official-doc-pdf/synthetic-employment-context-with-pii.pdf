@@ -1,0 +1,57 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 875 >>
+stream
+BT
+/F1 12 Tf
+50 780 Td
+14 TL
+(Synthetic Employment Context Package Seed) Tj
+T* (FOR EVALUATION ONLY - NO REAL CUSTOMER DATA) Tj
+T* () Tj
+T* (Document subtype: official-doc-pdf) Tj
+T* (Use case: Test PII detection and masking before AI handoff.) Tj
+T* () Tj
+T* (Employee name: Aoi Tanaka) Tj
+T* (Home address: 2-11-8 Sakura Heights 302, Chiyoda-ku, Tokyo 100-0001) Tj
+T* (Phone: 090-1234-5678) Tj
+T* (Email: aoi.tanaka.synthetic@example.jp) Tj
+T* (Employee ID: SYN-EMP-00042) Tj
+T* (Synthetic My Number-like value: 1234-5678-9012) Tj
+T* (Bank account: Sakura Bank Kanda Branch Ordinary 1234567) Tj
+T* () Tj
+T* (Employer: Example Accounting Office LLC) Tj
+T* (Contract type: Fixed-term office assistant) Tj
+T* (Monthly salary: JPY 280,000) Tj
+T* (Start date: 2026-04-01) Tj
+T* () Tj
+T* (PII policy note: every personal field in this PDF is invented for fixture testing.) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000317 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1242
+%%EOF

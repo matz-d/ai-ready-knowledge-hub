@@ -1,0 +1,78 @@
+export {
+  assertConversionEvalResultStageShape,
+  ContextPackageReadinessSchema,
+  ConversionEvalOverallSchema,
+  ConversionEvalOverallStatusSchema,
+  ConversionEvalResultSchema,
+  CoverageSchema,
+  createEmptyConversionEvalResult,
+  LocatorQualitySchema,
+  parseConversionEvalResult,
+  safeParseConversionEvalResult,
+  SAFETY_READINESS_HEALTH_STAGE_DEFAULTS,
+  SafetyReadinessSchema,
+  SchemaValiditySchema,
+  SemanticRetentionSchema,
+  type ConversionEvalOverallStatus,
+  type ConversionEvalResult,
+} from './conversionEvalResult';
+export {
+  CONVERSION_EVAL_AXES_MEASURED_BY_STAGE,
+  CONVERSION_EVAL_BLOCKER_AXES,
+  CONVERSION_EVAL_GOLDEN_ONLY_PATHS,
+  ConversionEvalAxisIdSchema,
+  ConversionEvalStageSchema,
+  isAxisMeasuredAtStage,
+  type ConversionEvalAxisId,
+  type ConversionEvalBlockerAxis,
+  type ConversionEvalStage,
+} from './conversionEvalStage';
+export {
+  DOCUMENT_IR_BLOCK_KINDS_WITH_CHUNK_MAPPING,
+  DOCUMENT_IR_SCHEMA_VERSION,
+  DocumentBlockKindSchema,
+  DocumentIrBlockSchema,
+  DocumentIrLocatorSchema,
+  DocumentIrPageSchema,
+  DocumentIrSchema,
+  DocumentIrSourceSchema,
+  DocumentSourceKindSchema,
+  DocumentSourceSubtypeSchema,
+  documentSourceSubtypeToKnowledgeChunkSourceType,
+  parseDocumentIr,
+  safeParseDocumentIr,
+  type DocumentBlockKind,
+  type DocumentIR,
+  type DocumentIr,
+  type DocumentIrBlock,
+  type DocumentIrLocator,
+  type DocumentIrPage,
+  type DocumentSourceKind,
+  type DocumentSourceSubtype,
+} from './documentIr';
+export {
+  buildPdfParagraphId,
+  documentIrBlockToStructureType,
+  documentIrToKnowledgeChunks,
+  type DocumentIrToKnowledgeChunkOptions,
+} from './documentIrToKnowledgeChunk';
+export {
+  evalSafetyReadiness,
+  SAFETY_READINESS_HEALTH_ROLLUP_STATUS,
+  type AxisRollupStatus,
+} from './evalSafetyReadiness';
+export {
+  attachOverallStatus,
+  collectNonBlockerFails,
+  deriveAxisStatuses,
+  evalContextPackageReadiness,
+  evalSchemaValidity,
+  rollupOverallStatus,
+  type ConversionEvalAxisStatuses,
+} from './rollupOverallStatus';
+export {
+  HEALTH_CHECK_SUPPORTED_SUBTYPE,
+  runConversionEvalHealthCheck,
+  type ConversionEvalHealthCheckChunk,
+  type ConversionEvalHealthCheckInput,
+} from './runConversionEvalHealthCheck';

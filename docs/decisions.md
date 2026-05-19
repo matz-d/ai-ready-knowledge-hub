@@ -1039,6 +1039,58 @@ subtype 1 の比較で `pdf-parse` の表抽出品質が `ConversionEvalResult.c
 
 ---
 
+## D-P3-H-1: Phase 3-H 実装結果の固定（2026-05-19）
+
+**決定**: Phase 3-H 実装結果として、`official-doc-pdf`（subtype 1）を **本線統合候補** に固定する。統合候補の変換方法は `pdf-parse` first-choice の TypeScript/pnpm 縦串（`DocumentIR` → subtype-aware adapter → `KnowledgeChunk` draft → health eval）とし、MarkItDown は本線に入れない。
+
+### Q1: subtype 1 を本線統合候補にするか
+
+**決定**: する。Phase 3-H-2 で最初に本線統合を検討する対象は subtype 1 のみとする。
+
+**代替案として検討したもの:**
+- (a) **subtype 1 のみ本線統合候補に固定** ← 採用
+- (b) subtype 1 + subtype 2 を同時に候補化
+- (c) どの subtype も候補化せず PoC 継続
+
+**選定理由:**
+- `poc/document-conversion/official-doc-pdf/runner.ts` と `official-doc-pdf/adapter/toKnowledgeChunk.ts` で、subtype 1 の縦串が TS 側で完結している。
+- `pnpm typecheck` は `tsc --noEmit && tsc -p poc/document-conversion/tsconfig.json --noEmit` で PoC 型検証まで接続済み。
+- `poc/document-conversion/output/official-doc-pdf/compare-summary.md` の実装結果では、`pdf-parse` 側が全 fixture で health stage `pass` を維持している。
+- subtype 2 / 3 は Gemini コスト・クォータ・失敗時 SLA 設計が未確定で、同時統合は Processing Boundary の説明を複雑化する。
+
+### Q2: 本線統合候補の変換方法
+
+**決定**: subtype 1 の本線候補は `pdf-parse` first-choice を採用し、PoC で固めた `DocumentIR` 変換・adapter・health eval を移植単位にする。
+
+**変換方法（候補）:**
+1. `pdf-parse` で text/table を抽出し `sourceSubtype: "official-doc-pdf"` の `DocumentIR` を生成。
+2. subtype-aware adapter で `KnowledgeChunk` draft に落とす（構造差分は metadata / locator 合成で吸収）。
+3. `ConversionEvalResult` の health stage（`schema_validity` / chunk 妥当性）を必須 gate として適用。
+4. upload 本線では subtype flag で段階的に有効化し、subtype 2 / 3 は後続フェーズで分離する。
+
+### Q3: MarkItDown を本線に入れない判断
+
+**決定**: MarkItDown は本線統合しない。subtype 1 の PoC 比較材料としてのみ維持する。
+
+**理由:**
+- MarkItDown は Python ランタイム前提で、Dockerfile / 本線 build に新ランタイム境界を持ち込むため、TypeScript + pnpm 統一方針と衝突する。
+- 実装結果として `poc/document-conversion/output/official-doc-pdf/compare-summary.md` では、MarkItDown 側は fixture により chunk 粒度が過剰に増え、`pageCoverage` も不安定（例: 0.25）で、本線デフォルトとしては扱いにくい。
+- `poc/document-conversion/official-doc-pdf/compare/README.md` の運用どおり、`uvx` ローカル比較に閉じることで本線汚染を避けられる。
+
+**撤退条件:**
+- subtype 1 の golden/heuristic で `pdf-parse` が継続的に必須情報 recall を満たせず、MarkItDown 系が再現性を持って上回る場合は、Python 導入の再検討を行う。
+- 本線統合準備で subtype 1 health gate を安定維持できない（schema invalid / empty chunk / oversized chunk が常態化）場合は、統合を中断して PoC 側で再調整する。
+- subtype 1 のみ統合する前提が崩れ、subtype 2/3 の同時統合が必須になった場合は、D-P3-H-2 の統合単位（subtype 単位）を再審議する。
+
+### 未決事項（継続）
+
+- `ConversionEvalResult` 各軸の fail / warn 閾値最終値（特に `coverage` / `context_package_readiness` / `safety_readiness`）。
+- subtype 1 本線統合時の feature flag 粒度と `uploadOrchestrator` への接続手順の最終確定。
+- subtype 2 / 3 統合時に必要な AuditEvent `inferenceDestination` 拡張の仕様固定。
+- slide-pdf / scan-pdf のコスト上限・quota 超過時挙動・fail-open/fail-closed の最終方針。
+
+---
+
 ## 関連ドキュメント
 
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
