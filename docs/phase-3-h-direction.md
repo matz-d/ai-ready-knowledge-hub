@@ -235,7 +235,7 @@ Phase 3-H は次を満たしたら完了とする。
 
 | 候補 | 内容 |
 |---|---|
-| Phase 3-H-2 | **subtype 1（`official-doc-pdf`）のみ本線 upload route に統合**。他 subtype はフィーチャーフラグで gating。AuditEvent の `inferenceDestination` 拡張（変換器が Gemini を呼ぶ場合）もここで設計。 |
+| Phase 3-H-2 | **subtype 1（`official-doc-pdf`）のみ本線 upload route に薄く統合**。feature flag 前提で段階的有効化し、health gate を必須適用。失敗時は fail-closed とし、変換 artifact / eval を観測して heuristic・golden の閾値育成に使う。詳細方針は `docs/decisions.md` の D-P3-H-3 を正とする。 |
 | Phase 3-H-3 | subtype 2（`slide-pdf`）/ subtype 3（`scan-pdf`）を順次本線統合。Gemini 直読みコスト評価込み。 |
 | Phase 3-F | 統合済み subtype を含むデモ polish・動画シナリオ更新。 |
 | Phase 3-G | `cloud-sanitized-ingress` prototype。高セキュリティ顧客向けの境界検証。 |

@@ -121,6 +121,7 @@ export function adaptFirestoreDocumentToInventory(
     sourceKind: doc.sourceKind,
     externalSourceFileId: doc.externalSource?.fileId,
     externalSourceWebViewLink: doc.externalSource?.webViewLink,
+    ...(doc.maskingPending === true ? { maskingPending: true } : {}),
   };
 }
 

@@ -97,6 +97,27 @@ describe('contextPackageFirestoreAdapter', () => {
     expect(contextPackageBodyObjectPath(doc)).toBe('raw/doc-1/sample.txt');
   });
 
+  it('returns null for curated documents with maskingPending', () => {
+    const doc = inventoryDoc({
+      status: 'curated',
+      storagePath: 'raw/doc-pdf/sample.pdf',
+      maskingPending: true,
+      aiUsePolicy: 'requires_masking',
+    });
+
+    expect(contextPackageBodyObjectPath(doc)).toBeNull();
+  });
+
+  it('returns null for curated documents with requires_masking policy', () => {
+    const doc = inventoryDoc({
+      status: 'curated',
+      storagePath: 'raw/doc-pdf/sample.pdf',
+      aiUsePolicy: 'requires_masking',
+    });
+
+    expect(contextPackageBodyObjectPath(doc)).toBeNull();
+  });
+
   it('uses aiSafeStoragePath for ai_safe documents and exports the masked body', async () => {
     const readBody = vi.fn(async (objectPath: string) => {
       if (objectPath === 'masked/doc-2/customer.txt') {

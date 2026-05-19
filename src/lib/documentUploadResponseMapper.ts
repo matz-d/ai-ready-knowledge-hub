@@ -54,5 +54,9 @@ export function documentUploadSuccessBodyFromOrchestrate(args: {
     };
   }
 
+  if (result.kind === 'curated' && result.maskingPending === true) {
+    return { ...base, maskingPending: true };
+  }
+
   return base;
 }

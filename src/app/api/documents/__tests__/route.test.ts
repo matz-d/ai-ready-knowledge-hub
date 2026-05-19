@@ -5,6 +5,10 @@ const {
   orchestrateUploadProcessingMock,
   replaceChunksForDocMock,
   getKnowledgeHubBucketNameMock,
+  extractPdfFromBufferMock,
+  getFeatureFlagMock,
+  isFeatureEnabledMock,
+  getFirestoreClientMock,
   curatorPhaseErrorClass,
   maskerPhaseErrorClass,
   recordAuditEventMock,
@@ -31,6 +35,10 @@ const {
     orchestrateUploadProcessingMock: vi.fn(),
     replaceChunksForDocMock: vi.fn(),
     getKnowledgeHubBucketNameMock: vi.fn(),
+    extractPdfFromBufferMock: vi.fn(),
+    getFeatureFlagMock: vi.fn(),
+    isFeatureEnabledMock: vi.fn(),
+    getFirestoreClientMock: vi.fn(),
     curatorPhaseErrorClass: CuratorPhaseErrorMock,
     maskerPhaseErrorClass: MaskerPhaseErrorMock,
     recordAuditEventMock: vi.fn().mockResolvedValue('audit-event-1'),
@@ -53,6 +61,19 @@ vi.mock('../../../../lib/uploadOrchestrator', () => ({
 
 vi.mock('../../../../lib/chunkRegenerator', () => ({
   replaceChunksForDoc: replaceChunksForDocMock,
+}));
+
+vi.mock('../../../../lib/extractors/pdfDocumentExtractor', () => ({
+  extractPdfFromBuffer: extractPdfFromBufferMock,
+}));
+
+vi.mock('../../../../lib/featureFlags', () => ({
+  getFeatureFlag: getFeatureFlagMock,
+  isFeatureEnabled: isFeatureEnabledMock,
+}));
+
+vi.mock('../../../../lib/firestore', () => ({
+  getFirestoreClient: getFirestoreClientMock,
 }));
 
 vi.mock('../../../../lib/audit/auditEvent', async (importOriginal) => {
@@ -95,9 +116,36 @@ async function parseJson(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
 
+const minimalPdfExtraction = {
+  textContent: 'PDF body text',
+  documentIr: {
+    schemaVersion: 1,
+    source: {
+      fileName: 'sample.pdf',
+      mediaType: 'application/pdf',
+      sourceKind: 'upload',
+      sourceSubtype: 'official-doc-pdf',
+    },
+    pages: [
+      {
+        pageNumber: 1,
+        blocks: [{ blockId: 'p1-b0', kind: 'paragraph', text: 'PDF body text' }],
+      },
+    ],
+  },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   getKnowledgeHubBucketNameMock.mockReturnValue('bucket-1');
+  getFirestoreClientMock.mockReturnValue({ collection: vi.fn() });
+  getFeatureFlagMock.mockResolvedValue({
+    flagId: 'pdf-conversion-subtype-1',
+    defaultEnabled: false,
+    enabledTenants: ['m-grow-ai.com'],
+  });
+  isFeatureEnabledMock.mockReturnValue(true);
+  extractPdfFromBufferMock.mockResolvedValue(minimalPdfExtraction);
   replaceChunksForDocMock.mockResolvedValue(undefined);
   orchestrateUploadProcessingMock.mockResolvedValue({
     kind: 'curated',
@@ -534,14 +582,14 @@ describe('POST /api/documents', () => {
   });
 
   it('returns 415 when extension is unsupported', async () => {
-    const file = new File(['hello'], 'sample.pdf', { type: 'application/pdf' });
+    const file = new File(['hello'], 'sample.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 
     const response = await POST(buildRequestWithFile(file));
 
     expect(response.status).toBe(415);
     await expect(parseJson(response)).resolves.toEqual(
       expect.objectContaining({
-        error: '対応している拡張子は .txt / .md / .csv / .xlsx のみです。',
+        error: '対応している拡張子は .txt / .md / .csv / .xlsx / .pdf のみです。',
       })
     );
   });
@@ -657,5 +705,95 @@ describe('POST /api/documents', () => {
       })
     );
     expect(recordAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  describe('PDF upload (Phase 3-H-2 M1)', () => {
+    function pdfFile(): File {
+      return new File(['%PDF-1.4 fake'], 'sample.pdf', {
+        type: 'application/pdf',
+      });
+    }
+
+    it('returns 403 when feature flag is disabled and does not call orchestrator', async () => {
+      isFeatureEnabledMock.mockReturnValue(false);
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(403);
+      await expect(parseJson(response)).resolves.toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('ベータ機能'),
+        })
+      );
+      expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
+    });
+
+    it('extracts PDF and orchestrates with documentIr without replaceChunksForDoc', async () => {
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(200);
+      expect(extractPdfFromBufferMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileName: 'sample.pdf',
+          sourceSubtype: 'official-doc-pdf',
+        })
+      );
+      expect(orchestrateUploadProcessingMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          displayName: 'sample.pdf',
+          contentType: 'application/pdf',
+          content: 'PDF body text',
+          documentIr: minimalPdfExtraction.documentIr,
+          sourceSubtype: 'official-doc-pdf',
+        })
+      );
+      expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when PDF parse fails and does not call orchestrator', async () => {
+      extractPdfFromBufferMock.mockRejectedValue(new Error('parse failed'));
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(400);
+      await expect(parseJson(response)).resolves.toEqual(
+        expect.objectContaining({
+          error: 'PDF ファイルを解析できませんでした。',
+        })
+      );
+      expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
+    });
+
+    it('returns curated success with maskingPending for requires_masking PDF', async () => {
+      orchestrateUploadProcessingMock.mockResolvedValue({
+        kind: 'curated',
+        docId: 'doc-pdf-mask',
+        storagePath: 'raw/doc-pdf-mask/sample.pdf',
+        curator: {
+          documentType: 'メモ',
+          businessDomain: '顧客対応',
+          sensitivity: 'Confidential',
+          freshness: 'current',
+          isAuthoritativeCandidate: true,
+          aiUsePolicy: 'requires_masking',
+          rationale: 'masking required',
+        },
+        curatorCompletedAt: new Date('2026-05-08T00:00:00.000Z'),
+        maskingPending: true,
+      });
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(200);
+      const body = await parseJson(response);
+      expect(body).toEqual(
+        expect.objectContaining({
+          status: 'curated',
+          maskingPending: true,
+        })
+      );
+      expect(body).not.toHaveProperty('masker');
+    });
   });
 });

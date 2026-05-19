@@ -6,6 +6,8 @@ import { modelId as curatorModelId } from '../agents/_shared/genkitClient';
 import { maskerPipelineFlow } from '../agents/masker/pipelineFlow';
 import type { PipelineOutput } from '../agents/masker/pipelineSchema';
 import { applyMaskerUpgrade } from '../agents/masker/upgrade';
+import type { DocumentIr, DocumentSourceSubtype } from '../eval/conversion/documentIr';
+import { documentIrToKnowledgeChunks } from '../eval/conversion/documentIrToKnowledgeChunk';
 import {
   DOCUMENTS_COLLECTION,
   buildRawObjectPath,
@@ -17,6 +19,7 @@ import {
   assertFirestoreInvariants,
   type FirestoreExternalSource,
   type FirestoreDocument,
+  type FirestoreDocumentSourceSubtype,
   hashContentSha256,
   maskerTerminalCuratorInvariantStub,
   terminalStatusForCuratorPolicy,
@@ -30,7 +33,10 @@ import {
   deleteRawObject,
   uploadMaskedObject,
   uploadRawObject,
+  getKnowledgeHubBucketName,
 } from './storage';
+import { writeDocumentIrSnapshot } from './documentIrStorage';
+import { createChunkFirestoreAdapter } from './chunkFirestoreAdapter';
 
 type FirestoreServerTimestamp = ReturnType<typeof FieldValue.serverTimestamp>;
 
@@ -79,6 +85,8 @@ export type FirestoreInitialDocumentDraft = {
   byteSize: number;
   contentSha256: string;
   sourceKind: 'upload' | 'google_workspace';
+  /** PDF subtype — null for non-PDF uploads (Phase 3-H-2 M1). */
+  sourceSubtype: FirestoreDocumentSourceSubtype | null;
   externalSource: FirestoreExternalSource | null;
   storagePath: string;
   aiSafeStoragePath: null;
@@ -98,6 +106,7 @@ export type FirestoreInitialDocumentDraft = {
   curatorError: null;
   masker: null;
   maskerError: null;
+  conversionError: null;
 };
 
 // ─────────────────────────────────────────────────────────────────────
@@ -109,6 +118,13 @@ export type OrchestrateInput = {
   contentType: string;
   buffer: Buffer;
   content: string;
+  /**
+   * Present when the file is a PDF (Phase 3-H-2 M1).
+   * When set, orchestrator uses the PDF path instead of the text path.
+   */
+  documentIr?: DocumentIr;
+  /** Required when documentIr is present. */
+  sourceSubtype?: DocumentSourceSubtype;
 };
 
 export type MaskerSummary = {
@@ -125,7 +141,16 @@ export type MaskerSummary = {
 
 export type OrchestrateResult =
   | {
-      kind: 'curated' | 'blocked';
+      kind: 'curated';
+      docId: string;
+      storagePath: string;
+      curator: CuratorOutputResult;
+      curatorCompletedAt: Date;
+      /** True when the PDF was classified requires_masking and is parked (PDF M1). */
+      maskingPending?: boolean;
+    }
+  | {
+      kind: 'blocked';
       docId: string;
       storagePath: string;
       curator: CuratorOutputResult;
@@ -250,6 +275,7 @@ export async function orchestrateUploadProcessing(
         byteSize: input.buffer.length,
         contentSha256,
         storagePath,
+        sourceSubtype: input.sourceSubtype ?? null,
       })
     );
   } catch (e) {
@@ -264,6 +290,19 @@ export async function orchestrateUploadProcessing(
     await safeDeleteRawObject(storagePath);
     await safeDeleteFirestoreDoc(docRef);
     throw e;
+  }
+
+  // PDF path (Phase 3-H-2 M1): curator + DocumentIR GCS write + optional chunking
+  if (input.documentIr) {
+    return orchestratePdfPath({
+      docRef,
+      docId,
+      displayName: input.displayName,
+      content: input.content,
+      contentSha256,
+      storagePath,
+      documentIr: input.documentIr,
+    });
   }
 
   return runCuratorAndMaskerLifecycle({
@@ -714,6 +753,32 @@ export function buildRestrictedFirestoreUpdate(
  * Curator / Masker いずれかの段で失敗したとき、Firestore に status='failed' と
  * `${phase}Error` ブロックを書く。書き込み自体が失敗した場合はログのみで吸収。
  */
+/**
+ * DocumentIR write / chunk replacement failures after curator has already
+ * committed a terminal curated status (PDF M1).
+ */
+export async function recordConversionFailure(
+  docRef: DocumentReference,
+  cause: unknown
+): Promise<void> {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  const detail = `変換処理に失敗しました。${message}`;
+  const truncated =
+    detail.length > 8000 ? `${detail.slice(0, 8000)}…` : detail;
+  try {
+    await docRef.update({
+      status: 'failed',
+      updatedAt: FieldValue.serverTimestamp(),
+      conversionError: {
+        message: truncated,
+        occurredAt: FieldValue.serverTimestamp(),
+      },
+    });
+  } catch (updateErr) {
+    console.error('[orchestrator] conversion failed status update', updateErr);
+  }
+}
+
 export async function recordPhaseFailure(
   docRef: DocumentReference,
   phase: 'curator' | 'masker',
@@ -756,6 +821,184 @@ export async function safeDeleteMaskedObject(
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// PDF path (Phase 3-H-2 M1)
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * PDF curator phase — mirrors `runCuratorPhase` for text documents but maps
+ * `requires_masking` → `status='curated' + maskingPending:true` instead of
+ * `status='masking'`.  The Masker is intentionally not wired to PDFs in M1.
+ */
+async function runPdfCuratorPhase(args: {
+  docRef: DocumentReference;
+  displayName: string;
+  content: string;
+  contentSha256: string;
+}): Promise<{ result: CuratorOutputResult; completedAt: Date }> {
+  try {
+    const result = await curatorFlow({
+      fileName: args.displayName,
+      content: args.content,
+    });
+    const completedAt = new Date();
+
+    // PDF M1: requires_masking → curated + maskingPending:true (Masker not yet wired)
+    const nextStatus =
+      result.aiUsePolicy === 'requires_masking'
+        ? 'curated'
+        : terminalStatusForCuratorPolicy(result.aiUsePolicy);
+    const maskingPending =
+      result.aiUsePolicy === 'requires_masking' ? true : null;
+
+    assertFirestoreInvariants({
+      sourceKind: 'upload',
+      externalSource: null,
+      status: nextStatus,
+      contentSha256: args.contentSha256,
+      aiSafeStoragePath: null,
+      sensitivity: result.sensitivity,
+      aiUsePolicy: result.aiUsePolicy,
+      sensitivitySource: 'curator',
+      originalCuratorSensitivity: null,
+      sensitivityReason: null,
+      maskingPending,
+      curator: {
+        documentType: result.documentType,
+        businessDomain: result.businessDomain,
+        sensitivity: result.sensitivity,
+        freshness: result.freshness,
+        isAuthoritativeCandidate: result.isAuthoritativeCandidate,
+        aiUsePolicy: result.aiUsePolicy,
+        rationale: result.rationale,
+        completedAt,
+        modelId: curatorModelId,
+      },
+      masker: null,
+    });
+
+    await args.docRef.update({
+      status: nextStatus,
+      maskingPending: maskingPending ?? null,
+      updatedAt: FieldValue.serverTimestamp(),
+      documentType: result.documentType,
+      businessDomain: result.businessDomain,
+      sensitivity: result.sensitivity,
+      freshness: result.freshness,
+      isAuthoritativeCandidate: result.isAuthoritativeCandidate,
+      aiUsePolicy: result.aiUsePolicy,
+      sensitivitySource: 'curator',
+      originalCuratorSensitivity: null,
+      sensitivityReason: null,
+      curator: {
+        documentType: result.documentType,
+        businessDomain: result.businessDomain,
+        sensitivity: result.sensitivity,
+        freshness: result.freshness,
+        isAuthoritativeCandidate: result.isAuthoritativeCandidate,
+        aiUsePolicy: result.aiUsePolicy,
+        rationale: result.rationale,
+        completedAt: FieldValue.serverTimestamp(),
+        modelId: curatorModelId,
+      },
+      curatorError: null,
+    });
+
+    return { result, completedAt };
+  } catch (e) {
+    await recordPhaseFailure(args.docRef, 'curator', e);
+    throw e;
+  }
+}
+
+/**
+ * PDF upload path (Phase 3-H-2 M1):
+ *   1. Run PDF curator phase (AI classification).
+ *   2. blocked → return immediately.
+ *   3. Write DocumentIR to GCS (for both direct and requires_masking).
+ *   4. direct → chunk via documentIrToKnowledgeChunks.
+ *   5. requires_masking → park at curated + maskingPending:true (no Masker in M1).
+ */
+async function orchestratePdfPath(args: {
+  docRef: DocumentReference;
+  docId: string;
+  displayName: string;
+  content: string;
+  contentSha256: string;
+  storagePath: string;
+  documentIr: DocumentIr;
+}): Promise<OrchestrateResult> {
+  let curatorOutput: { result: CuratorOutputResult; completedAt: Date };
+  try {
+    curatorOutput = await runPdfCuratorPhase({
+      docRef: args.docRef,
+      displayName: args.displayName,
+      content: args.content,
+      contentSha256: args.contentSha256,
+    });
+  } catch (e) {
+    throw new CuratorPhaseError(args.docId, e);
+  }
+
+  const { aiUsePolicy } = curatorOutput.result;
+
+  if (aiUsePolicy === 'blocked') {
+    return {
+      kind: 'blocked',
+      docId: args.docId,
+      storagePath: args.storagePath,
+      curator: curatorOutput.result,
+      curatorCompletedAt: curatorOutput.completedAt,
+    };
+  }
+
+  try {
+    const bucketName = getKnowledgeHubBucketName();
+    await writeDocumentIrSnapshot({
+      bucketName,
+      docId: args.docId,
+      documentIr: args.documentIr,
+    });
+
+    if (aiUsePolicy === 'direct') {
+      const db = getFirestoreClient();
+      const chunks = documentIrToKnowledgeChunks({
+        documentIr: args.documentIr,
+        docId: args.docId,
+        extractorInput: args.content,
+        documentSensitivity: curatorOutput.result.sensitivity,
+        documentAiUsePolicy: 'direct',
+        title: args.displayName,
+        sensitivitySource: 'inherited',
+      });
+      const adapter = createChunkFirestoreAdapter(db);
+      await adapter.replaceChunksForDocument(args.docId, chunks, {
+        extractorInput: args.content,
+      });
+
+      return {
+        kind: 'curated',
+        docId: args.docId,
+        storagePath: args.storagePath,
+        curator: curatorOutput.result,
+        curatorCompletedAt: curatorOutput.completedAt,
+      };
+    }
+
+    return {
+      kind: 'curated',
+      docId: args.docId,
+      storagePath: args.storagePath,
+      curator: curatorOutput.result,
+      curatorCompletedAt: curatorOutput.completedAt,
+      maskingPending: true,
+    };
+  } catch (e) {
+    await recordConversionFailure(args.docRef, e);
+    throw e;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // 内部
 // ─────────────────────────────────────────────────────────────────────
 
@@ -767,6 +1010,7 @@ function buildBaseInitialDocumentBody(args: {
   contentSha256: string;
   storagePath: string;
   sourceKind: FirestoreInitialDocumentDraft['sourceKind'];
+  sourceSubtype?: FirestoreInitialDocumentDraft['sourceSubtype'];
   externalSource: FirestoreInitialDocumentDraft['externalSource'];
   createdAt?: FirestoreInitialDocumentDraft['createdAt'];
 }): FirestoreInitialDocumentDraft {
@@ -793,6 +1037,7 @@ function buildBaseInitialDocumentBody(args: {
     byteSize: args.byteSize,
     contentSha256: args.contentSha256,
     sourceKind: args.sourceKind,
+    sourceSubtype: args.sourceSubtype ?? null,
     externalSource: args.externalSource,
     storagePath: args.storagePath,
     aiSafeStoragePath: null,
@@ -812,6 +1057,7 @@ function buildBaseInitialDocumentBody(args: {
     curatorError: null,
     masker: null,
     maskerError: null,
+    conversionError: null,
   };
 }
 
@@ -822,6 +1068,7 @@ export function buildUploadInitialDocumentBody(args: {
   byteSize: number;
   contentSha256: string;
   storagePath: string;
+  sourceSubtype?: FirestoreDocumentSourceSubtype | null;
 }): FirestoreInitialDocumentDraft {
   return buildBaseInitialDocumentBody({
     docId: args.docId,
@@ -831,6 +1078,7 @@ export function buildUploadInitialDocumentBody(args: {
     contentSha256: args.contentSha256,
     storagePath: args.storagePath,
     sourceKind: 'upload',
+    sourceSubtype: args.sourceSubtype ?? null,
     externalSource: null,
   });
 }

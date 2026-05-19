@@ -8,6 +8,10 @@ const {
   deleteRawObjectMock,
   uploadMaskedObjectMock,
   deleteMaskedObjectMock,
+  getKnowledgeHubBucketNameMock,
+  writeDocumentIrSnapshotMock,
+  documentIrToKnowledgeChunksMock,
+  replaceChunksForDocumentMock,
   setMock,
   updateMock,
   deleteMock,
@@ -23,6 +27,10 @@ const {
   deleteRawObjectMock: vi.fn(),
   uploadMaskedObjectMock: vi.fn(),
   deleteMaskedObjectMock: vi.fn(),
+  getKnowledgeHubBucketNameMock: vi.fn(),
+  writeDocumentIrSnapshotMock: vi.fn(),
+  documentIrToKnowledgeChunksMock: vi.fn(),
+  replaceChunksForDocumentMock: vi.fn(),
   setMock: vi.fn(),
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
@@ -57,6 +65,21 @@ vi.mock('../storage', () => ({
   deleteRawObject: deleteRawObjectMock,
   uploadMaskedObject: uploadMaskedObjectMock,
   deleteMaskedObject: deleteMaskedObjectMock,
+  getKnowledgeHubBucketName: getKnowledgeHubBucketNameMock,
+}));
+
+vi.mock('../documentIrStorage', () => ({
+  writeDocumentIrSnapshot: writeDocumentIrSnapshotMock,
+}));
+
+vi.mock('../../eval/conversion/documentIrToKnowledgeChunk', () => ({
+  documentIrToKnowledgeChunks: documentIrToKnowledgeChunksMock,
+}));
+
+vi.mock('../chunkFirestoreAdapter', () => ({
+  createChunkFirestoreAdapter: vi.fn(() => ({
+    replaceChunksForDocument: replaceChunksForDocumentMock,
+  })),
 }));
 
 const docMock = {
@@ -75,11 +98,37 @@ vi.mock('../firestore', () => ({
   getFirestoreClient: getFirestoreClientMock,
 }));
 
+import type { DocumentIr } from '../../eval/conversion/documentIr';
 import {
   CuratorPhaseError,
   MaskerPhaseError,
   orchestrateUploadProcessing,
 } from '../uploadOrchestrator';
+
+const minimalDocumentIr: DocumentIr = {
+  schemaVersion: 1,
+  source: {
+    fileName: 'sample.pdf',
+    mediaType: 'application/pdf',
+    sourceKind: 'upload',
+    sourceSubtype: 'official-doc-pdf',
+  },
+  pages: [
+    {
+      pageNumber: 1,
+      blocks: [{ blockId: 'p1-b0', kind: 'paragraph', text: 'PDF body text' }],
+    },
+  ],
+};
+
+const pdfBaseInput = {
+  displayName: 'sample.pdf',
+  contentType: 'application/pdf',
+  buffer: Buffer.from('%PDF-1.4 fake', 'utf-8'),
+  content: 'PDF body text',
+  documentIr: minimalDocumentIr,
+  sourceSubtype: 'official-doc-pdf' as const,
+};
 
 const baseInput = {
   displayName: 'sample.txt',
@@ -189,6 +238,27 @@ beforeEach(() => {
   deleteRawObjectMock.mockResolvedValue(undefined);
   uploadMaskedObjectMock.mockResolvedValue(undefined);
   deleteMaskedObjectMock.mockResolvedValue(undefined);
+  getKnowledgeHubBucketNameMock.mockReturnValue('bucket-1');
+  writeDocumentIrSnapshotMock.mockResolvedValue('raw/doc-1/document-ir/v1.json');
+  documentIrToKnowledgeChunksMock.mockReturnValue([
+    {
+      id: 'chunk-1',
+      docId: 'doc-1',
+      schemaVersion: 1,
+      sourceType: 'pdf',
+      structureType: 'paragraph',
+      locator: { kind: 'pdf', pageNumber: 1, blockId: 'p1-b0' },
+      text: 'PDF body text',
+      sensitivity: 'Internal',
+      aiUsePolicy: 'direct',
+      sensitivitySource: 'inherited',
+      extractionProvider: 'pdf-parse',
+      sourceHash: 'hash',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+  ]);
+  replaceChunksForDocumentMock.mockResolvedValue(undefined);
 });
 
 describe('orchestrateUploadProcessing', () => {
@@ -430,6 +500,126 @@ describe('orchestrateUploadProcessing', () => {
         (payload as Record<string, unknown>).status === 'failed'
     );
     expect(failedCall).toBeTruthy();
+  });
+
+  describe('PDF path (Phase 3-H-2 M1)', () => {
+    it('writes DocumentIR and chunks for direct PDFs', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-direct');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+      const result = await orchestrateUploadProcessing(pdfBaseInput);
+
+      expect(result).toEqual(
+        expect.objectContaining({ kind: 'curated', docId: 'doc-pdf-direct' })
+      );
+      expect(writeDocumentIrSnapshotMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bucketName: 'bucket-1',
+          docId: 'doc-pdf-direct',
+          documentIr: minimalDocumentIr,
+        })
+      );
+      expect(documentIrToKnowledgeChunksMock).toHaveBeenCalled();
+      expect(replaceChunksForDocumentMock).toHaveBeenCalledWith(
+        'doc-pdf-direct',
+        expect.any(Array),
+        expect.objectContaining({ extractorInput: 'PDF body text' })
+      );
+      expect(maskerPipelineFlowMock).not.toHaveBeenCalled();
+    });
+
+    it('writes DocumentIR but not chunks for requires_masking PDFs', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-mask');
+      curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+
+      const result = await orchestrateUploadProcessing(pdfBaseInput);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          kind: 'curated',
+          docId: 'doc-pdf-mask',
+          maskingPending: true,
+        })
+      );
+      expect(writeDocumentIrSnapshotMock).toHaveBeenCalled();
+      expect(documentIrToKnowledgeChunksMock).not.toHaveBeenCalled();
+      expect(replaceChunksForDocumentMock).not.toHaveBeenCalled();
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'curated',
+          maskingPending: true,
+        })
+      );
+    });
+
+    it('marks failed and rethrows when DocumentIR write fails on direct path', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-ir-fail');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+      writeDocumentIrSnapshotMock.mockRejectedValue(new Error('gcs write failed'));
+
+      await expect(orchestrateUploadProcessing(pdfBaseInput)).rejects.toThrow(
+        'gcs write failed'
+      );
+
+      const failedCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).status === 'failed'
+      );
+      expect(failedCall).toBeTruthy();
+      expect((failedCall?.[0] as Record<string, unknown>).conversionError).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('gcs write failed'),
+        })
+      );
+    });
+
+    it('marks failed and rethrows when chunk replacement fails on direct path', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-chunk-fail');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+      replaceChunksForDocumentMock.mockRejectedValue(new Error('chunk replace failed'));
+
+      await expect(orchestrateUploadProcessing(pdfBaseInput)).rejects.toThrow(
+        'chunk replace failed'
+      );
+
+      const failedCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).status === 'failed'
+      );
+      expect(failedCall).toBeTruthy();
+      expect((failedCall?.[0] as Record<string, unknown>).conversionError).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('chunk replace failed'),
+        })
+      );
+    });
+
+    it('marks failed when DocumentIR write fails on requires_masking path', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-mask-ir-fail');
+      curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+      writeDocumentIrSnapshotMock.mockRejectedValue(new Error('gcs write failed'));
+
+      await expect(orchestrateUploadProcessing(pdfBaseInput)).rejects.toThrow(
+        'gcs write failed'
+      );
+
+      const failedCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).status === 'failed'
+      );
+      expect(failedCall).toBeTruthy();
+      expect((failedCall?.[0] as Record<string, unknown>).conversionError).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('gcs write failed'),
+        })
+      );
+    });
   });
 
   it('wraps curator exceptions as CuratorPhaseError and records curatorError', async () => {

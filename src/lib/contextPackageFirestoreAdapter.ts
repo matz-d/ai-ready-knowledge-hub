@@ -41,6 +41,9 @@ export function contextPackageBodyObjectPath(
   }
 
   if (doc.status === 'curated') {
+    if (doc.maskingPending === true || doc.aiUsePolicy === 'requires_masking') {
+      return null;
+    }
     return doc.storagePath ?? null;
   }
 

@@ -1091,6 +1091,166 @@ subtype 1 の比較で `pdf-parse` の表抽出品質が `ConversionEvalResult.c
 
 ---
 
+## D-P3-H-3: subtype 1 の薄い本線統合と評価育成（2026-05-19）
+
+**決定**: 評価器（heuristic / golden）を完成させる前に、`official-doc-pdf`（subtype 1）を feature flag 付きで本線 upload 経路へ薄く統合する。目的は商用デフォルト有効化ではなく、`uploadOrchestrator` 境界における実運用に近い観測データを集め、評価軸を育成することとする。
+
+### Q1: 評価完成前に本線統合するか
+
+**決定**: する。対象は subtype 1 のみ、段階的有効化とする。
+
+**理由:**
+- PoC 内だけで heuristic / golden を先に作り込むと、本線の副作用順序（`uploadOrchestrator`）、保存形式、Masker 接続との前提差分が後で顕在化しやすい。
+- subtype 1 は `pdf-parse` の決定論的経路で Vertex AI 依存がなく、観測・切り戻し境界を最小化できる。
+- 本線ログ（変換結果 + eval 結果）を使う方が、閾値調整のサイクルが短い。
+
+### Q2: 統合方式（薄い配線）の定義
+
+**決定**: 本線統合は次の最小構成で行う。
+
+1. `official-doc-pdf` 判定時のみ `DocumentIR` 変換と adapter を実行する。
+2. `ConversionEvalResult` health stage を必須 gate とする。
+3. fail 条件（schema invalid / empty chunk の常態化 / oversized chunk）では fail-closed で保存を中断し、既存エラーハンドリングへ委譲する。
+4. 有効化は subtype feature flag 単位で行い、初期は限定環境（または限定 tenant）に絞る。
+
+### Q3: 観測と評価育成の扱い
+
+**決定**: 本線で得た変換 artifact を評価育成の一次入力として扱う。
+
+**観測対象（最低限）:**
+- `sourceSubtype` / `extractionProvider`
+- `DocumentIR` artifact 参照
+- `ConversionEvalResult`（health）
+- `extractionWarnings` / fallback reason（存在時）
+
+**後続で確定する項目:**
+- heuristic gate の閾値（`coverage` / `locator_quality` / `safety_readiness`）
+- golden fixture の expected fields と recall 判定
+- feature flag の公開範囲拡大条件
+
+---
+
+## D-P3-H-4: Phase 3-H-2 M1 初期判断（2026-05-19）
+
+**決定**: `D-P3-H-3` で「subtype 1 を feature flag 付きで薄く本線統合する」高レベル方針が確定したのを受け、Phase 3-H-2 M1（実装着手段階）で必要な具体判断を本エントリで固定する。正本実装方針は [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md)。
+
+**位置づけ:**
+- `D-P3-H-3` の「未決事項（継続）」のうち、**feature flag 粒度 / `uploadOrchestrator` 接続手順 / `requires_masking` PDF の扱い** を埋める。
+- heuristic 閾値、golden fixture expected fields、feature flag 公開範囲の最終確定は引き続き `D-P3-H-3` の未決として残し、Phase 3-H-2 M3 / M4 / M5 完了時に別エントリで埋める。
+- `D-P3-H-3` 自体の番号は Phase 3-H-3 着手時の判断用ではなく **Phase 3-H-2 着手時の高レベル方針** として機能している。Phase 3-H-3 着手時の判断は別番号を振る。
+
+### Q1: feature flag の粒度
+
+**決定**: Firestore `feature_flags` collection、**Allow-list + expiry 型**。
+
+```ts
+type FeatureFlag = {
+  flagId: string;
+  defaultEnabled: boolean;
+  enabledTenants: string[];   // IAP email domain 由来
+  expiresAt?: string;          // ISO8601 optional だが PoC flag では運用必須
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+};
+```
+
+**代替案として検討したもの:**
+- (a) 単一 env var（全集合 ON/OFF）
+- (b) Env var + tenant allow-list
+- (c) **Firestore `feature_flags` collection（allow-list + expiry）** ← 採用
+
+**選定理由:**
+- Phase 4 multi-tenant 商用化と整合させるなら、最初から tenant 粒度で gating できる形がよい。env var ベースは後から migration を打つ手間が増える。
+- `expiresAt?` を schema に入れることで、PoC flag が本番に永続化される anti-pattern を schema レベルで予防する（type guard ではないが PR レビュー時のフックになる）。
+- `enabledTenants` は `D-P3-D` の IAP email domain 由来 tenantId 規約と揃える。
+- 初期 flag は `pdf-conversion-subtype-1`、`enabledTenants: ['m-grow-ai.com']` で dev tenant 先行（tenantId は `resolveTenantIdFromAuth` が email domain から生成する値; email そのものではない）。
+
+### Q2: DocumentIR snapshot の保存先
+
+**決定**: GCS `raw/{docId}/document-ir/v1.json`。
+
+**理由:**
+- Firestore 1 MiB 制限の心配がなく、大きな PDF でも安全。
+- Phase 4 BigQuery write-once audit への送り出しと相性がよい。
+- 既存 `raw/{docId}/{safeOriginalFileName}` と同じ bucket 配下なので運用が単純。
+- Masker 統合後に再 chunk 化する時、PDF を再解析せずに DocumentIR を再読込できる（Q5 と効く）。
+
+### Q3: ConversionEvalResult の保存先
+
+**決定**: Firestore `conversion_eval/{evalId}` collection（append-only）。`documents/{docId}.latestConversionEvalId?` で逆参照。
+
+**理由:**
+- `ConversionEvalResult` 自体は数 KB に収まる構造で Firestore に収容可能。
+- append-only にすることで再評価時の履歴を残せる。Phase 4 BigQuery 送りの単位もこれ。
+- `evalId` 命名は初期案 `docId:revisionId`。M1 で確定する。
+
+### Q4: M1 のスコープ
+
+**決定**: PDF 受理 + Curator まで。`aiUsePolicy === 'direct'` のみ chunk 化。Masker は M1 に含めない。
+
+**正確な言い換え:**
+> 「PDF を本線に入れる」ではなく、**「PDF を Curator 判定まで本線に入れ、`direct` だけ chunk 化する」**。
+
+**代替案として検討したもの:**
+- (a) 狭い入り口（PDF 受理 + DocumentIR + chunk 生成まで、Curator なし）
+- (b) **中間（PDF 受理 + Curator まで、`direct` のみ chunk 化）** ← 採用
+- (c) フル縦串（Curator → Masker → Strategist まで）
+
+**選定理由:**
+- (a) は Curator 結果がないと `KnowledgeChunk.sensitivity` / `aiUsePolicy` が埋まらず、`knowledgeChunkSchema.ts` L172-179 の invariant rule 3（`requires_masking` chunk は `maskedText` 非空必須）を満たせない可能性が残る。
+- (c) は M1 が肥大化して M2 / M3 が遅れる。M2 観測データが出るまでに時間がかかる。
+- (b) は既存 text/csv/xlsx パイプラインの「Curator → Masker → chunk 化」と同じ pattern を踏襲し、Masker だけ後送りにできる。
+
+### Q5: `requires_masking` / `blocked` PDF の扱い
+
+**決定**: 新 status は導入しない。`documents/{docId}.status = 'curated'` のまま、`maskingPending: true` フラグを optional field として立てる。
+
+**代替案として検討したもの:**
+- (a) status は `'curated'` のまま放置（フラグなし）
+- (b) 新 status `'pending_masking'` 導入
+- (c) **status は `'curated'`、`maskingPending: true` フラグ** ← 採用
+
+**選定理由:**
+- (b) は既存 lifecycle に新状態を入れることになり、UI / Firestore query / 既存テストすべてに影響が波及する。
+- (a) は「PDF が Masker 待ち」という観測可能な状態を表現できない。
+- (c) は既存 lifecycle を壊さず、UI / API に「解析済みだが Masker 待ち」を表現できる。`requires_masking` chunk を作らない方針と相性がよい。
+- `documents/{docId}.maskingPending` は optional なので、既存 text/csv/xlsx 経路は影響を受けない。
+
+| Curator 返り値 | M1 挙動 |
+|---|---|
+| `direct` | chunk 化、`status = 'curated'`、`maskingPending: false`（または unset） |
+| `requires_masking` | chunk **化しない**、`status = 'curated'`、`maskingPending: true`、DocumentIR は GCS に保存 |
+| `blocked` | chunk 化しない、`status = 'blocked'`、`maskingPending` は立てない |
+
+### Q6: PII 入り fixture の観測経路
+
+**決定**: PII 入り fixture（`synthetic-employment-context-with-pii.pdf`）は M1〜M3 の本線観測には乗らない。Curator が `requires_masking` を返すため、Q4 / Q5 により本線では chunk 化されない。PoC `poc/document-conversion/official-doc-pdf/compare/runCompare.ts` で継続観測する。
+
+**理由:**
+- Masker 本線統合（Phase 3-H-2 後半 or Phase 3-H-3）まで PII 入り fixture は本線で chunk 化できない。
+- `safety_readiness` の本格評価は Masker 統合後に始まる。M3 の heuristic eval パスで DLP を呼ぶ設計（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §6）はその橋渡し。
+- PoC compare runner は引き続き PII 入り fixture を観測し続ける。
+
+### 影響範囲
+
+- `docs/phase-3-h-2-direction.md` を新設し、M1〜M6 の実装方針を正本化済み。
+- `docs/open-questions.md` の Document Conversion Eval 未決は M3 / M4 で順次解消される。
+- 新規依存（`pdf-parse`）は Phase 3-H Priority 1 で導入済み。M1 で追加の npm 依存は不要見込み。
+- 新規 npm 依存を追加する場合は CLAUDE.md `minimumReleaseAge: 4320` に従う。
+- `documents/{docId}` schema に `sourceSubtype?` / `maskingPending?` の 2 つの optional field が増える。既存 Firestore document との後方互換は維持。
+
+### 次の優先順位
+
+1. Phase 3-H-2 M1: 薄い本線統合（`feature_flags` / `pdfDocumentExtractor` / `documentIrStorage`）
+2. Phase 3-H-2 M2: 観測データ蓄積
+3. Phase 3-H-2 M3: Heuristic 閾値抽出（DLP bridge）
+4. Phase 3-H-2 M4: Golden eval 雛形
+5. Phase 3-H-2 M5: CI gate 接続
+6. Phase 3-H-2 M6: Phase 3-H-3 引き継ぎ docs
+
+---
+
 ## 関連ドキュメント
 
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）

@@ -46,6 +46,8 @@ export type InventoryDocument = {
   externalSourceFileId?: string;
   /** Google Drive web-view URL for workspace documents. */
   externalSourceWebViewLink?: string;
+  /** PDF M1: true when parked at curated awaiting Masker. */
+  maskingPending?: boolean;
 };
 
 /** One row from `docs/w1-artifacts/inventory.snapshot.json` (historical artifact; do not mutate file). */

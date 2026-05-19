@@ -24,8 +24,11 @@ import {
 } from '../../../lib/documents';
 import { documentUploadSuccessBodyFromOrchestrate } from '../../../lib/documentUploadResponseMapper';
 import { xlsxToNormalizedMarkdown } from '../../../lib/extractors/xlsxExtractor';
+import { extractPdfFromBuffer } from '../../../lib/extractors/pdfDocumentExtractor';
 import { replaceChunksForDoc } from '../../../lib/chunkRegenerator';
 import { auditActorFromRequest, recordAuditEvent } from '../../../lib/audit/auditEvent';
+import { getFeatureFlag, isFeatureEnabled } from '../../../lib/featureFlags';
+import { getFirestoreClient } from '../../../lib/firestore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -50,12 +53,14 @@ function defaultContentTypeForExt(
   | 'text/plain'
   | 'text/markdown'
   | 'text/csv'
-  | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' {
+  | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  | 'application/pdf' {
   if (ext === '.md') return 'text/markdown';
   if (ext === '.csv') return 'text/csv';
   if (ext === '.xlsx') {
     return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   }
+  if (ext === '.pdf') return 'application/pdf';
   return 'text/plain';
 }
 
@@ -107,7 +112,7 @@ export async function POST(request: Request) {
   const extCheck = getAllowedExtension(displayName);
   if (!extCheck) {
     return NextResponse.json(
-      { error: '対応している拡張子は .txt / .md / .csv / .xlsx のみです。' },
+      { error: '対応している拡張子は .txt / .md / .csv / .xlsx / .pdf のみです。' },
       { status: 415 }
     );
   }
@@ -122,6 +127,48 @@ export async function POST(request: Request) {
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
+
+  // ── PDF-specific pre-flight: feature flag check + extraction ─────────────
+  // Done before the orchestration try/catch so failure modes are clean 4xx/403,
+  // not confused with 5xx CuratorPhaseError / MaskerPhaseError.
+  let pdfExtractionResult:
+    | Awaited<ReturnType<typeof extractPdfFromBuffer>>
+    | undefined;
+
+  if (extCheck === '.pdf') {
+    let tenantId: string;
+    try {
+      ({ tenantId } = auditActorFromRequest(request));
+    } catch {
+      tenantId = '';
+    }
+    const db = getFirestoreClient();
+    const flag = await getFeatureFlag(db, 'pdf-conversion-subtype-1');
+    if (!isFeatureEnabled(flag, tenantId)) {
+      return NextResponse.json(
+        {
+          error:
+            'PDF アップロードはベータ機能です。テナントのアクセス権を確認してください。',
+        },
+        { status: 403 }
+      );
+    }
+
+    try {
+      pdfExtractionResult = await extractPdfFromBuffer({
+        buffer,
+        fileName: displayName,
+        sourceSubtype: 'official-doc-pdf',
+      });
+    } catch {
+      return NextResponse.json(
+        { error: 'PDF ファイルを解析できませんでした。' },
+        { status: 400 }
+      );
+    }
+  }
+
+  // ── Content extraction for non-PDF formats ────────────────────────────────
   let content: string;
   if (extCheck === '.xlsx') {
     try {
@@ -132,6 +179,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+  } else if (extCheck === '.pdf') {
+    // textContent already extracted above; used as extractorInput for chunk hashing
+    content = pdfExtractionResult!.textContent;
   } else {
     const decoded = decodeUtf8Strict(arrayBuffer);
     if (decoded === null) {
@@ -160,16 +210,25 @@ export async function POST(request: Request) {
       contentType,
       buffer,
       content,
+      ...(pdfExtractionResult
+        ? {
+            documentIr: pdfExtractionResult.documentIr,
+            sourceSubtype: 'official-doc-pdf',
+          }
+        : {}),
     });
 
-    try {
-      await replaceChunksForDoc(result.docId);
-    } catch (chunkError) {
-      console.error('[documents] chunk generation failed', chunkError);
-      return NextResponse.json(
-        { error: CHUNK_GENERATION_FAILURE_CLIENT_MESSAGE, docId: result.docId },
-        { status: 500 }
-      );
+    // PDF chunking is handled inside orchestratePdfPath — skip replaceChunksForDoc.
+    if (extCheck !== '.pdf') {
+      try {
+        await replaceChunksForDoc(result.docId);
+      } catch (chunkError) {
+        console.error('[documents] chunk generation failed', chunkError);
+        return NextResponse.json(
+          { error: CHUNK_GENERATION_FAILURE_CLIENT_MESSAGE, docId: result.docId },
+          { status: 500 }
+        );
+      }
     }
 
     const body = documentUploadSuccessBodyFromOrchestrate({

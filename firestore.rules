@@ -7,5 +7,12 @@ service cloud.firestore {
       allow read: if false; // Phase 3-D では client SDK 経路を持たない
       allow update, delete: if false; // append-only 保証
     }
+
+    // Feature flags — read/write exclusively via Admin SDK (Cloud Run).
+    // Client SDK has no direct access; flags are served only through the
+    // /api/* routes after IAP authentication.
+    match /feature_flags/{flagId} {
+      allow read, write: if false;
+    }
   }
 }

@@ -85,6 +85,26 @@ function buildDoc(overrides: Partial<FirestoreDocument> = {}): FirestoreDocument
 }
 
 describe('adaptFirestoreDocumentToInventory', () => {
+  it('propagates maskingPending for curated PDFs parked awaiting Masker', () => {
+    const row = adaptFirestoreDocumentToInventory(
+      'snapshot-id',
+      buildDoc({
+        maskingPending: true,
+        aiUsePolicy: 'requires_masking',
+        sensitivity: 'Confidential',
+        curator: baseCurator,
+      })
+    );
+
+    expect(row).toEqual(
+      expect.objectContaining({
+        status: 'curated',
+        maskingPending: true,
+        aiUsePolicy: 'requires_masking',
+      })
+    );
+  });
+
   it('keeps curator fields and curator sensitivity provenance for curated documents', () => {
     const row = adaptFirestoreDocumentToInventory('snapshot-id', buildDoc());
 

@@ -55,6 +55,17 @@ export type FirestoreErrorBlock = {
 
 export type FirestoreSourceKind = 'upload' | 'google_workspace';
 
+/**
+ * PDF subtype for uploaded documents.
+ * Defined as a local string literal union to avoid circular imports:
+ *   documentIr.ts → knowledgeChunkSchema.ts → firestoreSchema.ts
+ */
+export type FirestoreDocumentSourceSubtype =
+  | 'official-doc-pdf'
+  | 'slide-pdf'
+  | 'scan-pdf'
+  | 'office-native';
+
 export type FirestoreWorkspaceMimeType =
   | 'application/vnd.google-apps.spreadsheet'
   | 'application/vnd.google-apps.document';
@@ -84,6 +95,8 @@ export type FirestoreDocument = {
   /** upload raw bytes または imported snapshot bytes の SHA256 */
   contentSha256: string;
   sourceKind: FirestoreSourceKind;
+  /** PDF subtype (Phase 3-H-2 M1). Null for non-PDF uploads. */
+  sourceSubtype?: FirestoreDocumentSourceSubtype | null;
   externalSource: FirestoreExternalSource | null;
   storagePath: string;
   aiSafeStoragePath: string | null;
@@ -102,10 +115,19 @@ export type FirestoreDocument = {
   originalCuratorSensitivity: Sensitivity | null;
   sensitivityReason: string | null;
 
+  /**
+   * PDF M1 flag: set to `true` when aiUsePolicy='requires_masking' and the
+   * Masker has not yet processed this document (parked at status='curated').
+   * Cleared (set to null or false) once Masker runs in a future phase.
+   */
+  maskingPending?: boolean | null;
+
   curator: FirestoreCuratorBlock | null;
   curatorError: FirestoreErrorBlock | null;
   masker: FirestoreMaskerBlock | null;
   maskerError: FirestoreErrorBlock | null;
+  /** PDF conversion / DocumentIR write failures (Phase 3-H-2 M1). */
+  conversionError?: FirestoreErrorBlock | null;
 };
 
 /**
@@ -150,6 +172,8 @@ export type FirestoreDocumentInvariantInput = Pick<
 > & {
   curator: FirestoreCuratorInvariantInput;
   masker: FirestoreMaskerInvariantInput;
+  /** Required for PDF M1 invariant: curated + requires_masking must have maskingPending:true. */
+  maskingPending?: boolean | null;
 };
 
 /** Masker 終端状態の invariant 検証用（実ドキュメントにはフル curator が既に存在する）。 */
@@ -283,11 +307,18 @@ export function validateFirestoreDocumentInvariants(
     });
   }
 
-  if (doc.status === 'curated' && doc.curator?.aiUsePolicy !== 'direct') {
-    violations.push({
-      path: 'status',
-      message: 'status curated is only for curator.aiUsePolicy direct.',
-    });
+  if (doc.status === 'curated') {
+    const directOk = doc.curator?.aiUsePolicy === 'direct';
+    // PDF M1: requires_masking PDFs are parked at curated with maskingPending:true
+    const maskingPendingOk =
+      doc.curator?.aiUsePolicy === 'requires_masking' && doc.maskingPending === true;
+    if (!directOk && !maskingPendingOk) {
+      violations.push({
+        path: 'status',
+        message:
+          'status curated requires aiUsePolicy=direct, or requires_masking with maskingPending:true (PDF M1).',
+      });
+    }
   }
 
   if (doc.status === 'blocked' && doc.curator?.aiUsePolicy !== 'blocked') {

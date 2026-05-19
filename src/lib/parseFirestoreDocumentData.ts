@@ -118,6 +118,8 @@ const firestoreDocumentDataSchema = z
     curatorError: z.union([z.null(), firestoreErrorBlockSchema]),
     masker: z.union([z.null(), firestoreMaskerBlockSchema]),
     maskerError: z.union([z.null(), firestoreErrorBlockSchema]),
+    maskingPending: z.boolean().nullable().optional(),
+    conversionError: z.union([z.null(), firestoreErrorBlockSchema]).optional(),
   })
   .passthrough();
 
