@@ -23,6 +23,9 @@ importers:
       '@google-cloud/storage':
         specifier: ^7.18.0
         version: 7.19.0
+      '@napi-rs/canvas':
+        specifier: 0.1.80
+        version: 0.1.80
       csv-parse:
         specifier: ^6.2.1
         version: 6.2.1
@@ -41,6 +44,9 @@ importers:
       next:
         specifier: ^16.0.10
         version: 16.2.6(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      pdf-parse:
+        specifier: 2.4.5
+        version: 2.4.5
       react:
         specifier: ^19.2.1
         version: 19.2.6
@@ -75,9 +81,6 @@ importers:
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1
-      pdf-parse:
-        specifier: 2.4.5
-        version: 2.4.5
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
