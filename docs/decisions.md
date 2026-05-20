@@ -1282,6 +1282,36 @@ type FeatureFlag = {
 - M2-D の DLP 実測は direct / Public PDF 2 件のみで、`requires_masking` PDF は M1〜M3 の本線では chunk 化しない。PII-bearing golden eval または Masker 本線統合後に `maskableChunkRate` の意味と閾値を再検討する。
 - `coverage.pageCoverage` は今後 10 件程度の official-doc-pdf 観測が溜まった時点で、`1.0` pass が過度に厳しくないか再確認する。
 
+**Phase 3-H-2 完了時の最終確認（2026-05-20）:**
+- IAP 実機（revision `ai-ready-knowledge-hub-00018-xws`）で `mhlw-labor-conditions-notice-general.pdf` → `direct` + chunk 化、`synthetic-employment-context-with-pii.pdf` → `requires_masking` + `maskingPending: true`（chunk なし）を確認。
+- Heuristic CI は `rollupOverallStatus` の axis status と整合（M3-Fix）。golden 初回 recall は低いが blocker ではない（§7.4、[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) Completion Snapshot）。
+
+---
+
+## D-P3-H-5b: Phase 3-H-2 M5 CI gate + Branch protection 完了（2026-05-20）
+
+**決定**: Phase 3-H-2 M5 の完了条件として、GitHub Actions の health gate **と** default branch に対する **required status check** の両方を満たす。
+
+**採用した構成:**
+
+| 項目 | 内容 |
+|---|---|
+| Workflow | [`.github/workflows/conversion-eval.yml`](../.github/workflows/conversion-eval.yml) |
+| 必須ジョブ名 | `conversion-eval / health (required)`（`pull_request` のみ） |
+| Warning | `conversion-eval / heuristic (warning)` — `continue-on-error: true`、PR コメント |
+| Golden | `workflow_dispatch` + 月次 `schedule` のみ。PR では実行しない |
+| Branch protection | GitHub **ruleset** `main required checks`（id `16634732`、2026-05-20 有効化） |
+| Required check | `conversion-eval / health (required)` のみ（heuristic / golden は必須にしない） |
+| 検証 | 直 push が ruleset で拒否され、PR 経由で health green 後にマージ可能であることを確認 |
+
+**理由:**
+- ジョブを workflow に追加するだけでは「必須 gate」にならない。ruleset / branch protection で check 名を明示しないと、H-3 着手時に regress を止められない。
+- heuristic は観測・警告用途、golden は人間レビュー用途のため、M5 必須条件から外す（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §8.2 と整合）。
+
+**やらない判断:**
+- `deploy.yml` の deploy ジョブを conversion-eval health の必須依存にしない（eval とデプロイの失敗モードを分離）。
+- golden を PR 必須にしない（初回 recall ベースラインが低く、expected チューニング前に main を block しない）。
+
 ---
 
 ## D-P3-H-6: Phase 3-H-3 着手方針（2026-05-20、ドラフト）
@@ -1347,9 +1377,9 @@ type FeatureFlag = {
 
 Phase 3-H-3 の **実装**に入る前に次を満たす:
 
-1. Phase 3-H-2 DoD（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §12）完了
-2. subtype 1 の health CI gate が安定（conversion-eval workflow）
-3. `D-P3-H-6` の Q2（slide fallback 方針）と Q5（Masker タイミング）のいずれかが確定
+1. ~~Phase 3-H-2 DoD（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §12）完了~~ — **達成（2026-05-20）**
+2. ~~subtype 1 の health CI gate + 観測ループ（`conversion_eval` / `document.convert`）が本線で稼働~~ — **達成（2026-05-20、`D-P3-H-5b`）**
+3. `D-P3-H-6` の Q2（slide fallback 方針）と Q5（Masker タイミング）のいずれかが確定 — **未決（open-questions 参照）**
 
 ### 影響範囲（予定）
 

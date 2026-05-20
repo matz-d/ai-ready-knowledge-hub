@@ -11,6 +11,19 @@ Golden eval は **重要情報の recall**（`semanticRetention.keyFieldRecall` 
 | heuristic | warning（block しない） | — |
 | golden | **呼ばない** | 本手順（レビュー対象、block しない） |
 
+### 初回ベースライン（2026-05-20）
+
+Phase 3-H-2 完了直後の golden 実行では、**recall が意図的に低い**（`expected.json` が PoC sidecar IR の chunk 分割と未整合）。これは実装バグではなく、**初回運用タスク = expected チューニング** である。
+
+| `documentId` | `keyFieldRecall` | 備考 |
+|---|---:|---|
+| `mhlw-overtime-limit-guide` | 0.19 | 26 missing |
+| `mhlw-r07-model-work-rules` | 0.05 | 35 missing |
+| `mhlw-labor-conditions-notice-general` | 0.06 | 31 missing |
+| `synthetic-employment-context-with-pii` | 0.00 | overall warn（empty chunk）。expected は非 PII のみ |
+
+正本: [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §7.4。初回月次レビューでは Step 3 で **B. 意図的な変換改善 / C. 期待値陳腐化** を中心に `expected.json` を更新する。
+
 ---
 
 ## 1. いつやるか
