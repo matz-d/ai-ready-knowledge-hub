@@ -83,4 +83,38 @@ describe('exportConversionEvalSamples', () => {
       })
     );
   });
+
+  it('sorts rows deterministically when timestamps are missing or invalid', async () => {
+    const result = createEmptyConversionEvalResult();
+    const samples = await collectExportRowsFromDocs(
+      [
+        {
+          id: 'doc-b:v1',
+          data: () => ({
+            docId: 'doc-b',
+            revisionId: 'v1',
+            stage: 'health',
+            result,
+            createdAt: 'not-a-date',
+          }),
+        },
+        {
+          id: 'doc-a:v1',
+          data: () => ({
+            docId: 'doc-a',
+            revisionId: 'v1',
+            stage: 'health',
+            result,
+          }),
+        },
+      ],
+      async () => 'official-doc-pdf'
+    );
+
+    expect(samples.rows.map((row) => row.evalId)).toEqual([
+      'doc-a:v1',
+      'doc-b:v1',
+    ]);
+    expect(samples.rows[0].createdAt).toBeNull();
+  });
 });

@@ -204,9 +204,15 @@ export async function POST(request: Request) {
   }
 
   const contentType = mime ? mime : defaultContentTypeForExt(extCheck);
-  const pdfAuditContext = pdfExtractionResult
-    ? auditActorFromRequest(request)
-    : undefined;
+  let pdfAuditContext: ReturnType<typeof auditActorFromRequest> | undefined;
+  if (pdfExtractionResult) {
+    try {
+      pdfAuditContext = auditActorFromRequest(request);
+    } catch (auditErr) {
+      console.warn('[documents] auditActorFromRequest failed', auditErr);
+      pdfAuditContext = undefined;
+    }
+  }
 
   try {
     const result = await orchestrateUploadProcessing({

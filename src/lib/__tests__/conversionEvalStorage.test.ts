@@ -17,8 +17,7 @@ import {
 // ─── Minimal in-memory Firestore simulator ───────────────────────────────────
 //
 // Simulates only the Firestore surface used by conversionEvalStorage:
-//   collection(c).doc(id).get() / set(data, { merge })
-//   collection(c).doc(id).update(data)
+//   runTransaction(t => t.get(ref) / t.set(ref, data, { merge }) / t.update(ref, data))
 //   collection(c).where(f, op, v).orderBy(f, dir).limit(n).get()
 
 type RawData = Record<string, unknown>;
@@ -188,6 +187,20 @@ class FakeCollectionReference {
   }
 }
 
+class FakeTransaction {
+  async get(ref: FakeDocumentReference): ReturnType<FakeDocumentReference['get']> {
+    return ref.get();
+  }
+
+  set(ref: FakeDocumentReference, data: RawData, options?: SetOptions): void {
+    void ref.set(data, options);
+  }
+
+  update(ref: FakeDocumentReference, data: RawData): void {
+    void ref.update(data);
+  }
+}
+
 class FakeFirestore {
   private readonly store = new Map<string, RawData>();
 
@@ -201,6 +214,12 @@ class FakeFirestore {
 
   collection(name: string): FakeCollectionReference {
     return new FakeCollectionReference(this.store, name);
+  }
+
+  async runTransaction<T>(
+    updateFunction: (transaction: FakeTransaction) => Promise<T>
+  ): Promise<T> {
+    return updateFunction(new FakeTransaction());
   }
 }
 

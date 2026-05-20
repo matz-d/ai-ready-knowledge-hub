@@ -33,7 +33,15 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.pnpm/pdfjs-dist@5.4.296/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs ./node_modules/.pnpm/pdfjs-dist@5.4.296/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs
+
+# pdfjs worker is not bundled into standalone; place it beside pdf.mjs in the pnpm tree.
+COPY --from=builder /app/node_modules/.pnpm/pdfjs-dist@*/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs /tmp/pdf.worker.mjs
+RUN set -eux; \
+  worker_dir="$(dirname "$(find ./node_modules/.pnpm -path '*/node_modules/pdfjs-dist/legacy/build/pdf.mjs' -print -quit)")"; \
+  test -n "$worker_dir"; \
+  cp /tmp/pdf.worker.mjs "$worker_dir/pdf.worker.mjs"; \
+  chown nextjs:nodejs "$worker_dir/pdf.worker.mjs"; \
+  rm /tmp/pdf.worker.mjs
 
 USER nextjs
 

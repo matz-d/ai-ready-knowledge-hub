@@ -145,7 +145,7 @@ export function parseStoredRecord(
     revisionId: raw.revisionId,
     stage: ConversionEvalStageSchema.parse(raw.stage),
     result: parseConversionEvalResult(raw.result),
-    createdAt: timestampToIsoOrNull(raw.createdAt) ?? '',
+    createdAt: timestampToIsoOrNull(raw.createdAt),
   };
 }
 
@@ -156,7 +156,7 @@ export function toExportRow(record: ConversionEvalRecord): ExportRow {
     docId: record.docId,
     revisionId: record.revisionId,
     stage: record.stage,
-    createdAt: record.createdAt || null,
+    createdAt: record.createdAt,
     sourceSubtype: TARGET_SOURCE_SUBTYPE,
     coverage: {
       pageCoverage: result.coverage.pageCoverage,
@@ -228,7 +228,11 @@ export async function collectExportRowsFromDocs(
   rows.sort((left, right) => {
     const leftTime = left.createdAt ? Date.parse(left.createdAt) : 0;
     const rightTime = right.createdAt ? Date.parse(right.createdAt) : 0;
-    return leftTime - rightTime || left.evalId.localeCompare(right.evalId);
+    const leftSortable = Number.isNaN(leftTime) ? 0 : leftTime;
+    const rightSortable = Number.isNaN(rightTime) ? 0 : rightTime;
+    return (
+      leftSortable - rightSortable || left.evalId.localeCompare(right.evalId)
+    );
   });
 
   return { rows, skippedBySubtype, skippedInvalid };

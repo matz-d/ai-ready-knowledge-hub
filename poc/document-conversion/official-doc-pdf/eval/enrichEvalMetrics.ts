@@ -52,10 +52,12 @@ export function enrichOfficialDocPdfEvalMetrics(
           ...coverage,
           // Re-derive pageCoverage against the override so MarkItDown (which
           // loses original page count) is comparable to pdf-parse.
-          pageCoverage:
+          pageCoverage: Math.min(
+            1,
             documentIr.pages.filter((page) =>
               page.blocks.some((block) => block.text.trim().length > 0)
-            ).length / totalPagesOverride,
+            ).length / totalPagesOverride
+          ),
         }
       : coverage;
 

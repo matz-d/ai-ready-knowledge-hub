@@ -39,9 +39,11 @@ export type AuditEventResult = 'success' | 'failure' | 'partial';
 
 export type AuditProcessingProfile = ProcessingProfile;
 
-/** Vertex 推論先の監査用最小形（Phase 3-E §6.1 と同形）。 */
-// TODO(Phase 3-H-3): document.convert では subtype 2/3 で Gemini（Vertex）を実際に呼んだ成功パスのみ
-// inferenceDestination を必須で埋める。条件の正本は docs/phase-3-h-3-direction.md §4.2。
+/** Minimal audit shape for Vertex inference destinations (matches Phase 3-E §6.1). */
+// TODO(Phase 3-H-3): For document.convert, require inferenceDestination only on
+// successful slide-pdf / scan-pdf paths that actually call Gemini via Vertex.
+// official-doc-pdf and pdf-parse-only fallback paths may omit it.
+// Source of truth: docs/phase-3-h-3-direction.md §4.2.
 export type AuditInferenceDestination = {
   vendor: 'vertex';
   region: string;
@@ -83,10 +85,11 @@ export type AuditEventWrite = {
   ruleSetVersion?: string;
   maskingMetrics?: AuditMaskingMetrics;
   /**
-   * M2-C: 型のみ予約。M2 実装では document.convert に未設定。
-   * TODO(Phase 3-H-3): document.convert かつ conversion.sourceSubtype が slide-pdf | scan-pdf で
-   * Vertex Gemini 呼出があった成功パスでは必須。official-doc-pdf / pdf-parse-fallback のみは省略可。
-   * 仕様: docs/phase-3-h-3-direction.md §4.2
+   * M2-C reserves the field at the type level; M2 document.convert writes do not set it.
+   * TODO(Phase 3-H-3): require this on successful document.convert events when
+   * conversion.sourceSubtype is slide-pdf or scan-pdf and the path called Vertex
+   * Gemini. official-doc-pdf / pdf-parse-only fallback paths may omit it.
+   * Spec: docs/phase-3-h-3-direction.md §4.2.
    */
   inferenceDestination?: AuditInferenceDestination;
   conversion?: AuditEventConversion;

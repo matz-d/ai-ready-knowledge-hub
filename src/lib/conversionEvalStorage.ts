@@ -33,7 +33,7 @@ export type ConversionEvalRecord = {
   revisionId: string;
   stage: ConversionEvalStage;
   result: ConversionEvalResult;
-  createdAt: string;
+  createdAt: string | null;
 };
 
 export type AppendConversionEvalInput = {
@@ -137,18 +137,6 @@ export function createConversionEvalStorage(
       const evalRef = db.collection(CONVERSION_EVAL_COLLECTION).doc(evalId);
       const parentRef = db.collection(DOCUMENTS_COLLECTION).doc(input.docId);
 
-      const [existingEval, parentSnap] = await Promise.all([
-        evalRef.get(),
-        parentRef.get(),
-      ]);
-
-      if (existingEval.exists) {
-        throw new ConversionEvalAlreadyExistsError(evalId);
-      }
-      if (!parentSnap.exists) {
-        throw new ConversionEvalParentDocumentNotFoundError(input.docId);
-      }
-
       const createdAt = FieldValue.serverTimestamp();
       const payload = {
         evalId,
@@ -159,10 +147,24 @@ export function createConversionEvalStorage(
         createdAt,
       };
 
-      await evalRef.set(payload, { merge: false });
-      await parentRef.update({
-        latestConversionEvalId: evalId,
-        updatedAt: FieldValue.serverTimestamp(),
+      await db.runTransaction(async (transaction) => {
+        const [existingEval, parentSnap] = await Promise.all([
+          transaction.get(evalRef),
+          transaction.get(parentRef),
+        ]);
+
+        if (existingEval.exists) {
+          throw new ConversionEvalAlreadyExistsError(evalId);
+        }
+        if (!parentSnap.exists) {
+          throw new ConversionEvalParentDocumentNotFoundError(input.docId);
+        }
+
+        transaction.set(evalRef, payload, { merge: false });
+        transaction.update(parentRef, {
+          latestConversionEvalId: evalId,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
       });
 
       const written = await evalRef.get();

@@ -864,13 +864,13 @@ async function runPdfCuratorPhase(args: {
     });
     const completedAt = new Date();
 
-    // PDF M1: requires_masking → curated + maskingPending:true (Masker not yet wired)
-    const nextStatus =
-      result.aiUsePolicy === 'requires_masking'
-        ? 'curated'
-        : terminalStatusForCuratorPolicy(result.aiUsePolicy);
-    const maskingPending =
-      result.aiUsePolicy === 'requires_masking' ? true : null;
+    // PDF M1: requires_masking parks at curated + maskingPending after DocumentIR
+    // conversion succeeds (see parkPdfRequiresMaskingDocument in orchestratePdfPath).
+    const deferRequiresMaskingPark = result.aiUsePolicy === 'requires_masking';
+    const nextStatus = deferRequiresMaskingPark
+      ? 'curating'
+      : terminalStatusForCuratorPolicy(result.aiUsePolicy);
+    const maskingPending = null;
 
     assertFirestoreInvariants({
       sourceKind: 'upload',
@@ -1044,6 +1044,8 @@ async function orchestratePdfPath(args: {
       evalStatus,
     });
 
+    await parkPdfRequiresMaskingDocument(args.docRef);
+
     return {
       kind: 'curated',
       docId: args.docId,
@@ -1056,6 +1058,17 @@ async function orchestratePdfPath(args: {
     await recordConversionFailure(args.docRef, e);
     throw e;
   }
+}
+
+/** PDF M1 terminal park: conversion succeeded; Masker not wired yet. */
+async function parkPdfRequiresMaskingDocument(
+  docRef: DocumentReference
+): Promise<void> {
+  await docRef.update({
+    status: 'curated',
+    maskingPending: true,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 }
 
 async function persistPdfHealthStageEval(args: {

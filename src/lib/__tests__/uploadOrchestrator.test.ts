@@ -604,12 +604,23 @@ describe('orchestrateUploadProcessing', () => {
           latestConversionEvalId: 'doc-pdf-mask:v1',
         })
       );
-      expect(updateMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'curated',
-          maskingPending: true,
-        })
+      const curatedParkCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).status === 'curated' &&
+          (payload as Record<string, unknown>).maskingPending === true
       );
+      expect(curatedParkCall).toBeTruthy();
+      const parkCallIndex = updateMock.mock.calls.indexOf(curatedParkCall!);
+      const evalIdUpdateIndex = updateMock.mock.calls.findIndex(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).latestConversionEvalId ===
+            'doc-pdf-mask:v1'
+      );
+      expect(parkCallIndex).toBeGreaterThan(evalIdUpdateIndex);
     });
 
     it('continues PDF flow when health eval persistence fails', async () => {
