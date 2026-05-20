@@ -1,0 +1,15 @@
+{
+  "documentId": "synthetic-employment-context-with-pii",
+  "expectedFields": [
+    "Synthetic Employment Context Package Seed",
+    "FOR EVALUATION ONLY - NO REAL CUSTOMER DATA",
+    "Document subtype: official-doc-pdf",
+    "Use case: Test PII detection and masking before AI handoff.",
+    "Employer: Example Accounting Office LLC",
+    "Contract type: Fixed-term office assistant",
+    "Monthly salary: JPY 280,000",
+    "Start date: 2026-04-01",
+    "PII policy note: every personal field in this PDF is invented for fixture testing."
+  ],
+  "notes": "Local synthetic fixture. Expected fields intentionally include only non-PII information that should remain after masking; PII recall belongs to M3 piiDetectionRecall."
+}

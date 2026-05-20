@@ -78,3 +78,15 @@ export {
   type ConversionEvalHealthCheckChunk,
   type ConversionEvalHealthCheckInput,
 } from './runConversionEvalHealthCheck';
+export {
+  GOLDEN_CHECK_SUPPORTED_SUBTYPES,
+  runConversionEvalGoldenCheck,
+  type ConversionEvalGoldenCheckInput,
+  type GoldenCheckSupportedSubtype,
+} from './runConversionEvalGoldenCheck';
+export {
+  evalSemanticRetention,
+  normalizeForSubstringMatch,
+  type EvalSemanticRetentionInput,
+  type SemanticRetentionEvalChunk,
+} from './golden';

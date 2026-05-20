@@ -128,6 +128,28 @@ describe('safety_readiness health rollup', () => {
       attachOverallStatus(result, 'health').overall.reasons
     ).not.toContain('safety_readiness: fail');
   });
+
+  it('fails heuristic rollup when unmaskable PII is found', () => {
+    const result = createEmptyConversionEvalResult();
+    result.safetyReadiness.unmaskablePiiFindings = 1;
+    result.safetyReadiness.maskableChunkRate = 1;
+    expect(evalSafetyReadiness(result, 'heuristic')).toBe('fail');
+    expect(rollupOverallStatus(result, 'heuristic')).toEqual({
+      status: 'fail',
+      reasons: ['safety_readiness: fail'],
+    });
+  });
+
+  it('passes heuristic rollup when maskable chunk rate is low but no unmaskable PII is found', () => {
+    const result = createEmptyConversionEvalResult();
+    result.safetyReadiness.unmaskablePiiFindings = 0;
+    result.safetyReadiness.maskableChunkRate = 0.5;
+    expect(evalSafetyReadiness(result, 'heuristic')).toBe('pass');
+    expect(rollupOverallStatus(result, 'heuristic')).toEqual({
+      status: 'pass',
+      reasons: [],
+    });
+  });
 });
 
 describe('KnowledgeChunk alignment', () => {

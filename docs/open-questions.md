@@ -132,6 +132,19 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - 残未決: replacement token を DLP 既定の `[INFO_TYPE]` のまま使うか、既存 `SimpleMasker` と同じ `[REDACTED:TYPE]` に寄せるか
 - 残未決: 日本向け custom dictionary（顧客名、社内担当者、支店名など）をどの段階で導入するか
 
+### Phase 3-H-3（slide-pdf / scan-pdf 本線統合）
+
+**方針ドラフト（2026-05-20）:** [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) と [docs/decisions.md](decisions.md) `D-P3-H-6`（ドラフト）を正とする。実装着手前に以下を確定する。
+
+- 残未決: **Masker 本線統合（PDF 経路）** を Phase 3-H-3 内で行うか、別フェーズに送るか（`D-P3-H-6 Q5` 推奨は後送り）
+- 残未決: **slide-pdf 本線**で Gemini 失敗時に `pdf-parse` fallback を許すか、health gate で fail-closed にするか（PoC は fallback、`D-P3-H-6 Q2`）
+- 残未決: **scan-pdf** の quota 超過・timeout・コスト上限と fail-closed の具体値
+- 残未決: subtype 2 / 3 の **heuristic 閾値**（[docs/phase-3-h-slide-pdf-poc.md](phase-3-h-slide-pdf-poc.md) 暫定表は PoC 候補のみ）
+- 残未決: `sample-data/document-conversion/{slide-pdf,scan-pdf}/*.expected.json` の golden 粒度と月次レビュー手順の subtype 拡張
+- 残未決: `pdf-conversion-subtype-2` / `pdf-conversion-subtype-3` の **公開範囲拡大条件**（subtype 1 M5 判断の踏襲か再定義か）
+- 残未決: `document.convert` の **`inferenceDestination`** に載せる model / region の tenant override 要否（固定 env のみで足りるか）
+- 残未決: PoC の `ocrUsage` / `ocrCost` を `ConversionEvalResult` 本線 schema に昇格するか
+
 ### Document Conversion Eval（Phase 3-H に向けた未決）
 - **Phase 3-E 方針（2026-05-18）**: 6 評価軸・`ConversionEvalResult` の docs 上の型案・三段階成熟度（health / heuristic / golden）・`overall.status` ロールアップ規約（案B: blocker 軸方式）を [docs/phase-3-e-direction.md](phase-3-e-direction.md) §10 と [docs/decisions.md](decisions.md) D-P3-E Q8 に固定済み。`src/` への型実装、評価器ランナー、golden fixture、`poc/document-conversion/` 作成、CI への評価器接続は Phase 3-H へ送る。
 - 残未決: 各軸の fail / warn 閾値（特に `safety_readiness.maskableChunkRate` の下限、`context_package_readiness.oversizedChunks` の許容数、`coverage.pageCoverage` の最低値）

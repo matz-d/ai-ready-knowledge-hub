@@ -1,0 +1,217 @@
+name: Conversion eval
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Eval stage
+        required: true
+        type: choice
+        default: golden
+        options:
+          - golden
+  schedule:
+    - cron: '0 0 1 * *'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  DLP_DRY_RUN: 'true'
+
+jobs:
+  health:
+    name: conversion-eval / health (required)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run health eval (required gate)
+        run: pnpm tsx scripts/runConversionEvalForCi.ts --stage health --out tmp/conversion-eval-health.json
+
+      - name: Upload health report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conversion-eval-health
+          path: tmp/conversion-eval-health.json
+
+  heuristic:
+    name: conversion-eval / heuristic (warning)
+    if: github.event_name == 'pull_request'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run heuristic eval (warning gate)
+        continue-on-error: true
+        run: pnpm tsx scripts/runConversionEvalForCi.ts --stage heuristic --out tmp/conversion-eval-heuristic.json
+
+      - name: Post heuristic report comment
+        if: always()
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          REPORT_PATH: tmp/conversion-eval-heuristic.json
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('node:fs');
+            const marker = '<!-- conversion-eval-heuristic -->';
+            const reportPath = process.env.REPORT_PATH;
+            if (!reportPath || !fs.existsSync(reportPath)) {
+              core.warning('Heuristic report JSON was not found; skipping PR comment.');
+              return;
+            }
+
+            const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+            const iconFor = (status) =>
+              status === 'pass'
+                ? '✅'
+                : status === 'warn'
+                  ? '⚠️'
+                  : status === 'fail'
+                    ? '❌'
+                    : '➖';
+            const rows = report.fixtures
+              .map((fixture) => {
+                const matrix = fixture.heuristicAxisStatuses ?? {};
+                const coverage = matrix.coverage ?? 'n/a';
+                const locator = matrix.locator_quality ?? 'n/a';
+                const safety = matrix.safety_readiness ?? 'n/a';
+                return `| ${fixture.documentId} | ${iconFor(coverage)} ${coverage} | ${iconFor(locator)} ${locator} | ${iconFor(safety)} ${safety} |`;
+              })
+              .join('\n');
+
+            const headlineIcon =
+              report.summary.fail > 0 ? '❌' : report.summary.warn > 0 ? '⚠️' : '✅';
+            const axisSummary = report.heuristicAxisSummary;
+            const axisSummaryLines = axisSummary
+              ? [
+                  `- coverage: pass=${axisSummary.coverage.pass}, warn=${axisSummary.coverage.warn}, fail=${axisSummary.coverage.fail}`,
+                  `- locator_quality: pass=${axisSummary.locator_quality.pass}, warn=${axisSummary.locator_quality.warn}, fail=${axisSummary.locator_quality.fail}`,
+                  `- safety_readiness: pass=${axisSummary.safety_readiness.pass}, warn=${axisSummary.safety_readiness.warn}, fail=${axisSummary.safety_readiness.fail}`,
+                ]
+              : ['- heuristic axis summary is unavailable'];
+
+            const body = [
+              marker,
+              '### Conversion Eval (heuristic warning gate)',
+              '',
+              `${headlineIcon} pass=${report.summary.pass}, warn=${report.summary.warn}, fail=${report.summary.fail}`,
+              '',
+              '**Fixture matrix (coverage / locator_quality / safety_readiness)**',
+              '',
+              '| Fixture | coverage | locator_quality | safety_readiness |',
+              '|---|---|---|---|',
+              rows,
+              '',
+              '**Axis summary**',
+              ...axisSummaryLines,
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find(
+              (comment) =>
+                comment.user?.type === 'Bot' && comment.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
+      - name: Upload heuristic report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conversion-eval-heuristic
+          path: tmp/conversion-eval-heuristic.json
+
+  golden:
+    name: conversion-eval / golden (manual + monthly)
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run golden eval
+        env:
+          EVAL_STAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.stage || 'golden' }}
+        run: pnpm tsx scripts/runConversionEvalForCi.ts --stage "${EVAL_STAGE}" --out tmp/conversion-eval-golden.json
+
+      - name: Upload golden report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conversion-eval-golden
+          path: tmp/conversion-eval-golden.json

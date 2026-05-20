@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "fileName": "mhlw-r07-model-work-rules.pdf",
+    "mediaType": "application/pdf",
+    "sourceKind": "poc",
+    "sourceSubtype": "official-doc-pdf"
+  },
+  "pages": [
+    {
+      "pageNumber": 1,
+      "blocks": [
+        {
+          "blockId": "p1-b1",
+          "kind": "heading",
+          "text": "モデル就業規則（令和7年版）",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "headingLevel": 1 }
+        },
+        {
+          "blockId": "p1-b2",
+          "kind": "paragraph",
+          "text": "本規則は、株式会社○○の従業員の就業条件を定めるものである。労働基準法その他関係法令の定めるところによるほか、本規則の定めるところによる。",
+          "locator": { "pageNumber": 1 }
+        }
+      ]
+    },
+    {
+      "pageNumber": 2,
+      "blocks": [
+        {
+          "blockId": "p2-b1",
+          "kind": "heading",
+          "text": "第2章 採用、異動等",
+          "locator": { "pageNumber": 2 },
+          "metadata": { "headingLevel": 2 }
+        },
+        {
+          "blockId": "p2-b2",
+          "kind": "paragraph",
+          "text": "第6条（採用手続）会社は、入社を希望する者の中から選考試験に合格し、所定の手続を経た者を従業員として採用する。",
+          "locator": { "pageNumber": 2 }
+        }
+      ]
+    },
+    {
+      "pageNumber": 3,
+      "blocks": [
+        {
+          "blockId": "p3-t1-r0",
+          "kind": "table",
+          "text": "条文\t見出し\t備考",
+          "locator": {
+            "pageNumber": 3,
+            "tableIndex": 1,
+            "rowIndex": 0
+          },
+          "metadata": { "isHeaderRow": true, "columnCount": 3 }
+        },
+        {
+          "blockId": "p3-t1-r1",
+          "kind": "table",
+          "text": "第7条\t試用期間\t3か月以内",
+          "locator": {
+            "pageNumber": 3,
+            "tableIndex": 1,
+            "rowIndex": 1
+          },
+          "metadata": { "columnCount": 3 }
+        }
+      ]
+    },
+    {
+      "pageNumber": 4,
+      "blocks": [
+        {
+          "blockId": "p4-b1",
+          "kind": "paragraph",
+          "text": "附則 本規則は、令和7年4月1日から施行する。",
+          "locator": { "pageNumber": 4 }
+        }
+      ]
+    }
+  ]
+}
