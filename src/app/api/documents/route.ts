@@ -14,6 +14,7 @@ import {
   CuratorPhaseError,
   MaskerPhaseError,
   orchestrateUploadProcessing,
+  type PdfConversionAudit,
 } from '../../../lib/uploadOrchestrator';
 import { getKnowledgeHubBucketName } from '../../../lib/storage';
 import {
@@ -25,6 +26,7 @@ import {
 import { documentUploadSuccessBodyFromOrchestrate } from '../../../lib/documentUploadResponseMapper';
 import { xlsxToNormalizedMarkdown } from '../../../lib/extractors/xlsxExtractor';
 import { extractPdfFromBuffer } from '../../../lib/extractors/pdfDocumentExtractor';
+import { extractSlidePdfFromBuffer } from '../../../lib/extractors/slidePdfDocumentExtractor';
 import { replaceChunksForDoc } from '../../../lib/chunkRegenerator';
 import { auditActorFromRequest, recordAuditEvent } from '../../../lib/audit/auditEvent';
 import { getFeatureFlag, isFeatureEnabled } from '../../../lib/featureFlags';
@@ -41,6 +43,59 @@ const MASKER_FAILURE_CLIENT_MESSAGE =
 
 const CHUNK_GENERATION_FAILURE_CLIENT_MESSAGE =
   'チャンク生成に失敗しました。設定またはログを確認してください。';
+
+type PdfExtractionResult = {
+  textContent: string;
+  documentIr: Awaited<
+    ReturnType<typeof extractPdfFromBuffer>
+  >['documentIr'];
+  /** Audit metadata threaded into `document.convert` (Phase 3-H-3 §4.2). */
+  conversion: PdfConversionAudit;
+};
+
+type PdfSubtypePreFlightConfig = {
+  flagId: 'pdf-conversion-subtype-1' | 'pdf-conversion-subtype-2';
+  extract: (args: { buffer: Buffer; fileName: string }) => Promise<PdfExtractionResult>;
+};
+
+const PDF_SUBTYPE_PRE_FLIGHT_CONFIGS: readonly PdfSubtypePreFlightConfig[] = [
+  {
+    flagId: 'pdf-conversion-subtype-2',
+    extract: async ({ buffer, fileName }) => {
+      const result = await extractSlidePdfFromBuffer({ buffer, fileName });
+      return {
+        textContent: result.textContent,
+        documentIr: result.documentIr,
+        conversion: {
+          converterId: result.conversion.converterId,
+          inferenceDestination: {
+            vendor: 'vertex',
+            region: result.conversion.region,
+            model: result.conversion.model,
+          },
+        },
+      };
+    },
+  },
+  {
+    flagId: 'pdf-conversion-subtype-1',
+    extract: async ({ buffer, fileName }) => {
+      const result = await extractPdfFromBuffer({
+        buffer,
+        fileName,
+        sourceSubtype: 'official-doc-pdf',
+      });
+      return {
+        textContent: result.textContent,
+        documentIr: result.documentIr,
+        conversion: { converterId: 'pdf-parse' },
+      };
+    },
+  },
+] as const;
+
+const PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE =
+  'PDF 変換の feature flag が競合しています。同一テナントで official-doc-pdf と slide-pdf を同時に有効にできません。';
 
 /** Whole mebibytes for client-facing copy (limit is defined in binary units). */
 function formatBytesAsMB(bytes: number): string {
@@ -131,9 +186,7 @@ export async function POST(request: Request) {
   // ── PDF-specific pre-flight: feature flag check + extraction ─────────────
   // Done before the orchestration try/catch so failure modes are clean 4xx/403,
   // not confused with 5xx CuratorPhaseError / MaskerPhaseError.
-  let pdfExtractionResult:
-    | Awaited<ReturnType<typeof extractPdfFromBuffer>>
-    | undefined;
+  let pdfExtractionResult: PdfExtractionResult | undefined;
 
   if (extCheck === '.pdf') {
     let tenantId: string;
@@ -143,8 +196,15 @@ export async function POST(request: Request) {
       tenantId = '';
     }
     const db = getFirestoreClient();
-    const flag = await getFeatureFlag(db, 'pdf-conversion-subtype-1');
-    if (!isFeatureEnabled(flag, tenantId)) {
+    const enabledPdfConfigs: PdfSubtypePreFlightConfig[] = [];
+    for (const config of PDF_SUBTYPE_PRE_FLIGHT_CONFIGS) {
+      const flag = await getFeatureFlag(db, config.flagId);
+      if (isFeatureEnabled(flag, tenantId)) {
+        enabledPdfConfigs.push(config);
+      }
+    }
+
+    if (enabledPdfConfigs.length === 0) {
       return NextResponse.json(
         {
           error:
@@ -154,11 +214,23 @@ export async function POST(request: Request) {
       );
     }
 
+    if (enabledPdfConfigs.length > 1) {
+      console.warn('[documents] conflicting PDF conversion feature flags', {
+        tenantId,
+        enabledFlagIds: enabledPdfConfigs.map((config) => config.flagId),
+      });
+      return NextResponse.json(
+        { error: PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE },
+        { status: 403 }
+      );
+    }
+
+    const selectedPdfConfig = enabledPdfConfigs[0]!;
+
     try {
-      pdfExtractionResult = await extractPdfFromBuffer({
+      pdfExtractionResult = await selectedPdfConfig.extract({
         buffer,
         fileName: displayName,
-        sourceSubtype: 'official-doc-pdf',
       });
     } catch (error) {
       console.error('[documents] PDF extraction failed', error);
@@ -223,8 +295,9 @@ export async function POST(request: Request) {
       ...(pdfExtractionResult
         ? {
             documentIr: pdfExtractionResult.documentIr,
-            sourceSubtype: 'official-doc-pdf',
+            sourceSubtype: pdfExtractionResult.documentIr.source.sourceSubtype,
             auditContext: pdfAuditContext,
+            conversion: pdfExtractionResult.conversion,
           }
         : {}),
     });

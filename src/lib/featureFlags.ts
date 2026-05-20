@@ -16,6 +16,7 @@ import { z } from 'zod';
 // Using `as const satisfies` keeps element literals narrow for z.enum() below.
 export const FEATURE_FLAG_IDS = [
   'pdf-conversion-subtype-1', // official-doc-pdf pipeline (Phase 3-H-2 M1)
+  'pdf-conversion-subtype-2', // slide-pdf pipeline (Phase 3-H-3 M1)
 ] as const satisfies readonly string[];
 
 export type FeatureFlagId = (typeof FEATURE_FLAG_IDS)[number];

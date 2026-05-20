@@ -1314,20 +1314,21 @@ type FeatureFlag = {
 
 ---
 
-## D-P3-H-6: Phase 3-H-3 着手方針（2026-05-20、ドラフト）
+## D-P3-H-6: Phase 3-H-3 着手方針（2026-05-20、確定）
 
-**ステータス**: ドラフト。Phase 3-H-2 M6 完了に伴う docs 正本。[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) を実装着手時の入口とする。番号 `D-P3-H-3` は Phase 3-H-2 着手時の subtype 1 高レベル方針であり、本エントリが **フェーズ名 Phase 3-H-3（subtype 2/3）** の判断用である。
+**ステータス**: 確定（2026-05-20）。Q2 / Q5 の未決が解消し、着手ゲート 3 を含む全項目が確定。[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) を実装着手時の入口とする。番号 `D-P3-H-3` は Phase 3-H-2 着手時の subtype 1 高レベル方針であり、本エントリが **フェーズ名 Phase 3-H-3（subtype 2/3）** の判断用である。
 
-**決定（ドラフト）**: `slide-pdf`（subtype 2）と `scan-pdf`（subtype 3）を、subtype 1 と同型の薄い本線統合（feature flag + Curator まで + `direct` のみ chunk 化）で順次載せる。Vertex AI Gemini 呼出時のみ AuditEvent `document.convert` に `inferenceDestination` を記録する。
+**決定**: `slide-pdf`（subtype 2）と `scan-pdf`（subtype 3）を、subtype 1 と同型の薄い本線統合（feature flag + Curator まで + `direct` のみ chunk 化）で順次載せる。Vertex AI Gemini 呼出時のみ AuditEvent `document.convert` に `inferenceDestination` を記録する。slide-pdf 本線は **pdf-parse fallback を持たず fail-closed**（Q2）、Masker 本線統合は **H-3 外**（Q5）。
 
 ### Q1: 着手順序
 
-**決定（ドラフト）**: **subtype 2 → subtype 3** の順で統合する。
+**決定**: **subtype 2 → subtype 3** の順で統合する。scan-pdf（subtype 3）は subtype 2 と同時に実装しない。subtype 2 の M1〜M5（extractor 本線昇格、観測、heuristic、golden、CI health gate）と live smoke 証跡が揃ったあと、別フェーズとして昇格する。
 
 **理由:**
 - [docs/phase-3-h-direction.md](phase-3-h-direction.md) の Priority 2 / 3 と一致する。
-- slide-pdf は fallback 経路があり、本線障害切り分けの学習コストが scan-pdf より低い。
+- slide-pdf は OCR ではなく PDF media 直読みで、scan-pdf より PII / `unmaskablePiiFindings` の safety 評価を分離しやすい。
 - scan-pdf は OCR 専用・`unmaskablePiiFindings` の意味が強く、subtype 2 の観測データと eval 基盤が揃ってから入る方が安全。
+- scan-pdf は PII が OCR で抽出できない/誤読される場合の安全評価が中心になるため、subtype 2 の `direct` deck 観測と同じ PR に混ぜると失敗原因が切り分けにくい。
 
 **代替案:**
 - (a) subtype 2 → subtype 3 ← ドラフト採用
@@ -1342,7 +1343,34 @@ type FeatureFlag = {
 - PoC と本線で fallback / 監査の挙動が分岐すると、D-P3-H-4 で固定した副作用順序が崩れる。
 - Strategist / Context Package export で既に Vertex + `inferenceDestination` 実績がある（[src/app/api/context-package/route.ts](../src/app/api/context-package/route.ts)）。
 
-**未決（実装前）:** slide-pdf 本線で Gemini 失敗時に pdf-parse fallback を許すか、health fail で止めるか → [docs/open-questions.md](open-questions.md)。
+**確定（2026-05-20、Q2 補遺）**: slide-pdf 本線では **`pdf-parse` fallback を持たない**。Gemini 呼出が失敗した場合は subtype 1 同様に **fail-closed**（chunk 化せず、既存エラーハンドリングに委譲）。PoC runner（`poc/document-conversion/slide-pdf/runner.ts`）の fallback / `SLIDE_PDF_SKIP_GEMINI` は **PoC 専用**として温存する。
+
+**理由（fallback 不採用）:**
+- subtype 2（`slide-pdf`）を subtype 1（`official-doc-pdf`）と分離した設計理由が「`pdf-parse` ではスライド系コンテンツを十分に拾えないため Gemini を first-choice にする」であり、本線 fallback を持つと subtype 分離の前提自体が崩れる。
+- PoC 実出力でも `synthetic-employment-context-with-pii.pdf` は pdf-parse fallback で 1 ブロックまで縮退しており、本線に流すと「Gemini 失敗を audit 経由でしか検知できない劣化 chunk」が Context Package に混入する。
+- `D-P3-H-4 Q5` / `includedBodyForChunk` の masking fallback を `throw` に変えた前例（本ファイル L701 / L728）と同じ "黙って劣化した出力を流さない" 原則の延長。
+- `D-P3-H-6 Q4` で fallback パスには `inferenceDestination` を **付けない**と定めているため、本線で fallback を許すと "Gemini を呼ばず完結した変換" が `converterId` でしか区別できず、採点軸「とどける」の Gemini 利用証跡が薄くなる。
+
+**運用上の含意:**
+- Gemini quota 超過 / region outage / schema validation 失敗時は `document.convert` を `evalStatus: 'error'`（または `'fail'`）で書き、chunk 化は行わない。
+- tenant policy 切り替え（fail-closed / fallback 許可）は **入れない**。将来必要になった場合は新規 decision を起票する。
+- scan-pdf（subtype 3）は `D-P3-H-6` ドラフト時点から **fallback なし / fail-closed 候補**。OCR 失敗時に pdf-parse fallback へ落とすと、画像化 PDF の可視 PII が欠落したまま安全に見える劣化 chunk を作り得るため、subtype 3 着手時にこの方針を明示的に確定する。
+
+### Q2b: scan-pdf 昇格差分（subtype 2 M1〜M5 完了後）
+
+**決定**: scan-pdf の Gemini OCR extractor 昇格は、subtype 2 の M1〜M5 完了後に別フェーズで実施する。実装差分は [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §7 を正とする。
+
+**必要差分:**
+- 新規 extractor: `src/lib/extractors/scanPdfDocumentExtractor.ts`
+- 新規 flag: `pdf-conversion-subtype-3`（dev tenant allow-list + `expiresAt` 必須、subtype 2 とは独立）
+- `converterId`: `gemini-ocr` など subtype 3 専用値
+- fallback: なし / fail-closed を第一候補。OCR 失敗時は chunk 化しない
+- eval: `unmaskablePiiFindings`、OCR coverage、locator quality、PII golden recall を subtype 2 より重く見る
+
+**理由:**
+- scan-pdf は OCR 境界そのものが価値であり、fallback で `pdf-parse` へ落とすと「見えていたはずの情報が抽出されない」失敗を隠す。
+- スキャン文書は氏名・住所・電話・マイナンバー風値などの PII を含む可能性が高く、抽出できない PII は Masker に渡せないため、`unmaskablePiiFindings` の意味が slide-pdf より強い。
+- subtype 2 と同時実装すると、Vertex 呼出・OCR 品質・safety_readiness・chunk invariant の失敗が重なり、観測ループの原因分析が難しくなる。
 
 ### Q3: Feature flag
 
@@ -1351,6 +1379,8 @@ type FeatureFlag = {
 **理由:**
 - subtype ごとにコスト・障害特性が異なるため、単一「PDF ON」flag ではロールバック粒度が粗い。
 - subtype 1 の運用ノウハウ（allow-list、期限付き PoC flag）をそのまま流用できる。
+
+**確定（M1 実装、2026-05-20）:** flag は subtype ごとに独立だが、**同一 tenant で subtype-1 と subtype-2 を同時 ON にしない**。`/api/documents` は両方 ON を 403 で拒否する（配列順による暗黙ルーティングは使わない）。M1 では PDF 内容からの subtype 自動判定は行わない。
 
 ### Q4: AuditEvent `inferenceDestination`
 
@@ -1364,14 +1394,14 @@ type FeatureFlag = {
 
 ### Q5: Masker 本線統合（PDF 経路）
 
-**決定（ドラフト）**: **Phase 3-H-3 のスコープ外（別フェーズ送り）** を推奨案とする。
+**確定（2026-05-20）**: **Phase 3-H-3 のスコープ外（別フェーズ送り）**。`requires_masking` PDF は subtype 1 と同じく `maskingPending: true` で停止し、Masker 本線統合は Phase 3-H-3 完了後の別フェーズで扱う。
 
 **理由:**
 - `requires_masking` PDF は chunk 化せず `maskingPending: true` で止める方針は `D-P3-H-4 Q5` で確定済み。
-- Vertex 統合と Masker + DLP 本格接続を同時にすると、eval 失敗の原因切り分けが難しい。
-- subtype 2/3 の初期 fixture は自己所有 deck / 公的 scan 中心で `direct` 観測から始められる。
+- Vertex（subtype 2/3）+ Masker + DLP を同時に本線へ載せると、subtype 1 の health eval も含めた三重障害の切り分けが指数的に難しくなる。
+- subtype 2/3 の初期 fixture は自己所有 deck / 公的 scan 中心で `direct` 観測から始められる。PII 入り fixture（`synthetic-employment-context-with-pii.pdf` 等）は PoC 経路で継続観測する（本ファイル L1228）。
 
-**未決:** product が PII 入り slide/scan を早期に本線で見る必要が出た場合は (a) に振り替え → open-questions。
+**再開条件:** product 要請として PII 入り slide/scan を本線で `safety_readiness` 評価する必要が出た場合、別フェーズで (a) を新規 decision として起票する。
 
 ### 着手ゲート（ドラフト）
 
@@ -1379,7 +1409,7 @@ Phase 3-H-3 の **実装**に入る前に次を満たす:
 
 1. ~~Phase 3-H-2 DoD（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §12）完了~~ — **達成（2026-05-20）**
 2. ~~subtype 1 の health CI gate + 観測ループ（`conversion_eval` / `document.convert`）が本線で稼働~~ — **達成（2026-05-20、`D-P3-H-5b`）**
-3. `D-P3-H-6` の Q2（slide fallback 方針）と Q5（Masker タイミング）のいずれかが確定 — **未決（open-questions 参照）**
+3. ~~`D-P3-H-6` の Q2（slide fallback 方針）と Q5（Masker タイミング）のいずれかが確定~~ — **両方確定（2026-05-20）**: Q2 は本線 fallback なし（fail-closed）、Q5 は H-3 スコープ外（別フェーズ）
 
 ### 影響範囲（予定）
 
