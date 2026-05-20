@@ -1251,12 +1251,122 @@ type FeatureFlag = {
 
 ---
 
+## D-P3-H-5: subtype-1 heuristic 閾値確定（2026-05-20）
+
+**決定**: Phase 3-H-2 M2-D の dev Firestore 観測 JSONL（`tmp/conversion-eval-samples-2026-05-20.jsonl`）のうち、DLP 実測版 `revisionId = v1-heuristic-m2d-20260520-dlp` の 2 行を初期分布として、`official-doc-pdf`（subtype 1）の M3 heuristic 閾値を以下で固定する。
+
+| 軸 | M2-D 実測 | M3-C 初期閾値 |
+|---|---:|---|
+| `coverage.pageCoverage` | `1.0`, `1.0` | `>= 1.0` pass、`>= 0.75` warn、`< 0.75` fail（非ブロッカー） |
+| `coverage.textDensityWarnings.length` | `0`, `1` | status 閾値には使わず、人間レビュー向け warning signal として保持 |
+| `coverage.tableCandidates` | `116`, `78` | 閾値なし。文書の表量差が大きいため観測のみ |
+| `locatorQuality.hasPageLocators` | `true`, `true` | `true` 必須 |
+| `locatorQuality.hasTableLocators` | `true`, `true` | warning only。表を持たない文書を fail しない |
+| `contextPackageReadiness.oversizedChunks` | `0`, `0` | `=== 0` 必須 |
+| `safetyReadiness.unmaskablePiiFindings` | `0`, `0` | `=== 0` 必須。`> 0` は blocker fail |
+| `safetyReadiness.maskableChunkRate` | `0.0714`, `0.2442` | 初期下限 `0`。M3-C では blocker / warn に使わず観測のみ |
+
+**理由:**
+- `coverage.pageCoverage` は M2-D の direct / Public PDF 2 件でどちらも `1.0`。subtype 1 は text layer ありの official doc PDF であり、初期 pass は「全 page で non-empty block が出る」ことを期待値にする。一方、合成 PII fixture では `0.75` の partial coverage が既知なので、`0.75` 以上を warn として人間レビューに残す。
+- `tableCandidates` は `78` / `116` と文書の表量に強く依存する。閾値化すると「表が多い・少ない」そのものを品質判定してしまうため、M3-C では観測のみとする。
+- `locatorQuality.hasPageLocators` は Context Package の根拠提示に必要なので必須にする。`hasTableLocators` は表を含まない official document を fail しないため warning only に留める。
+- `contextPackageReadiness.oversizedChunks` は Firestore / Context Package への投入可能性に直結するため、既存 health 実装と同じく `0` 必須にする。
+- `safetyReadiness.maskableChunkRate` は今回の公開文書で DLP が PERSON_NAME などを検出した chunk 数を全 chunk 数で割る値になり、PII の多寡や DLP の false positive に強く影響される。低い値それ自体は「危険」ではないため、M3-C では `unmaskablePiiFindings === 0` を blocker とし、`maskableChunkRate` は将来の PII-bearing golden / Masker 統合後に再定義する。
+
+**実装への反映:**
+- `coverage.pageCoverage` の初期閾値は `src/eval/conversion/heuristic/evalCoverage.ts` に定数化する。
+- `safetyReadiness.unmaskablePiiFindings` / `maskableChunkRate` の初期閾値は `src/eval/conversion/evalSafetyReadiness.ts` に定数化する。
+- `docs/phase-3-h-2-direction.md` §6.2 の表を本エントリの値へ置換する。
+
+**残リスク / 次回見直し条件:**
+- M2-D の DLP 実測は direct / Public PDF 2 件のみで、`requires_masking` PDF は M1〜M3 の本線では chunk 化しない。PII-bearing golden eval または Masker 本線統合後に `maskableChunkRate` の意味と閾値を再検討する。
+- `coverage.pageCoverage` は今後 10 件程度の official-doc-pdf 観測が溜まった時点で、`1.0` pass が過度に厳しくないか再確認する。
+
+---
+
+## D-P3-H-6: Phase 3-H-3 着手方針（2026-05-20、ドラフト）
+
+**ステータス**: ドラフト。Phase 3-H-2 M6 完了に伴う docs 正本。[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) を実装着手時の入口とする。番号 `D-P3-H-3` は Phase 3-H-2 着手時の subtype 1 高レベル方針であり、本エントリが **フェーズ名 Phase 3-H-3（subtype 2/3）** の判断用である。
+
+**決定（ドラフト）**: `slide-pdf`（subtype 2）と `scan-pdf`（subtype 3）を、subtype 1 と同型の薄い本線統合（feature flag + Curator まで + `direct` のみ chunk 化）で順次載せる。Vertex AI Gemini 呼出時のみ AuditEvent `document.convert` に `inferenceDestination` を記録する。
+
+### Q1: 着手順序
+
+**決定（ドラフト）**: **subtype 2 → subtype 3** の順で統合する。
+
+**理由:**
+- [docs/phase-3-h-direction.md](phase-3-h-direction.md) の Priority 2 / 3 と一致する。
+- slide-pdf は fallback 経路があり、本線障害切り分けの学習コストが scan-pdf より低い。
+- scan-pdf は OCR 専用・`unmaskablePiiFindings` の意味が強く、subtype 2 の観測データと eval 基盤が揃ってから入る方が安全。
+
+**代替案:**
+- (a) subtype 2 → subtype 3 ← ドラフト採用
+- (b) 同時統合（単一 PR / 単一 flag）
+- (c) scan-pdf を先に（OCR 需要優先）
+
+### Q2: Vertex AI を upload pipeline に載せる境界
+
+**決定（ドラフト）**: 推論呼出は **`uploadOrchestrator` 配下の本線 extractor** に限定し、PoC CLI runner は昇格元として残す。設定は既存 `GOOGLE_CLOUD_PROJECT` / `GOOGLE_CLOUD_LOCATION` / `GEMINI_MODEL` を流用する。
+
+**理由:**
+- PoC と本線で fallback / 監査の挙動が分岐すると、D-P3-H-4 で固定した副作用順序が崩れる。
+- Strategist / Context Package export で既に Vertex + `inferenceDestination` 実績がある（[src/app/api/context-package/route.ts](../src/app/api/context-package/route.ts)）。
+
+**未決（実装前）:** slide-pdf 本線で Gemini 失敗時に pdf-parse fallback を許すか、health fail で止めるか → [docs/open-questions.md](open-questions.md)。
+
+### Q3: Feature flag
+
+**決定（ドラフト）**: `D-P3-H-4 Q1` の schema を踏襲し、flagId は `pdf-conversion-subtype-2` / `pdf-conversion-subtype-3` を **subtype ごとに独立**して新設する。初期は dev tenant allow-list + `expiresAt` 必須。
+
+**理由:**
+- subtype ごとにコスト・障害特性が異なるため、単一「PDF ON」flag ではロールバック粒度が粗い。
+- subtype 1 の運用ノウハウ（allow-list、期限付き PoC flag）をそのまま流用できる。
+
+### Q4: AuditEvent `inferenceDestination`
+
+**決定（ドラフト）**: [docs/phase-3-e-direction.md](phase-3-e-direction.md) §6.1 `ProcessingRecord.inferenceDestination` と同形の `AuditInferenceDestination` を、`document.convert` で **Vertex Gemini を実際に呼んだ成功パス**にだけ付与する。`pdf-parse` / `pdf-parse-fallback` のみの変換では付与しない。
+
+**接続点:**
+- 型の正本: [src/lib/audit/auditEvent.ts](../src/lib/audit/auditEvent.ts)
+- Phase 3-H-2 M2: `document.convert` は `conversion` のみ（`inferenceDestination` 未設定）
+- Phase 3-H-3: subtype 2/3 の Vertex 成功時に region / model を埋める
+- Phase 4: §6.1 全体を BigQuery write-once audit へ昇格する際の部分集合として再利用
+
+### Q5: Masker 本線統合（PDF 経路）
+
+**決定（ドラフト）**: **Phase 3-H-3 のスコープ外（別フェーズ送り）** を推奨案とする。
+
+**理由:**
+- `requires_masking` PDF は chunk 化せず `maskingPending: true` で止める方針は `D-P3-H-4 Q5` で確定済み。
+- Vertex 統合と Masker + DLP 本格接続を同時にすると、eval 失敗の原因切り分けが難しい。
+- subtype 2/3 の初期 fixture は自己所有 deck / 公的 scan 中心で `direct` 観測から始められる。
+
+**未決:** product が PII 入り slide/scan を早期に本線で見る必要が出た場合は (a) に振り替え → open-questions。
+
+### 着手ゲート（ドラフト）
+
+Phase 3-H-3 の **実装**に入る前に次を満たす:
+
+1. Phase 3-H-2 DoD（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §12）完了
+2. subtype 1 の health CI gate が安定（conversion-eval workflow）
+3. `D-P3-H-6` の Q2（slide fallback 方針）と Q5（Masker タイミング）のいずれかが確定
+
+### 影響範囲（予定）
+
+- 新規: `src/lib/extractors/slidePdf*.ts`、`scanPdf*.ts`（名称は実装時確定）
+- 修正: `uploadOrchestrator.ts`、`featureFlags.ts` flagId union、`auditEvent.ts` 書き込み、`firestore.rules`（新 flag 読取）
+- docs: [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md)、open-questions
+
+---
+
 ## 関連ドキュメント
 
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
 - [docs/phase-3-d-direction.md](phase-3-d-direction.md) — Phase 3-D CI/CD + IAP 実装方針（正本）
 - [docs/phase-3-e-direction.md](phase-3-e-direction.md) — Phase 3-E Processing Boundary + Cloud DLP Trust Modes 実装方針（正本）
 - [docs/phase-3-h-direction.md](phase-3-h-direction.md) — Phase 3-H Document Conversion PoC 方針
+- [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) — Phase 3-H-2 subtype 1 薄い本線統合
+- [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) — Phase 3-H-3 subtype 2/3 足場
 - [docs/offering-model.md](offering-model.md) — 提供形態
 - [docs/phase-3-c-5-source-coverage.md](phase-3-c-5-source-coverage.md) — Phase 3-C-5 source coverage 確認結果
 - [docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) — Phase 3-B（Drive 再取り込み・schemaVersion 2・鮮度バッジ・完了条件の正本）

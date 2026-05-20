@@ -192,12 +192,12 @@ M2 で集めた分布から subtype-1 の `coverage` / `locator_quality` / `cont
 
 | 軸 | やること |
 |---|---|
-| `coverage.pageCoverage` | M2 分布から最低値を抽出。初期案: `>= 0.8` を pass、`>= 0.5` を warn、それ未満 fail（非ブロッカー） |
-| `coverage.tableCandidates` | 閾値は設けず観測のみ。`textDensityWarnings` で異常を拾う |
-| `locator_quality.has*` | `hasPageLocators === true` 必須、`hasTableLocators` は warning のみ |
-| `context_package_readiness.oversizedChunks` | `=== 0` 必須（既存実装に近い） |
-| `safety_readiness.maskableChunkRate` | **既存 `cloudDlpMasker` を eval パスから呼ぶ** 設計を確定。`chunks with at least one maskable span / total chunks` を初期定義 |
-| `safety_readiness.unmaskablePiiFindings` | DLP detected かつ chunk が `imageText` / locator 無し / chunk 境界跨ぎの場合をカウント |
+| `coverage.pageCoverage` | M2-D 実測 2 件はいずれも `1.0`。初期閾値は `>= 1.0` pass、`>= 0.75` warn、`< 0.75` fail（非ブロッカー） |
+| `coverage.tableCandidates` | M2-D 実測は `78` / `116`。文書種別差が大きいため閾値は設けず観測のみ。`textDensityWarnings` で異常を拾う |
+| `locator_quality.has*` | M2-D 実測はいずれも `hasPageLocators=true` / `hasTableLocators=true`。`hasPageLocators === true` 必須、`hasTableLocators` は warning のみ |
+| `context_package_readiness.oversizedChunks` | M2-D 実測はいずれも `0`。`=== 0` 必須（既存実装に近い） |
+| `safety_readiness.maskableChunkRate` | DLP 実測は `0.0714` / `0.2442`。公開文書では「PII finding が載った chunk 比率」に引っ張られるため、M3-C では blocker / warn 閾値に使わず観測値として保持（初期下限 `0`） |
+| `safety_readiness.unmaskablePiiFindings` | DLP 実測はいずれも `0`。`=== 0` 必須。DLP detected かつ chunk が `imageText` / locator 無し / chunk 境界跨ぎの場合をカウント |
 | コスト管理 | DLP 呼出は per-eval throttling。本線 Masker 統合とは別予算枠で観測 |
 
 ### 6.3 触るファイル
@@ -234,7 +234,7 @@ M2 で集めた分布から subtype-1 の `coverage` / `locator_quality` / `cont
 | `sample-data/document-conversion/official-doc-pdf/*.expected.json` | 4 fixture 分作成。fixture 名 + `.expected.json` |
 | 期待フィールド粒度 | 様式名 / 適用年 / 章タイトル / 表の主要セル / 記入欄ラベル / 重要金額・日付 |
 | `evalSemanticRetention` 実装 | `missingExpectedFields` を chunks 連結テキストの substring match で算出。`keyFieldRecall` は `(found / expected)` |
-| 月次レビュー手順 | `docs/phase-3-h-2-monthly-review.md` で運用化 |
+| 月次レビュー手順 | [docs/phase-3-h-2-monthly-review.md](phase-3-h-2-monthly-review.md)（golden 手動 trigger → recall 表 → 期待値ドリフトレビュー → `expected.json` 更新 PR。CI からは呼ばない） |
 
 ### 7.3 PII 入り fixture の golden
 
@@ -273,7 +273,7 @@ GitHub Actions に conversion eval を組み込み、health gate を必須、heu
 
 ### 9.1 ゴール
 
-slide-pdf / scan-pdf を本線統合する時の足場（Vertex AI 呼出 → AuditEvent `inferenceDestination` 拡張）を docs として固定し、`D-P3-H-3` 雛形を起こす。
+slide-pdf / scan-pdf を本線統合する時の足場（Vertex AI 呼出 → AuditEvent `inferenceDestination` 拡張）を docs として固定し、[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) と `D-P3-H-6` ドラフトを起こす。
 
 ### 9.2 スコープ
 
@@ -340,7 +340,9 @@ Phase 3-H-2 全体は次を満たしたら完了とする。
 - [docs/phase-3-h-direction.md](phase-3-h-direction.md) — Phase 3-H Document Conversion PoC 方針（subtype 起点）
 - [docs/phase-3-e-direction.md](phase-3-e-direction.md) — Document Conversion Eval 契約（6 軸 / 3 段階成熟度 / ロールアップ案B）
 - [docs/phase-3-d-direction.md](phase-3-d-direction.md) — CI/CD + IAP + AuditEvent の正本
-- [docs/decisions.md](decisions.md) — `D-P3-H` / `D-P3-H-2` / `D-P3-H-3` / `D-P3-H-4`
+- [docs/decisions.md](decisions.md) — `D-P3-H` / `D-P3-H-2` / `D-P3-H-3` / `D-P3-H-4` / `D-P3-H-6`
+- [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) — Phase 3-H-3 subtype 2/3 足場（§9 引き継ぎ先）
 - [docs/open-questions.md](open-questions.md) — Document Conversion Eval 関連の未決
+- [docs/phase-3-h-2-monthly-review.md](phase-3-h-2-monthly-review.md) — Golden eval 月次レビュー手順（M5-A 手動 trigger）
 - [docs/firestore-schema.md](firestore-schema.md) — Firestore document shape の正本
 - [docs/architecture.md](architecture.md) — Upload pipeline / Masker pipeline 構造
