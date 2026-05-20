@@ -168,6 +168,9 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - 残未決: subtype 2 / 3 の **heuristic 閾値**（[docs/phase-3-h-slide-pdf-poc.md](phase-3-h-slide-pdf-poc.md) 暫定表は PoC 候補のみ）
 - 残未決: `sample-data/document-conversion/{slide-pdf,scan-pdf}/*.expected.json` の golden 粒度と月次レビュー手順の subtype 拡張
 - 残未決: `pdf-conversion-subtype-2` / `pdf-conversion-subtype-3` の **公開範囲拡大条件**（subtype 1 M5 判断の踏襲か再定義か）
+
+**M1 運用（確定・再議論しない）:**
+- 同一 tenant で `pdf-conversion-subtype-1` と `pdf-conversion-subtype-2` を **同時 ON にしない**（`/api/documents` は 403）。本線 upload 上限は **5 MiB**（`MAX_UPLOAD_BYTES`）。PoC の 30 MB は runner 専用。
 - 残未決: `document.convert` の **`inferenceDestination`** に載せる model / region の tenant override 要否（固定 env のみで足りるか）
 - 残未決: PoC の `ocrUsage` / `ocrCost` を `ConversionEvalResult` 本線 schema に昇格するか
 

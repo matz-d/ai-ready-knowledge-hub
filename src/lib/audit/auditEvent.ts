@@ -74,6 +74,15 @@ export type AuditInferenceDestination = {
   model: string;
 };
 
+/** Thrown by {@link assertConversionInferenceDestinationInvariant} on wiring violations. */
+export class ConversionInferenceDestinationInvariantError extends Error {
+  override readonly name = 'ConversionInferenceDestinationInvariantError';
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 /**
  * Enforce the spec from docs/phase-3-h-3-direction.md §4.2 at the audit
  * boundary. `inferenceDestination` MUST be present iff
@@ -96,12 +105,12 @@ export function assertConversionInferenceDestinationInvariant(input: {
   const requireInferenceDestination = subtypeRequiresVertex && vertex;
 
   if (requireInferenceDestination && !input.inferenceDestination) {
-    throw new Error(
+    throw new ConversionInferenceDestinationInvariantError(
       `document.convert: inferenceDestination is required for converterId=${input.conversion.converterId} on sourceSubtype=${input.conversion.sourceSubtype}`
     );
   }
   if (!requireInferenceDestination && input.inferenceDestination) {
-    throw new Error(
+    throw new ConversionInferenceDestinationInvariantError(
       `document.convert: inferenceDestination must not be set for converterId=${input.conversion.converterId} on sourceSubtype=${input.conversion.sourceSubtype}`
     );
   }

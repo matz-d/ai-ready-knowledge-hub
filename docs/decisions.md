@@ -1380,6 +1380,8 @@ type FeatureFlag = {
 - subtype ごとにコスト・障害特性が異なるため、単一「PDF ON」flag ではロールバック粒度が粗い。
 - subtype 1 の運用ノウハウ（allow-list、期限付き PoC flag）をそのまま流用できる。
 
+**確定（M1 実装、2026-05-20）:** flag は subtype ごとに独立だが、**同一 tenant で subtype-1 と subtype-2 を同時 ON にしない**。`/api/documents` は両方 ON を 403 で拒否する（配列順による暗黙ルーティングは使わない）。M1 では PDF 内容からの subtype 自動判定は行わない。
+
 ### Q4: AuditEvent `inferenceDestination`
 
 **決定（ドラフト）**: [docs/phase-3-e-direction.md](phase-3-e-direction.md) §6.1 `ProcessingRecord.inferenceDestination` と同形の `AuditInferenceDestination` を、`document.convert` で **Vertex Gemini を実際に呼んだ成功パス**にだけ付与する。`pdf-parse` / `pdf-parse-fallback` のみの変換では付与しない。

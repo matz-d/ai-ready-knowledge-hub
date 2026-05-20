@@ -43,6 +43,7 @@ import {
 } from './documentIrStorage';
 import { createChunkFirestoreAdapter } from './chunkFirestoreAdapter';
 import {
+  ConversionInferenceDestinationInvariantError,
   recordAuditEvent,
   type AuditConversionEvalStatus,
   type AuditConverterId,
@@ -1203,6 +1204,9 @@ async function recordDocumentConvertAudit(args: {
         : {}),
     });
   } catch (error) {
+    if (error instanceof ConversionInferenceDestinationInvariantError) {
+      throw error;
+    }
     console.warn('[orchestrator] recordAuditEvent document.convert failed', error);
   }
 }

@@ -106,7 +106,7 @@ sequenceDiagram
 
 | 論点 | slide-pdf（案） | scan-pdf（案） | 確定先 |
 |---|---|---|---|
-| 1 request サイズ上限 | PoC 同様 30 MB 未満を初期案 | 同左 | `D-P3-H-6` / open-questions |
+| 1 request サイズ上限 | **本線（M1）:** `MAX_UPLOAD_BYTES` = **5 MiB**（`src/lib/documents.ts`、全 upload 共通）。PoC runner は 30 MB 未満を別上限として温存 | 同左（本線 5 MiB） | **M1 確定（本線）** / PoC は従来表のまま |
 | quota / timeout | Gemini 失敗時 **本線は fail-closed**（pdf-parse fallback を持たない、`D-P3-H-6 Q2` 確定 2026-05-20）。PoC runner の fallback / `SLIDE_PDF_SKIP_GEMINI` は PoC 専用 | OCR 失敗時 **fail-closed**（chunk 化しない） | `D-P3-H-6 Q2` 確定 |
 | cost visibility | `conversion` metadata + 将来 `ocrUsage` / token を eval に載せる | PoC の `ocrCost` フィールドを eval へ昇格検討 | M2 観測後 |
 | 本線での `SLIDE_PDF_SKIP_GEMINI` | **採用しない**（本線は明示 flag のみ） | — | 実装時 |
@@ -129,10 +129,12 @@ sequenceDiagram
 - **flag は subtype 単位で独立**。subtype 2 を ON にしても subtype 3 は自動 ON にしない。
 - 初期運用: dev tenant allow-list + `expiresAt` 必須（PoC flag 運用ルール踏襲）。
 
-### 3.2 `/api/documents` との関係
+### 3.2 `/api/documents` との関係（M1 実装）
 
-- MIME `application/pdf` 受理は、**いずれかの subtype flag が ON** かつ extractor が subtype を判定した場合に限る（判定ロジックは実装時に `D-P3-H-6` で確定）。
-- subtype 1 と同様、flag OFF tenant では PDF upload を拒否する（fail-closed）。
+- MIME `application/pdf` 受理は、tenant に対して **有効な PDF conversion flag がちょうど 1 つ** の場合に限る（fail-closed）。
+- **同一 tenant で `pdf-conversion-subtype-1` と `pdf-conversion-subtype-2` を同時 ON にしない。** 両方 ON のとき API は **403** で拒否する（配列順による暗黙の優先は使わない）。
+- M1 では **PDF 内容から subtype を自動判定しない。** flag が選んだ extractor（official-doc = `pdf-parse`、slide = Gemini direct-read）が `sourceSubtype` を決める。将来の自動判定は別 decision。
+- flag が 0 個の tenant では PDF upload を拒否する（403、subtype 1 と同型）。
 
 ### 3.3 公開範囲拡大
 

@@ -94,6 +94,9 @@ const PDF_SUBTYPE_PRE_FLIGHT_CONFIGS: readonly PdfSubtypePreFlightConfig[] = [
   },
 ] as const;
 
+const PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE =
+  'PDF 変換の feature flag が競合しています。同一テナントで official-doc-pdf と slide-pdf を同時に有効にできません。';
+
 /** Whole mebibytes for client-facing copy (limit is defined in binary units). */
 function formatBytesAsMB(bytes: number): string {
   return `${Math.floor(bytes / (1024 * 1024))} MB`;
@@ -193,15 +196,15 @@ export async function POST(request: Request) {
       tenantId = '';
     }
     const db = getFirestoreClient();
-    let selectedPdfConfig: PdfSubtypePreFlightConfig | undefined;
+    const enabledPdfConfigs: PdfSubtypePreFlightConfig[] = [];
     for (const config of PDF_SUBTYPE_PRE_FLIGHT_CONFIGS) {
       const flag = await getFeatureFlag(db, config.flagId);
-      if (!isFeatureEnabled(flag, tenantId)) continue;
-      selectedPdfConfig = config;
-      break;
+      if (isFeatureEnabled(flag, tenantId)) {
+        enabledPdfConfigs.push(config);
+      }
     }
 
-    if (!selectedPdfConfig) {
+    if (enabledPdfConfigs.length === 0) {
       return NextResponse.json(
         {
           error:
@@ -210,6 +213,19 @@ export async function POST(request: Request) {
         { status: 403 }
       );
     }
+
+    if (enabledPdfConfigs.length > 1) {
+      console.warn('[documents] conflicting PDF conversion feature flags', {
+        tenantId,
+        enabledFlagIds: enabledPdfConfigs.map((config) => config.flagId),
+      });
+      return NextResponse.json(
+        { error: PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE },
+        { status: 403 }
+      );
+    }
+
+    const selectedPdfConfig = enabledPdfConfigs[0]!;
 
     try {
       pdfExtractionResult = await selectedPdfConfig.extract({

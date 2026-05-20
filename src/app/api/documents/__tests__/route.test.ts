@@ -792,6 +792,22 @@ describe('POST /api/documents', () => {
       expect(replaceChunksForDocMock).not.toHaveBeenCalled();
     });
 
+    it('returns 403 when both pdf-conversion-subtype-1 and subtype-2 flags are enabled', async () => {
+      isFeatureEnabledMock.mockReturnValue(true);
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(403);
+      await expect(parseJson(response)).resolves.toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('feature flag が競合'),
+        })
+      );
+      expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractSlidePdfFromBufferMock).not.toHaveBeenCalled();
+      expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
+    });
+
     it('uses slide-pdf extractor and forwards slide subtype + DocumentIR when subtype-2 is enabled', async () => {
       isFeatureEnabledMock.mockImplementation(
         (flag) => flag?.flagId === 'pdf-conversion-subtype-2'

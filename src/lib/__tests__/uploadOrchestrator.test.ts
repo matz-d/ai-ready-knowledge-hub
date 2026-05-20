@@ -801,6 +801,70 @@ describe('orchestrateUploadProcessing', () => {
       });
     });
 
+    it('rethrows inferenceDestination invariant violations from document.convert audit', async () => {
+      const { ConversionInferenceDestinationInvariantError } =
+        await vi.importActual<typeof import('../audit/auditEvent')>(
+          '../audit/auditEvent'
+        );
+      randomUUIDMock.mockReturnValue('doc-pdf-audit-invariant');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+      recordAuditEventMock.mockRejectedValue(
+        new ConversionInferenceDestinationInvariantError(
+          'document.convert: inferenceDestination is required for converterId=gemini-direct-read on sourceSubtype=slide-pdf'
+        )
+      );
+
+      const slideDocumentIr: DocumentIr = {
+        ...minimalDocumentIr,
+        source: {
+          ...minimalDocumentIr.source,
+          sourceSubtype: 'slide-pdf',
+        },
+      };
+
+      await expect(
+        orchestrateUploadProcessing({
+          ...pdfBaseInput,
+          documentIr: slideDocumentIr,
+          sourceSubtype: 'slide-pdf',
+          auditContext: {
+            tenantId: 'customer.example',
+            actor: {
+              userId: 'alice@customer.example',
+              ipAddress: '203.0.113.10',
+              userAgent: 'vitest',
+            },
+          },
+          conversion: {
+            converterId: 'gemini-direct-read',
+            // wiring mistake: missing inferenceDestination
+          },
+        })
+      ).rejects.toBeInstanceOf(ConversionInferenceDestinationInvariantError);
+    });
+
+    it('continues curated upload when document.convert audit storage fails', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-audit-storage-fail');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+      recordAuditEventMock.mockRejectedValue(new Error('firestore unavailable'));
+
+      const result = await orchestrateUploadProcessing({
+        ...pdfBaseInput,
+        auditContext: {
+          tenantId: 'customer.example',
+          actor: {
+            userId: 'alice@customer.example',
+            ipAddress: '203.0.113.10',
+            userAgent: 'vitest',
+          },
+        },
+        conversion: { converterId: 'pdf-parse' },
+      });
+
+      expect(result.kind).toBe('curated');
+      expect(recordAuditEventMock).toHaveBeenCalledTimes(1);
+    });
+
     it('records document.convert without inferenceDestination for slide-pdf pdf-parse-fallback', async () => {
       randomUUIDMock.mockReturnValue('doc-pdf-audit-slide-fb');
       curatorFlowMock.mockResolvedValue(curatorDirectResult);

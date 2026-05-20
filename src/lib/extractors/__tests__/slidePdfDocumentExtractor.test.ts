@@ -23,8 +23,12 @@ import { DOCUMENT_IR_SCHEMA_VERSION } from '../../../eval/conversion/documentIr'
 // vi.mock factories cannot reference outer scope at hoist time, so the mock
 // reads module-level mutable state set via setResponse / setError helpers.
 
+const DEFAULT_MOCK_SLIDES = {
+  slides: [{ slideNumber: 1, blocks: [{ kind: 'paragraph' as const, text: 'default' }] }],
+};
+
 let _mockResponse: { output: unknown; text?: string } = {
-  output: { slides: [] },
+  output: DEFAULT_MOCK_SLIDES,
 };
 let _mockError: Error | null = null;
 
@@ -55,7 +59,7 @@ function setError(err: Error): void {
 }
 
 beforeEach(() => {
-  _mockResponse = { output: { slides: [] } };
+  _mockResponse = { output: DEFAULT_MOCK_SLIDES };
   _mockError = null;
 });
 
@@ -81,7 +85,9 @@ describe('extractSlidePdfFromBuffer — DocumentIr shape', () => {
 
   it('never returns sourceKind="poc" (PoC contamination guard)', async () => {
     setResponse({
-      slides: [{ slideNumber: 1, blocks: [] }],
+      slides: [
+        { slideNumber: 1, blocks: [{ kind: 'paragraph', text: 'guard' }] },
+      ],
     });
     const { documentIr } = await extractSlidePdfFromBuffer({
       buffer: FAKE_BUFFER,
@@ -93,8 +99,8 @@ describe('extractSlidePdfFromBuffer — DocumentIr shape', () => {
   it('creates one page per slide and preserves slideNumber', async () => {
     setResponse({
       slides: [
-        { slideNumber: 1, blocks: [] },
-        { slideNumber: 2, blocks: [] },
+        { slideNumber: 1, blocks: [{ kind: 'paragraph', text: 's1' }] },
+        { slideNumber: 2, blocks: [{ kind: 'paragraph', text: 's2' }] },
       ],
     });
     const { documentIr } = await extractSlidePdfFromBuffer({
@@ -131,7 +137,11 @@ describe('extractSlidePdfFromBuffer — title handling', () => {
   it('omits the title block when title is missing or whitespace-only', async () => {
     setResponse({
       slides: [
-        { slideNumber: 1, title: '   ', blocks: [] },
+        {
+          slideNumber: 1,
+          title: '   ',
+          blocks: [{ kind: 'paragraph', text: 'body on slide 1' }],
+        },
         { slideNumber: 2, blocks: [] },
       ],
     });
@@ -139,7 +149,8 @@ describe('extractSlidePdfFromBuffer — title handling', () => {
       buffer: FAKE_BUFFER,
       fileName: 'deck.pdf',
     });
-    expect(documentIr.pages[0].blocks).toHaveLength(0);
+    expect(documentIr.pages[0].blocks.map((b) => b.blockId)).toEqual(['s1-b1']);
+    expect(documentIr.pages[0].blocks[0].kind).toBe('paragraph');
     expect(documentIr.pages[1].blocks).toHaveLength(0);
   });
 });
@@ -244,7 +255,9 @@ describe('extractSlidePdfFromBuffer — textContent', () => {
 
 describe('extractSlidePdfFromBuffer — conversion metadata', () => {
   it('returns converterId=gemini-direct-read and calledVertex=true on success', async () => {
-    setResponse({ slides: [{ slideNumber: 1, blocks: [] }] });
+    setResponse({
+      slides: [{ slideNumber: 1, blocks: [{ kind: 'paragraph', text: 'x' }] }],
+    });
     const { conversion } = await extractSlidePdfFromBuffer({
       buffer: FAKE_BUFFER,
       fileName: 'deck.pdf',
@@ -254,7 +267,9 @@ describe('extractSlidePdfFromBuffer — conversion metadata', () => {
   });
 
   it('forwards model/region from genkitClient so the orchestrator can build inferenceDestination', async () => {
-    setResponse({ slides: [{ slideNumber: 1, blocks: [] }] });
+    setResponse({
+      slides: [{ slideNumber: 1, blocks: [{ kind: 'paragraph', text: 'x' }] }],
+    });
     const { conversion } = await extractSlidePdfFromBuffer({
       buffer: FAKE_BUFFER,
       fileName: 'deck.pdf',
@@ -329,6 +344,43 @@ describe('extractSlidePdfFromBuffer — error classification', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(SlidePdfExtractorError);
       expect((e as SlidePdfExtractorError).kind).toBe('gemini-output-empty');
+    }
+  });
+
+  it('classifies zero slides as gemini-output-empty (fail-closed)', async () => {
+    setResponse({ slides: [] });
+    try {
+      await extractSlidePdfFromBuffer({
+        buffer: FAKE_BUFFER,
+        fileName: 'deck.pdf',
+      });
+      throw new Error('expected extractor to throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(SlidePdfExtractorError);
+      const err = e as SlidePdfExtractorError;
+      expect(err.kind).toBe('gemini-output-empty');
+      expect(err.message).toContain('zero slides');
+    }
+  });
+
+  it('classifies slides with no title or block text as gemini-output-empty (fail-closed)', async () => {
+    setResponse({
+      slides: [
+        { slideNumber: 1, title: '   ', blocks: [{ kind: 'paragraph', text: ' ' }] },
+        { slideNumber: 2, blocks: [] },
+      ],
+    });
+    try {
+      await extractSlidePdfFromBuffer({
+        buffer: FAKE_BUFFER,
+        fileName: 'deck.pdf',
+      });
+      throw new Error('expected extractor to throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(SlidePdfExtractorError);
+      const err = e as SlidePdfExtractorError;
+      expect(err.kind).toBe('gemini-output-empty');
+      expect(err.message).toContain('no extractable text');
     }
   });
 

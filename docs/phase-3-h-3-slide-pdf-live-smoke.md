@@ -6,6 +6,17 @@ Purpose: Confirm that `slide-pdf` upload works across the real GCP boundary:
 Cloud Run + IAP, Firestore `feature_flags`, GCS DocumentIR, Vertex AI, Firestore
 `conversion_eval`, chunks, and `AuditEvent document.convert`.
 
+## Relationship to CI fixtures
+
+This document records a **live Gemini response** on Cloud Run (page count, block
+text, and titles reflect the model output at smoke time).
+
+CI health / golden checks use **fixed sidecar files** under
+`sample-data/document-conversion/slide-pdf/` (`*.document-ir.json`,
+`*.expected.json`). Those fixtures are synthetic and stable for regression; they
+are not required to byte-match this smoke transcript. When comparing smoke vs CI,
+treat live evidence as operational proof and CI fixtures as pinned eval inputs.
+
 ## Deployment / boundary
 
 - Project: `ai-ready-knowledge-hub`

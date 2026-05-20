@@ -131,6 +131,27 @@ export type ExtractSlidePdfFromBufferResult = {
  *
  * @throws {SlidePdfExtractorError} fail-closed on any Gemini failure path.
  */
+function assertNonEmptySlideGeminiOutput(extracted: GeminiSlidePdfOutput): void {
+  if (extracted.slides.length === 0) {
+    throw new SlidePdfExtractorError(
+      'gemini-output-empty',
+      'Gemini returned zero slides'
+    );
+  }
+
+  const hasVisibleText = extracted.slides.some((slide) => {
+    if (slide.title?.trim()) return true;
+    return slide.blocks.some((block) => block.text.trim().length > 0);
+  });
+
+  if (!hasVisibleText) {
+    throw new SlidePdfExtractorError(
+      'gemini-output-empty',
+      'Gemini returned slides with no extractable text'
+    );
+  }
+}
+
 export async function extractSlidePdfFromBuffer(
   options: ExtractSlidePdfFromBufferOptions
 ): Promise<ExtractSlidePdfFromBufferResult> {
@@ -206,7 +227,10 @@ async function callGeminiDirect(
 
   if (hasOutput) {
     const parsed = GeminiSlidePdfOutputSchema.safeParse(response.output);
-    if (parsed.success) return parsed.data;
+    if (parsed.success) {
+      assertNonEmptySlideGeminiOutput(parsed.data);
+      return parsed.data;
+    }
     attempts.push(`structured(output): ${parsed.error.message}`);
   }
 
@@ -215,7 +239,10 @@ async function callGeminiDirect(
       const parsedText = GeminiSlidePdfOutputSchema.safeParse(
         parseJsonFromModelText(response.text!)
       );
-      if (parsedText.success) return parsedText.data;
+      if (parsedText.success) {
+        assertNonEmptySlideGeminiOutput(parsedText.data);
+        return parsedText.data;
+      }
       attempts.push(`structured(text): ${parsedText.error.message}`);
     } catch (e) {
       attempts.push(
