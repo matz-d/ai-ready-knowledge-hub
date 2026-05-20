@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "fileName": "synthetic-employment-context-with-pii.pdf",
+    "mediaType": "application/pdf",
+    "sourceKind": "poc",
+    "sourceSubtype": "official-doc-pdf"
+  },
+  "pages": [
+    {
+      "pageNumber": 1,
+      "blocks": [
+        {
+          "blockId": "p1-b1",
+          "kind": "heading",
+          "text": "雇用契約コンテキスト（合成データ）",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "headingLevel": 1 }
+        },
+        {
+          "blockId": "p1-b2",
+          "kind": "paragraph",
+          "text": "本資料は学習目的のための合成データである。氏名・住所・電話番号は架空である。",
+          "locator": { "pageNumber": 1 }
+        }
+      ]
+    },
+    {
+      "pageNumber": 2,
+      "blocks": [
+        {
+          "blockId": "p2-b1",
+          "kind": "paragraph",
+          "text": "氏名: 山田 太郎（架空）。電話: 03-1234-5678（架空）。住所: 東京都千代田区サンプル町1-2-3。",
+          "locator": { "pageNumber": 2 }
+        }
+      ]
+    },
+    {
+      "pageNumber": 3,
+      "blocks": [
+        {
+          "blockId": "p3-b1",
+          "kind": "paragraph",
+          "text": "   ",
+          "locator": { "pageNumber": 3 }
+        }
+      ]
+    },
+    {
+      "pageNumber": 4,
+      "blocks": [
+        {
+          "blockId": "p4-b1",
+          "kind": "image_text",
+          "text": "署名欄（画像）"
+        }
+      ]
+    }
+  ]
+}

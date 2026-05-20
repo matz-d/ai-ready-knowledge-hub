@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "fileName": "mhlw-overtime-limit-guide.pdf",
+    "mediaType": "application/pdf",
+    "sourceKind": "poc",
+    "sourceSubtype": "official-doc-pdf"
+  },
+  "pages": [
+    {
+      "pageNumber": 1,
+      "blocks": [
+        {
+          "blockId": "p1-b1",
+          "kind": "heading",
+          "text": "時間外労働の上限規制 わかりやすい解説",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "headingLevel": 1 }
+        },
+        {
+          "blockId": "p1-b2",
+          "kind": "paragraph",
+          "text": "2019年4月施行。中小企業への適用は2020年4月。働き方改革関連法解説（労働基準法／時間外労働の上限規制関係）。",
+          "locator": { "pageNumber": 1 }
+        }
+      ]
+    },
+    {
+      "pageNumber": 2,
+      "blocks": [
+        {
+          "blockId": "p2-b1",
+          "kind": "paragraph",
+          "text": "1日8時間・1週40時間以内、毎週少なくとも1回の休日が労働基準法に定められている。36協定がない場合、これを超える労働は違法。",
+          "locator": { "pageNumber": 2 }
+        }
+      ]
+    },
+    {
+      "pageNumber": 3,
+      "blocks": [
+        {
+          "blockId": "p3-t1-r0",
+          "kind": "table",
+          "text": "区分\t上限\t備考",
+          "locator": {
+            "pageNumber": 3,
+            "tableIndex": 1,
+            "rowIndex": 0
+          },
+          "metadata": { "columnCount": 3, "isHeaderRow": true }
+        },
+        {
+          "blockId": "p3-t1-r1",
+          "kind": "table",
+          "text": "月\t45時間\t原則",
+          "locator": {
+            "pageNumber": 3,
+            "tableIndex": 1,
+            "rowIndex": 1
+          },
+          "metadata": { "columnCount": 3 }
+        },
+        {
+          "blockId": "p3-t1-r2",
+          "kind": "table",
+          "text": "年\t360時間\t原則",
+          "locator": {
+            "pageNumber": 3,
+            "tableIndex": 1,
+            "rowIndex": 2
+          },
+          "metadata": { "columnCount": 3 }
+        }
+      ]
+    }
+  ]
+}

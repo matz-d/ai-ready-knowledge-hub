@@ -11,13 +11,15 @@ export type AxisRollupStatus = 'pass' | 'warn' | 'fail';
  * but not measured yet — rollup status is always `pass` so CI gate stays quiet.
  */
 export const SAFETY_READINESS_HEALTH_ROLLUP_STATUS: AxisRollupStatus = 'pass';
+export const SAFETY_READINESS_MAX_UNMASKABLE_PII_FINDINGS = 0;
+export const SAFETY_READINESS_MIN_MASKABLE_CHUNK_RATE = 0;
 
 /**
  * Phase 3-H §7.3: health check always returns pass until heuristic thresholds land.
  * Heuristic / golden thresholds are subtype-specific (Phase 3-H follow-up).
  */
 export function evalSafetyReadiness(
-  _result: Pick<ConversionEvalResult, 'safetyReadiness'>,
+  result: Pick<ConversionEvalResult, 'safetyReadiness'>,
   stage: ConversionEvalStage
 ): AxisRollupStatus {
   if (stage === 'health') {
@@ -28,6 +30,18 @@ export function evalSafetyReadiness(
     return 'pass';
   }
 
-  // heuristic / golden thresholds are defined per subtype in Phase 3-H follow-up.
+  if (
+    result.safetyReadiness.unmaskablePiiFindings >
+    SAFETY_READINESS_MAX_UNMASKABLE_PII_FINDINGS
+  ) {
+    return 'fail';
+  }
+  if (
+    result.safetyReadiness.maskableChunkRate <
+    SAFETY_READINESS_MIN_MASKABLE_CHUNK_RATE
+  ) {
+    return 'warn';
+  }
+
   return 'pass';
 }

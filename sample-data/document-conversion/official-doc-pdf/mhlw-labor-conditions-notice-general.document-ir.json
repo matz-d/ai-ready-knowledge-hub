@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "fileName": "mhlw-labor-conditions-notice-general.pdf",
+    "mediaType": "application/pdf",
+    "sourceKind": "poc",
+    "sourceSubtype": "official-doc-pdf"
+  },
+  "pages": [
+    {
+      "pageNumber": 1,
+      "blocks": [
+        {
+          "blockId": "p1-b1",
+          "kind": "heading",
+          "text": "労働条件通知書（一般労働者用）",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "headingLevel": 1 }
+        },
+        {
+          "blockId": "p1-t1-r0",
+          "kind": "table",
+          "text": "項目\t内容",
+          "locator": {
+            "pageNumber": 1,
+            "tableIndex": 1,
+            "rowIndex": 0
+          },
+          "metadata": { "isHeaderRow": true, "columnCount": 2 }
+        },
+        {
+          "blockId": "p1-t1-r1",
+          "kind": "table",
+          "text": "契約期間\t期間の定めなし",
+          "locator": {
+            "pageNumber": 1,
+            "tableIndex": 1,
+            "rowIndex": 1
+          },
+          "metadata": { "columnCount": 2 }
+        },
+        {
+          "blockId": "p1-t1-r2",
+          "kind": "table",
+          "text": "就業の場所\t○○事業所",
+          "locator": {
+            "pageNumber": 1,
+            "tableIndex": 1,
+            "rowIndex": 2
+          },
+          "metadata": { "columnCount": 2 }
+        },
+        {
+          "blockId": "p1-t1-r3",
+          "kind": "table",
+          "text": "従事すべき業務\t事務職",
+          "locator": {
+            "pageNumber": 1,
+            "tableIndex": 1,
+            "rowIndex": 3
+          },
+          "metadata": { "columnCount": 2 }
+        }
+      ]
+    },
+    {
+      "pageNumber": 2,
+      "blocks": [
+        {
+          "blockId": "p2-b1",
+          "kind": "paragraph",
+          "text": "本通知書に記載のない事項については、当社就業規則による。",
+          "locator": { "pageNumber": 2 }
+        }
+      ]
+    }
+  ]
+}
