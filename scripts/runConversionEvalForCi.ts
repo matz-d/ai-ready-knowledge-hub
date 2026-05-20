@@ -18,19 +18,41 @@ import {
   validateKnowledgeChunkInvariants,
 } from '../src/lib/knowledgeChunkSchema';
 
-const FIXTURE_DIR = path.resolve(
+const FIXTURE_ROOT_DIR = path.resolve(
   process.cwd(),
-  'sample-data/document-conversion/official-doc-pdf'
+  'sample-data/document-conversion'
 );
 
-const FIXTURE_BASENAMES = [
-  'mhlw-overtime-limit-guide',
-  'mhlw-r07-model-work-rules',
-  'mhlw-labor-conditions-notice-general',
-  'synthetic-employment-context-with-pii',
+const FIXTURES = [
+  {
+    directory: 'official-doc-pdf',
+    documentId: 'mhlw-overtime-limit-guide',
+    sourceSubtype: 'official-doc-pdf',
+  },
+  {
+    directory: 'official-doc-pdf',
+    documentId: 'mhlw-r07-model-work-rules',
+    sourceSubtype: 'official-doc-pdf',
+  },
+  {
+    directory: 'official-doc-pdf',
+    documentId: 'mhlw-labor-conditions-notice-general',
+    sourceSubtype: 'official-doc-pdf',
+  },
+  {
+    directory: 'official-doc-pdf',
+    documentId: 'synthetic-employment-context-with-pii',
+    sourceSubtype: 'official-doc-pdf',
+  },
+  {
+    directory: 'slide-pdf',
+    documentId: 'synthetic-context-package-deck',
+    sourceSubtype: 'slide-pdf',
+  },
 ] as const;
 
-type FixtureBasename = (typeof FIXTURE_BASENAMES)[number];
+type FixtureDefinition = (typeof FIXTURES)[number];
+type FixtureDocumentId = FixtureDefinition['documentId'];
 
 type ExpectedFieldsFixture = {
   documentId: string;
@@ -45,7 +67,7 @@ type CliOptions = {
 };
 
 type FixtureEvaluation = {
-  documentId: FixtureBasename;
+  documentId: FixtureDocumentId;
   overallStatus: ConversionEvalResult['overall']['status'];
   overallReasons: readonly string[];
   heuristicAxisStatuses?: HeuristicCiAxisStatuses;
@@ -122,25 +144,41 @@ function parseArgs(argv: string[]): CliOptions {
   return { stage, outPath, pretty };
 }
 
-async function loadDocumentIr(basename: FixtureBasename): Promise<DocumentIr> {
-  const filePath = path.resolve(FIXTURE_DIR, `${basename}.document-ir.json`);
+async function loadDocumentIr(fixture: FixtureDefinition): Promise<DocumentIr> {
+  const filePath = path.resolve(
+    FIXTURE_ROOT_DIR,
+    fixture.directory,
+    `${fixture.documentId}.document-ir.json`
+  );
   const raw = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
-  return parseDocumentIr(raw);
+  const documentIr = parseDocumentIr(raw);
+  if (documentIr.source.sourceSubtype !== fixture.sourceSubtype) {
+    throw new Error(
+      `${fixture.documentId}.document-ir.json sourceSubtype must be "${fixture.sourceSubtype}", got "${documentIr.source.sourceSubtype}"`
+    );
+  }
+  return documentIr;
 }
 
 async function loadExpectedFields(
-  basename: FixtureBasename
+  fixture: FixtureDefinition
 ): Promise<ExpectedFieldsFixture> {
-  const filePath = path.resolve(FIXTURE_DIR, `${basename}.expected.json`);
+  const filePath = path.resolve(
+    FIXTURE_ROOT_DIR,
+    fixture.directory,
+    `${fixture.documentId}.expected.json`
+  );
   const raw = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
   const parsed = raw as Partial<ExpectedFieldsFixture>;
-  if (parsed.documentId !== basename) {
+  if (parsed.documentId !== fixture.documentId) {
     throw new Error(
-      `${basename}.expected.json documentId must be "${basename}", got "${parsed.documentId}"`
+      `${fixture.documentId}.expected.json documentId must be "${fixture.documentId}", got "${parsed.documentId}"`
     );
   }
   if (!Array.isArray(parsed.expectedFields)) {
-    throw new Error(`${basename}.expected.json expectedFields must be an array`);
+    throw new Error(
+      `${fixture.documentId}.expected.json expectedFields must be an array`
+    );
   }
   return {
     documentId: parsed.documentId,
@@ -196,14 +234,14 @@ function evaluateChunkSchemaValidity(
 
 async function evaluateFixture(
   stage: ConversionEvalStage,
-  basename: FixtureBasename,
+  fixture: FixtureDefinition,
   dlpDryRun: boolean
 ): Promise<FixtureEvaluation> {
-  const documentIr = await loadDocumentIr(basename);
-  const extractorInput = `${basename}-fixture-bytes`;
+  const documentIr = await loadDocumentIr(fixture);
+  const extractorInput = `${fixture.documentId}-fixture-bytes`;
   const chunks = documentIrToKnowledgeChunks({
     documentIr,
-    docId: basename,
+    docId: fixture.documentId,
     extractorInput,
     documentSensitivity: 'Internal',
     documentAiUsePolicy: 'direct',
@@ -212,14 +250,14 @@ async function evaluateFixture(
 
   const schemaValidity = evaluateChunkSchemaValidity(
     chunks,
-    basename,
+    fixture.documentId,
     extractorInput
   );
   let result: ConversionEvalResult;
 
   if (stage === 'health') {
     result = runConversionEvalHealthCheck({
-      sourceSubtype: documentIr.source.sourceSubtype,
+      sourceSubtype: fixture.sourceSubtype,
       chunkDrafts: chunks.map((chunk) => ({ text: chunk.text })),
       schemaValidity,
     });
@@ -231,9 +269,9 @@ async function evaluateFixture(
       safetyReadinessOptions: { dryRun: dlpDryRun },
     });
   } else {
-    const expected = await loadExpectedFields(basename);
+    const expected = await loadExpectedFields(fixture);
     result = await runConversionEvalGoldenCheck({
-      sourceSubtype: documentIr.source.sourceSubtype,
+      sourceSubtype: fixture.sourceSubtype,
       documentIr,
       chunks,
       expectedFields: expected.expectedFields,
@@ -243,7 +281,7 @@ async function evaluateFixture(
   }
 
   return {
-    documentId: basename,
+    documentId: fixture.documentId,
     overallStatus: result.overall.status,
     overallReasons: result.overall.reasons,
     heuristicAxisStatuses:
@@ -257,8 +295,8 @@ async function runConversionEvalForCi(
 ): Promise<ConversionEvalCiReport> {
   const dlpDryRun = resolveDlpDryRun();
   const fixtures = await Promise.all(
-    FIXTURE_BASENAMES.map((basename) =>
-      evaluateFixture(options.stage, basename, dlpDryRun)
+    FIXTURES.map((fixture) =>
+      evaluateFixture(options.stage, fixture, dlpDryRun)
     )
   );
 

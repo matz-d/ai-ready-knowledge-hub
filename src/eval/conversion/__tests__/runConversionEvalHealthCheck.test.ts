@@ -64,13 +64,24 @@ describe('runConversionEvalHealthCheck', () => {
     expect(result.overall.status).toBe('pass');
   });
 
+  it('accepts slide-pdf subtype for subtype 2 health checks', () => {
+    const result = runConversionEvalHealthCheck({
+      sourceSubtype: 'slide-pdf',
+      chunkDrafts: [{ text: 'slide line' }],
+      schemaValidity: { passed: true },
+    });
+
+    expect(result.contextPackageReadiness.chunkCount).toBe(1);
+    expect(result.overall.status).toBe('pass');
+  });
+
   it('rejects unsupported subtypes', () => {
     expect(() =>
       runConversionEvalHealthCheck({
-        sourceSubtype: 'slide-pdf',
+        sourceSubtype: 'office-native',
         chunkDrafts: [{ text: 'alpha' }],
         schemaValidity: { passed: true },
       })
-    ).toThrow(/official-doc-pdf, scan-pdf/);
+    ).toThrow(/official-doc-pdf, slide-pdf, scan-pdf/);
   });
 });

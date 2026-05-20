@@ -156,11 +156,15 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 
 ### Phase 3-H-3（slide-pdf / scan-pdf 本線統合）
 
-**方針ドラフト（2026-05-20）:** [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) と [docs/decisions.md](decisions.md) `D-P3-H-6`（ドラフト）を正とする。実装着手前に以下を確定する。
+**方針確定（2026-05-20）:** [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) と [docs/decisions.md](decisions.md) `D-P3-H-6`（確定）を正とする。実装着手前提として Q2 / Q5 は確定済み。
 
-- 残未決: **Masker 本線統合（PDF 経路）** を Phase 3-H-3 内で行うか、別フェーズに送るか（`D-P3-H-6 Q5` 推奨は後送り）
-- 残未決: **slide-pdf 本線**で Gemini 失敗時に `pdf-parse` fallback を許すか、health gate で fail-closed にするか（PoC は fallback、`D-P3-H-6 Q2`）
-- 残未決: **scan-pdf** の quota 超過・timeout・コスト上限と fail-closed の具体値
+**確定済み（H-3 では再議論しない）:**
+- **slide-pdf 本線の `pdf-parse` fallback は持たない（fail-closed）** — Gemini 呼出失敗時は subtype 1 同様に chunk 化を中断する。PoC runner の fallback / `SLIDE_PDF_SKIP_GEMINI` は PoC 専用として温存（`D-P3-H-6 Q2` 確定、2026-05-20）。
+- **Masker 本線統合（PDF 経路）は H-3 スコープ外** — `requires_masking` PDF は `maskingPending: true` で停止し、本格統合は別フェーズで起票（`D-P3-H-6 Q5` 確定、2026-05-20）。
+
+**残未決:**
+- 残未決: **scan-pdf** の quota 超過・timeout・コスト上限と fail-closed の具体値。scan-pdf は subtype 2 と同時に実装せず、subtype 2 M1〜M5 完了後に別フェーズで扱う（[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §7）。
+- 残未決: **scan-pdf** の `unmaskablePiiFindings` 閾値。OCR で抽出できない PII は Masker に渡せないため、slide-pdf より強い safety signal として扱う。
 - 残未決: subtype 2 / 3 の **heuristic 閾値**（[docs/phase-3-h-slide-pdf-poc.md](phase-3-h-slide-pdf-poc.md) 暫定表は PoC 候補のみ）
 - 残未決: `sample-data/document-conversion/{slide-pdf,scan-pdf}/*.expected.json` の golden 粒度と月次レビュー手順の subtype 拡張
 - 残未決: `pdf-conversion-subtype-2` / `pdf-conversion-subtype-3` の **公開範囲拡大条件**（subtype 1 M5 判断の踏襲か再定義か）

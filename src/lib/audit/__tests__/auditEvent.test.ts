@@ -17,6 +17,7 @@ vi.mock('../../firestore', () => ({
 
 import {
   AUDIT_EVENTS_COLLECTION,
+  assertConversionInferenceDestinationInvariant,
   auditActorFromRequest,
   ipAddressFromHeaders,
   recordAuditEvent,
@@ -170,6 +171,295 @@ describe('recordAuditEvent', () => {
     const failBody = createMock.mock.calls[1]?.[0] as Record<string, unknown>;
     expect((warnBody.conversion as { evalStatus: string }).evalStatus).toBe('warn');
     expect((failBody.conversion as { evalStatus: string }).evalStatus).toBe('fail');
+  });
+
+  it('appends document.convert for slide-pdf gemini-direct-read with inferenceDestination', async () => {
+    await recordAuditEvent({
+      tenantId: 'customer.example',
+      actor: {
+        userId: 'alice@customer.example',
+        ipAddress: '203.0.113.10',
+        userAgent: 'vitest',
+      },
+      action: 'document.convert',
+      target: {
+        docId: 'doc-slide-1',
+        fileName: 'slides.pdf',
+        sourceKind: 'upload',
+        sensitivity: 'Internal',
+      },
+      result: 'success',
+      conversion: {
+        converterId: 'gemini-direct-read',
+        sourceSubtype: 'slide-pdf',
+        evalStatus: 'pass',
+      },
+      inferenceDestination: {
+        vendor: 'vertex',
+        region: 'asia-northeast1',
+        model: 'gemini-2.5-flash',
+      },
+    });
+
+    const [written] = createMock.mock.calls[0] as [Record<string, unknown>];
+    expect(written.inferenceDestination).toEqual({
+      vendor: 'vertex',
+      region: 'asia-northeast1',
+      model: 'gemini-2.5-flash',
+    });
+    expect((written.conversion as { converterId: string }).converterId).toBe(
+      'gemini-direct-read'
+    );
+  });
+
+  it('appends document.convert for scan-pdf gemini-vertex-ocr with inferenceDestination', async () => {
+    await recordAuditEvent({
+      tenantId: 'customer.example',
+      actor: {
+        userId: 'alice@customer.example',
+        ipAddress: '203.0.113.10',
+        userAgent: 'vitest',
+      },
+      action: 'document.convert',
+      target: {
+        docId: 'doc-scan-1',
+        fileName: 'scan.pdf',
+        sourceKind: 'upload',
+        sensitivity: 'Confidential',
+      },
+      result: 'success',
+      conversion: {
+        converterId: 'gemini-vertex-ocr',
+        sourceSubtype: 'scan-pdf',
+        evalStatus: 'pass',
+      },
+      inferenceDestination: {
+        vendor: 'vertex',
+        region: 'us-central1',
+        model: 'gemini-2.5-pro',
+      },
+    });
+
+    const [written] = createMock.mock.calls[0] as [Record<string, unknown>];
+    expect(written.inferenceDestination).toEqual({
+      vendor: 'vertex',
+      region: 'us-central1',
+      model: 'gemini-2.5-pro',
+    });
+  });
+
+  it('appends document.convert for slide-pdf pdf-parse-fallback without inferenceDestination', async () => {
+    await recordAuditEvent({
+      tenantId: 'customer.example',
+      actor: {
+        userId: 'alice@customer.example',
+        ipAddress: '203.0.113.10',
+        userAgent: 'vitest',
+      },
+      action: 'document.convert',
+      target: {
+        docId: 'doc-slide-fb',
+        fileName: 'slides.pdf',
+        sourceKind: 'upload',
+        sensitivity: 'Internal',
+      },
+      result: 'partial',
+      conversion: {
+        converterId: 'pdf-parse-fallback',
+        sourceSubtype: 'slide-pdf',
+        evalStatus: 'warn',
+      },
+    });
+
+    const [written] = createMock.mock.calls[0] as [Record<string, unknown>];
+    expect(written.inferenceDestination).toBeUndefined();
+    expect((written.conversion as { converterId: string }).converterId).toBe(
+      'pdf-parse-fallback'
+    );
+  });
+
+  it('throws when slide-pdf gemini-direct-read is missing inferenceDestination', async () => {
+    await expect(
+      recordAuditEvent({
+        tenantId: 'customer.example',
+        actor: {
+          userId: 'alice@customer.example',
+          ipAddress: '203.0.113.10',
+          userAgent: 'vitest',
+        },
+        action: 'document.convert',
+        target: {
+          docId: 'doc-slide-2',
+          fileName: 'slides.pdf',
+          sourceKind: 'upload',
+          sensitivity: 'Internal',
+        },
+        result: 'success',
+        conversion: {
+          converterId: 'gemini-direct-read',
+          sourceSubtype: 'slide-pdf',
+          evalStatus: 'pass',
+        },
+      })
+    ).rejects.toThrow(/inferenceDestination is required/);
+
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('throws when official-doc-pdf pdf-parse includes inferenceDestination', async () => {
+    await expect(
+      recordAuditEvent({
+        tenantId: 'customer.example',
+        actor: {
+          userId: 'alice@customer.example',
+          ipAddress: '203.0.113.10',
+          userAgent: 'vitest',
+        },
+        action: 'document.convert',
+        target: {
+          docId: 'doc-official-1',
+          fileName: 'guide.pdf',
+          sourceKind: 'upload',
+          sensitivity: 'Internal',
+        },
+        result: 'success',
+        conversion: {
+          converterId: 'pdf-parse',
+          sourceSubtype: 'official-doc-pdf',
+          evalStatus: 'pass',
+        },
+        inferenceDestination: {
+          vendor: 'vertex',
+          region: 'asia-northeast1',
+          model: 'gemini-2.5-flash',
+        },
+      })
+    ).rejects.toThrow(/inferenceDestination must not be set/);
+
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('throws when slide-pdf pdf-parse-fallback includes inferenceDestination', async () => {
+    await expect(
+      recordAuditEvent({
+        tenantId: 'customer.example',
+        actor: {
+          userId: 'alice@customer.example',
+          ipAddress: '203.0.113.10',
+          userAgent: 'vitest',
+        },
+        action: 'document.convert',
+        target: {
+          docId: 'doc-slide-fb-2',
+          fileName: 'slides.pdf',
+          sourceKind: 'upload',
+          sensitivity: 'Internal',
+        },
+        result: 'partial',
+        conversion: {
+          converterId: 'pdf-parse-fallback',
+          sourceSubtype: 'slide-pdf',
+          evalStatus: 'warn',
+        },
+        inferenceDestination: {
+          vendor: 'vertex',
+          region: 'asia-northeast1',
+          model: 'gemini-2.5-flash',
+        },
+      })
+    ).rejects.toThrow(/inferenceDestination must not be set/);
+  });
+});
+
+describe('assertConversionInferenceDestinationInvariant', () => {
+  it('accepts official-doc-pdf + pdf-parse without inferenceDestination', () => {
+    expect(() =>
+      assertConversionInferenceDestinationInvariant({
+        conversion: {
+          converterId: 'pdf-parse',
+          sourceSubtype: 'official-doc-pdf',
+          evalStatus: 'pass',
+        },
+        inferenceDestination: undefined,
+      })
+    ).not.toThrow();
+  });
+
+  it('accepts slide-pdf + pdf-parse-fallback without inferenceDestination', () => {
+    expect(() =>
+      assertConversionInferenceDestinationInvariant({
+        conversion: {
+          converterId: 'pdf-parse-fallback',
+          sourceSubtype: 'slide-pdf',
+          evalStatus: 'warn',
+        },
+        inferenceDestination: undefined,
+      })
+    ).not.toThrow();
+  });
+
+  it('accepts slide-pdf + gemini-direct-read with inferenceDestination', () => {
+    expect(() =>
+      assertConversionInferenceDestinationInvariant({
+        conversion: {
+          converterId: 'gemini-direct-read',
+          sourceSubtype: 'slide-pdf',
+          evalStatus: 'pass',
+        },
+        inferenceDestination: {
+          vendor: 'vertex',
+          region: 'asia-northeast1',
+          model: 'gemini-2.5-flash',
+        },
+      })
+    ).not.toThrow();
+  });
+
+  it('throws when Vertex converter on slide-pdf is missing inferenceDestination', () => {
+    expect(() =>
+      assertConversionInferenceDestinationInvariant({
+        conversion: {
+          converterId: 'gemini-direct-read',
+          sourceSubtype: 'slide-pdf',
+          evalStatus: 'pass',
+        },
+        inferenceDestination: undefined,
+      })
+    ).toThrow(/required/);
+  });
+
+  it('throws when inferenceDestination is provided with a non-Vertex converter', () => {
+    expect(() =>
+      assertConversionInferenceDestinationInvariant({
+        conversion: {
+          converterId: 'pdf-parse-fallback',
+          sourceSubtype: 'slide-pdf',
+          evalStatus: 'warn',
+        },
+        inferenceDestination: {
+          vendor: 'vertex',
+          region: 'asia-northeast1',
+          model: 'gemini-2.5-flash',
+        },
+      })
+    ).toThrow(/must not be set/);
+  });
+
+  it('throws when inferenceDestination is provided on official-doc-pdf', () => {
+    expect(() =>
+      assertConversionInferenceDestinationInvariant({
+        conversion: {
+          converterId: 'pdf-parse',
+          sourceSubtype: 'official-doc-pdf',
+          evalStatus: 'pass',
+        },
+        inferenceDestination: {
+          vendor: 'vertex',
+          region: 'asia-northeast1',
+          model: 'gemini-2.5-flash',
+        },
+      })
+    ).toThrow(/must not be set/);
   });
 });
 

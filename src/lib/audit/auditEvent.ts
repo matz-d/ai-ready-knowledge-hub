@@ -29,8 +29,30 @@ export type AuditConversionEvalStatus =
   | 'fail'
   | 'error';
 
+/**
+ * Known `document.convert` converter identifiers.
+ *
+ * - `pdf-parse`         : subtype 1 (official-doc-pdf), no Vertex.
+ * - `gemini-direct-read`: subtype 2 (slide-pdf), Vertex Gemini success.
+ * - `gemini-vertex-ocr` : subtype 3 (scan-pdf), Vertex Gemini OCR success (reserved).
+ * - `pdf-parse-fallback`: PoC-only fallback path (no Vertex).
+ *
+ * Source of truth for inferenceDestination gating: docs/phase-3-h-3-direction.md §4.2.
+ */
+export type AuditConverterId =
+  | 'pdf-parse'
+  | 'gemini-direct-read'
+  | 'gemini-vertex-ocr'
+  | 'pdf-parse-fallback';
+
+export function isVertexConverterId(converterId: AuditConverterId): boolean {
+  return (
+    converterId === 'gemini-direct-read' || converterId === 'gemini-vertex-ocr'
+  );
+}
+
 export type AuditEventConversion = {
-  converterId: string;
+  converterId: AuditConverterId;
   sourceSubtype: AuditDocumentSourceSubtype;
   evalStatus: AuditConversionEvalStatus;
 };
@@ -39,16 +61,51 @@ export type AuditEventResult = 'success' | 'failure' | 'partial';
 
 export type AuditProcessingProfile = ProcessingProfile;
 
-/** Minimal audit shape for Vertex inference destinations (matches Phase 3-E §6.1). */
-// TODO(Phase 3-H-3): For document.convert, require inferenceDestination only on
-// successful slide-pdf / scan-pdf paths that actually call Gemini via Vertex.
-// official-doc-pdf and pdf-parse-only fallback paths may omit it.
-// Source of truth: docs/phase-3-h-3-direction.md §4.2.
+/**
+ * Minimal audit shape for Vertex inference destinations (matches Phase 3-E §6.1).
+ *
+ * Required on `document.convert` iff conversion.sourceSubtype is slide-pdf /
+ * scan-pdf AND conversion.converterId is a Vertex-calling converter. See
+ * {@link assertConversionInferenceDestinationInvariant}.
+ */
 export type AuditInferenceDestination = {
   vendor: 'vertex';
   region: string;
   model: string;
 };
+
+/**
+ * Enforce the spec from docs/phase-3-h-3-direction.md §4.2 at the audit
+ * boundary. `inferenceDestination` MUST be present iff
+ * (sourceSubtype is slide-pdf or scan-pdf) AND converterId calls Vertex.
+ *
+ * Throws when:
+ *   - inferenceDestination is set but converterId is not a Vertex converter
+ *     (e.g. pdf-parse / pdf-parse-fallback)
+ *   - inferenceDestination is set but sourceSubtype is official-doc-pdf
+ *   - inferenceDestination is missing on slide-pdf/scan-pdf + Vertex converter
+ */
+export function assertConversionInferenceDestinationInvariant(input: {
+  conversion: AuditEventConversion;
+  inferenceDestination: AuditInferenceDestination | undefined;
+}): void {
+  const subtypeRequiresVertex =
+    input.conversion.sourceSubtype === 'slide-pdf' ||
+    input.conversion.sourceSubtype === 'scan-pdf';
+  const vertex = isVertexConverterId(input.conversion.converterId);
+  const requireInferenceDestination = subtypeRequiresVertex && vertex;
+
+  if (requireInferenceDestination && !input.inferenceDestination) {
+    throw new Error(
+      `document.convert: inferenceDestination is required for converterId=${input.conversion.converterId} on sourceSubtype=${input.conversion.sourceSubtype}`
+    );
+  }
+  if (!requireInferenceDestination && input.inferenceDestination) {
+    throw new Error(
+      `document.convert: inferenceDestination must not be set for converterId=${input.conversion.converterId} on sourceSubtype=${input.conversion.sourceSubtype}`
+    );
+  }
+}
 
 export type AuditDataResidency = {
   storage: string;
@@ -85,11 +142,9 @@ export type AuditEventWrite = {
   ruleSetVersion?: string;
   maskingMetrics?: AuditMaskingMetrics;
   /**
-   * M2-C reserves the field at the type level; M2 document.convert writes do not set it.
-   * TODO(Phase 3-H-3): require this on successful document.convert events when
-   * conversion.sourceSubtype is slide-pdf or scan-pdf and the path called Vertex
-   * Gemini. official-doc-pdf / pdf-parse-only fallback paths may omit it.
-   * Spec: docs/phase-3-h-3-direction.md §4.2.
+   * Required on `document.convert` iff conversion.sourceSubtype is slide-pdf /
+   * scan-pdf AND conversion.converterId calls Vertex Gemini (Phase 3-H-3 §4.2).
+   * Validated at write time by {@link assertConversionInferenceDestinationInvariant}.
    */
   inferenceDestination?: AuditInferenceDestination;
   conversion?: AuditEventConversion;
@@ -160,6 +215,13 @@ export function auditActorFromRequest(request: Request): {
 export async function recordAuditEvent(
   input: RecordAuditEventInput
 ): Promise<string> {
+  if (input.action === 'document.convert' && input.conversion) {
+    assertConversionInferenceDestinationInvariant({
+      conversion: input.conversion,
+      inferenceDestination: input.inferenceDestination,
+    });
+  }
+
   const db = getFirestoreClient();
   const eventId = createTimeSortableEventId();
   const body: AuditEventWrite = {

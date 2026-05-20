@@ -15,6 +15,7 @@ const {
   createConversionEvalStorageMock,
   appendConversionEvalMock,
   replaceChunksForDocumentMock,
+  recordAuditEventMock,
   setMock,
   updateMock,
   deleteMock,
@@ -37,6 +38,7 @@ const {
   createConversionEvalStorageMock: vi.fn(),
   appendConversionEvalMock: vi.fn(),
   replaceChunksForDocumentMock: vi.fn(),
+  recordAuditEventMock: vi.fn(),
   setMock: vi.fn(),
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
@@ -96,6 +98,16 @@ vi.mock('../chunkFirestoreAdapter', () => ({
     replaceChunksForDocument: replaceChunksForDocumentMock,
   })),
 }));
+
+vi.mock('../audit/auditEvent', async () => {
+  const actual = await vi.importActual<typeof import('../audit/auditEvent')>(
+    '../audit/auditEvent'
+  );
+  return {
+    ...actual,
+    recordAuditEvent: recordAuditEventMock,
+  };
+});
 
 const docMock = {
   set: setMock,
@@ -246,6 +258,7 @@ const restrictedPipelineResult = {
 beforeEach(() => {
   vi.clearAllMocks();
   randomUUIDMock.mockReturnValue('doc-1');
+  recordAuditEventMock.mockResolvedValue('evt-1');
   setMock.mockResolvedValue(undefined);
   updateMock.mockResolvedValue(undefined);
   deleteMock.mockResolvedValue(undefined);
@@ -702,6 +715,131 @@ describe('orchestrateUploadProcessing', () => {
           message: expect.stringContaining('chunk replace failed'),
         })
       );
+    });
+
+    it('records document.convert with pdf-parse and no inferenceDestination for official-doc-pdf', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-audit-official');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+      await orchestrateUploadProcessing({
+        ...pdfBaseInput,
+        auditContext: {
+          tenantId: 'customer.example',
+          actor: {
+            userId: 'alice@customer.example',
+            ipAddress: '203.0.113.10',
+            userAgent: 'vitest',
+          },
+        },
+        conversion: { converterId: 'pdf-parse' },
+      });
+
+      expect(recordAuditEventMock).toHaveBeenCalledTimes(1);
+      const payload = recordAuditEventMock.mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      expect(payload.action).toBe('document.convert');
+      expect(payload.conversion).toEqual(
+        expect.objectContaining({
+          converterId: 'pdf-parse',
+          sourceSubtype: 'official-doc-pdf',
+        })
+      );
+      expect(payload.inferenceDestination).toBeUndefined();
+    });
+
+    it('records document.convert with gemini-direct-read + inferenceDestination for slide-pdf Vertex success', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-audit-slide');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+      const slideDocumentIr: DocumentIr = {
+        ...minimalDocumentIr,
+        source: {
+          ...minimalDocumentIr.source,
+          sourceSubtype: 'slide-pdf',
+        },
+      };
+
+      await orchestrateUploadProcessing({
+        ...pdfBaseInput,
+        documentIr: slideDocumentIr,
+        sourceSubtype: 'slide-pdf',
+        auditContext: {
+          tenantId: 'customer.example',
+          actor: {
+            userId: 'alice@customer.example',
+            ipAddress: '203.0.113.10',
+            userAgent: 'vitest',
+          },
+        },
+        conversion: {
+          converterId: 'gemini-direct-read',
+          inferenceDestination: {
+            vendor: 'vertex',
+            region: 'asia-northeast1',
+            model: 'gemini-2.5-flash',
+          },
+        },
+      });
+
+      expect(recordAuditEventMock).toHaveBeenCalledTimes(1);
+      const payload = recordAuditEventMock.mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      expect(payload.conversion).toEqual(
+        expect.objectContaining({
+          converterId: 'gemini-direct-read',
+          sourceSubtype: 'slide-pdf',
+        })
+      );
+      expect(payload.inferenceDestination).toEqual({
+        vendor: 'vertex',
+        region: 'asia-northeast1',
+        model: 'gemini-2.5-flash',
+      });
+    });
+
+    it('records document.convert without inferenceDestination for slide-pdf pdf-parse-fallback', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-audit-slide-fb');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+      const slideDocumentIr: DocumentIr = {
+        ...minimalDocumentIr,
+        source: {
+          ...minimalDocumentIr.source,
+          sourceSubtype: 'slide-pdf',
+        },
+      };
+
+      await orchestrateUploadProcessing({
+        ...pdfBaseInput,
+        documentIr: slideDocumentIr,
+        sourceSubtype: 'slide-pdf',
+        auditContext: {
+          tenantId: 'customer.example',
+          actor: {
+            userId: 'alice@customer.example',
+            ipAddress: '203.0.113.10',
+            userAgent: 'vitest',
+          },
+        },
+        conversion: { converterId: 'pdf-parse-fallback' },
+      });
+
+      expect(recordAuditEventMock).toHaveBeenCalledTimes(1);
+      const payload = recordAuditEventMock.mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      expect(payload.conversion).toEqual(
+        expect.objectContaining({
+          converterId: 'pdf-parse-fallback',
+          sourceSubtype: 'slide-pdf',
+        })
+      );
+      expect(payload.inferenceDestination).toBeUndefined();
     });
 
     it('marks failed when DocumentIR write fails on requires_masking path', async () => {

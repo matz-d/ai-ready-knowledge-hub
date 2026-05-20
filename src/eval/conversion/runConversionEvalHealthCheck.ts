@@ -7,9 +7,10 @@ import type { ConversionEvalStage } from './conversionEvalStage';
 import type { DocumentSourceSubtype } from './documentIr';
 import { attachOverallStatus } from './rollupOverallStatus';
 
-/** Subtype 1 (mainline candidate) and subtype 3 (scan-pdf PoC). */
+/** Subtype 1+2 (mainline candidates) and subtype 3 (scan-pdf PoC). */
 export const HEALTH_CHECK_SUPPORTED_SUBTYPES = [
   'official-doc-pdf',
+  'slide-pdf',
   'scan-pdf',
 ] as const satisfies readonly DocumentSourceSubtype[];
 
@@ -54,7 +55,7 @@ function countOversizedChunks<TChunk extends object>(
 
 /**
  * Health-check runner for ConversionEvalResult.
- * Phase 3-H: subtype 1 (`official-doc-pdf`) and scan-pdf PoC metrics.
+ * Phase 3-H: subtype 1/2 (`official-doc-pdf`/`slide-pdf`) and scan-pdf PoC metrics.
  */
 export function runConversionEvalHealthCheck<
   TChunk extends ConversionEvalHealthCheckChunk,

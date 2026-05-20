@@ -45,12 +45,30 @@ import { createChunkFirestoreAdapter } from './chunkFirestoreAdapter';
 import {
   recordAuditEvent,
   type AuditConversionEvalStatus,
+  type AuditConverterId,
   type AuditDocumentSourceSubtype,
   type AuditEventWrite,
+  type AuditInferenceDestination,
 } from './audit/auditEvent';
 
-/** M1 official-doc-pdf upload path uses pdf-parse (no Vertex in M2). */
-const PDF_UPLOAD_CONVERTER_ID = 'pdf-parse';
+/**
+ * Audit metadata describing how a PDF was converted. Built at the route
+ * boundary (next to the extractor) and threaded through the orchestrator so
+ * the `document.convert` AuditEvent can carry the right `converterId` and
+ * `inferenceDestination` per Phase 3-H-3 §4.2.
+ *
+ * For official-doc-pdf this defaults to `{ converterId: 'pdf-parse' }` (no
+ * inferenceDestination). For slide-pdf / scan-pdf Vertex-success paths the
+ * caller fills in `inferenceDestination`.
+ */
+export type PdfConversionAudit = {
+  converterId: AuditConverterId;
+  inferenceDestination?: AuditInferenceDestination;
+};
+
+const DEFAULT_PDF_CONVERSION_AUDIT: PdfConversionAudit = {
+  converterId: 'pdf-parse',
+};
 
 type FirestoreServerTimestamp = ReturnType<typeof FieldValue.serverTimestamp>;
 
@@ -146,6 +164,12 @@ export type OrchestrateInput = {
   sourceSubtype?: DocumentSourceSubtype;
   /** When set, PDF conversion records `document.convert` AuditEvent (Phase 3-H-2 M2). */
   auditContext?: OrchestrateAuditContext;
+  /**
+   * PDF conversion audit metadata (Phase 3-H-3 §4.2). Required by spec when
+   * `documentIr` is set; defaults to `{ converterId: 'pdf-parse' }` for
+   * backwards compatibility with subtype 1 callers that don't pass it yet.
+   */
+  conversion?: PdfConversionAudit;
 };
 
 export type MaskerSummary = {
@@ -324,6 +348,7 @@ export async function orchestrateUploadProcessing(
       storagePath,
       documentIr: input.documentIr,
       auditContext: input.auditContext,
+      conversion: input.conversion ?? DEFAULT_PDF_CONVERSION_AUDIT,
     });
   }
 
@@ -950,6 +975,7 @@ async function orchestratePdfPath(args: {
   storagePath: string;
   documentIr: DocumentIr;
   auditContext?: OrchestrateAuditContext;
+  conversion: PdfConversionAudit;
 }): Promise<OrchestrateResult> {
   let curatorOutput: { result: CuratorOutputResult; completedAt: Date };
   try {
@@ -1015,6 +1041,7 @@ async function orchestratePdfPath(args: {
         documentIr: args.documentIr,
         sensitivity: curatorOutput.result.sensitivity,
         evalStatus,
+        conversion: args.conversion,
       });
 
       return {
@@ -1042,6 +1069,7 @@ async function orchestratePdfPath(args: {
       documentIr: args.documentIr,
       sensitivity: curatorOutput.result.sensitivity,
       evalStatus,
+      conversion: args.conversion,
     });
 
     await parkPdfRequiresMaskingDocument(args.docRef);
@@ -1140,10 +1168,15 @@ async function recordDocumentConvertAudit(args: {
   documentIr: DocumentIr;
   sensitivity: Sensitivity;
   evalStatus: AuditConversionEvalStatus;
+  conversion: PdfConversionAudit;
 }): Promise<void> {
   if (!args.auditContext) {
     return;
   }
+
+  const sourceSubtype = toAuditDocumentSourceSubtype(
+    args.documentIr.source.sourceSubtype
+  );
 
   try {
     await recordAuditEvent({
@@ -1161,12 +1194,13 @@ async function recordDocumentConvertAudit(args: {
           ? 'partial'
           : 'success',
       conversion: {
-        converterId: PDF_UPLOAD_CONVERTER_ID,
-        sourceSubtype: toAuditDocumentSourceSubtype(
-          args.documentIr.source.sourceSubtype
-        ),
+        converterId: args.conversion.converterId,
+        sourceSubtype,
         evalStatus: args.evalStatus,
       },
+      ...(args.conversion.inferenceDestination
+        ? { inferenceDestination: args.conversion.inferenceDestination }
+        : {}),
     });
   } catch (error) {
     console.warn('[orchestrator] recordAuditEvent document.convert failed', error);

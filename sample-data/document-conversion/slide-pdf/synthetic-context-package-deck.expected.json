@@ -1,0 +1,14 @@
+{
+  "documentId": "synthetic-context-package-deck",
+  "expectedFields": [
+    "AI-Ready Knowledge Hub: Context Package Demo",
+    "FOR EVALUATION ONLY - SYNTHETIC CONTENT",
+    "Subtype: slide-pdf",
+    "Flow: classify -> mask -> package -> human confirmation",
+    "Output sections: usable information, excluded information, missing information, questions for humans",
+    "Input artifacts: policy PDF, sales notes, spreadsheet snapshots",
+    "Safety rule: never upload customer PII without masking and confirmation",
+    "Golden operation: manual run on workflow_dispatch and monthly schedule"
+  ],
+  "notes": "Local synthetic slide fixture for subtype-2 evaluation. Expected fields are neutral workflow markers for semantic retention checks."
+}

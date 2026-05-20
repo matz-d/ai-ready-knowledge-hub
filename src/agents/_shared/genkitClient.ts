@@ -9,7 +9,7 @@ import type { ZodType } from 'zod';
  * - ローカル / scripts/ 実行では `.env.local` から読む（ロードは scripts 側責務）
  */
 
-const location = process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1';
+export const location = process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1';
 const projectId = process.env.GOOGLE_CLOUD_PROJECT;
 
 if (!projectId && process.env.NODE_ENV !== 'production') {

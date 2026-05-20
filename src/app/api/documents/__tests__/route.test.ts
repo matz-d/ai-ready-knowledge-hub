@@ -6,6 +6,7 @@ const {
   replaceChunksForDocMock,
   getKnowledgeHubBucketNameMock,
   extractPdfFromBufferMock,
+  extractSlidePdfFromBufferMock,
   getFeatureFlagMock,
   isFeatureEnabledMock,
   getFirestoreClientMock,
@@ -36,6 +37,7 @@ const {
     replaceChunksForDocMock: vi.fn(),
     getKnowledgeHubBucketNameMock: vi.fn(),
     extractPdfFromBufferMock: vi.fn(),
+    extractSlidePdfFromBufferMock: vi.fn(),
     getFeatureFlagMock: vi.fn(),
     isFeatureEnabledMock: vi.fn(),
     getFirestoreClientMock: vi.fn(),
@@ -65,6 +67,10 @@ vi.mock('../../../../lib/chunkRegenerator', () => ({
 
 vi.mock('../../../../lib/extractors/pdfDocumentExtractor', () => ({
   extractPdfFromBuffer: extractPdfFromBufferMock,
+}));
+
+vi.mock('../../../../lib/extractors/slidePdfDocumentExtractor', () => ({
+  extractSlidePdfFromBuffer: extractSlidePdfFromBufferMock,
 }));
 
 vi.mock('../../../../lib/featureFlags', () => ({
@@ -135,17 +141,49 @@ const minimalPdfExtraction = {
   },
 };
 
+const minimalSlidePdfExtraction = {
+  textContent: 'Slide PDF body text',
+  documentIr: {
+    schemaVersion: 1,
+    source: {
+      fileName: 'sample.pdf',
+      mediaType: 'application/pdf',
+      sourceKind: 'upload',
+      sourceSubtype: 'slide-pdf',
+    },
+    pages: [
+      {
+        pageNumber: 1,
+        blocks: [
+          {
+            blockId: 's1-b1',
+            kind: 'paragraph',
+            text: 'Slide PDF body text',
+          },
+        ],
+      },
+    ],
+  },
+  conversion: {
+    converterId: 'gemini-direct-read' as const,
+    calledVertex: true as const,
+    model: 'gemini-2.5-flash',
+    region: 'asia-northeast1',
+  },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   getKnowledgeHubBucketNameMock.mockReturnValue('bucket-1');
   getFirestoreClientMock.mockReturnValue({ collection: vi.fn() });
-  getFeatureFlagMock.mockResolvedValue({
-    flagId: 'pdf-conversion-subtype-1',
-    defaultEnabled: false,
-    enabledTenants: ['m-grow-ai.com'],
-  });
-  isFeatureEnabledMock.mockReturnValue(true);
+  getFeatureFlagMock.mockImplementation(async (_db, flagId: string) => ({
+    flagId,
+    defaultEnabled: flagId === 'pdf-conversion-subtype-1',
+    enabledTenants: flagId === 'pdf-conversion-subtype-1' ? ['m-grow-ai.com'] : [],
+  }));
+  isFeatureEnabledMock.mockImplementation((flag) => flag?.defaultEnabled ?? false);
   extractPdfFromBufferMock.mockResolvedValue(minimalPdfExtraction);
+  extractSlidePdfFromBufferMock.mockResolvedValue(minimalSlidePdfExtraction);
   replaceChunksForDocMock.mockResolvedValue(undefined);
   orchestrateUploadProcessingMock.mockResolvedValue({
     kind: 'curated',
@@ -726,10 +764,11 @@ describe('POST /api/documents', () => {
         })
       );
       expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractSlidePdfFromBufferMock).not.toHaveBeenCalled();
       expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
     });
 
-    it('extracts PDF and orchestrates with documentIr without replaceChunksForDoc', async () => {
+    it('extracts official-doc PDF and orchestrates with extractor subtype without replaceChunksForDoc', async () => {
       const response = await POST(buildRequestWithFile(pdfFile()));
 
       expect(response.status).toBe(200);
@@ -746,6 +785,42 @@ describe('POST /api/documents', () => {
           content: 'PDF body text',
           documentIr: minimalPdfExtraction.documentIr,
           sourceSubtype: 'official-doc-pdf',
+          conversion: { converterId: 'pdf-parse' },
+        })
+      );
+      expect(extractSlidePdfFromBufferMock).not.toHaveBeenCalled();
+      expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+    });
+
+    it('uses slide-pdf extractor and forwards slide subtype + DocumentIR when subtype-2 is enabled', async () => {
+      isFeatureEnabledMock.mockImplementation(
+        (flag) => flag?.flagId === 'pdf-conversion-subtype-2'
+      );
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(200);
+      expect(extractSlidePdfFromBufferMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileName: 'sample.pdf',
+        })
+      );
+      expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(orchestrateUploadProcessingMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          displayName: 'sample.pdf',
+          contentType: 'application/pdf',
+          content: 'Slide PDF body text',
+          documentIr: minimalSlidePdfExtraction.documentIr,
+          sourceSubtype: 'slide-pdf',
+          conversion: {
+            converterId: 'gemini-direct-read',
+            inferenceDestination: {
+              vendor: 'vertex',
+              region: 'asia-northeast1',
+              model: 'gemini-2.5-flash',
+            },
+          },
         })
       );
       expect(replaceChunksForDocMock).not.toHaveBeenCalled();
