@@ -11,6 +11,9 @@ const {
   getKnowledgeHubBucketNameMock,
   writeDocumentIrSnapshotMock,
   documentIrToKnowledgeChunksMock,
+  runConversionEvalHealthCheckMock,
+  createConversionEvalStorageMock,
+  appendConversionEvalMock,
   replaceChunksForDocumentMock,
   setMock,
   updateMock,
@@ -30,6 +33,9 @@ const {
   getKnowledgeHubBucketNameMock: vi.fn(),
   writeDocumentIrSnapshotMock: vi.fn(),
   documentIrToKnowledgeChunksMock: vi.fn(),
+  runConversionEvalHealthCheckMock: vi.fn(),
+  createConversionEvalStorageMock: vi.fn(),
+  appendConversionEvalMock: vi.fn(),
   replaceChunksForDocumentMock: vi.fn(),
   setMock: vi.fn(),
   updateMock: vi.fn(),
@@ -69,11 +75,20 @@ vi.mock('../storage', () => ({
 }));
 
 vi.mock('../documentIrStorage', () => ({
+  DOCUMENT_IR_GCS_VERSION: 'v1',
   writeDocumentIrSnapshot: writeDocumentIrSnapshotMock,
 }));
 
 vi.mock('../../eval/conversion/documentIrToKnowledgeChunk', () => ({
   documentIrToKnowledgeChunks: documentIrToKnowledgeChunksMock,
+}));
+
+vi.mock('../../eval/conversion/runConversionEvalHealthCheck', () => ({
+  runConversionEvalHealthCheck: runConversionEvalHealthCheckMock,
+}));
+
+vi.mock('../conversionEvalStorage', () => ({
+  createConversionEvalStorage: createConversionEvalStorageMock,
 }));
 
 vi.mock('../chunkFirestoreAdapter', () => ({
@@ -240,6 +255,26 @@ beforeEach(() => {
   deleteMaskedObjectMock.mockResolvedValue(undefined);
   getKnowledgeHubBucketNameMock.mockReturnValue('bucket-1');
   writeDocumentIrSnapshotMock.mockResolvedValue('raw/doc-1/document-ir/v1.json');
+  runConversionEvalHealthCheckMock.mockReturnValue({
+    overall: { status: 'pass', reasons: [] },
+  });
+  appendConversionEvalMock.mockImplementation(async (input: {
+    docId: string;
+    revisionId: string;
+    stage: 'health';
+    result: unknown;
+  }) => ({
+    evalId: `${input.docId}:${input.revisionId}`,
+    docId: input.docId,
+    revisionId: input.revisionId,
+    stage: input.stage,
+    result: input.result,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }));
+  createConversionEvalStorageMock.mockReturnValue({
+    appendConversionEval: appendConversionEvalMock,
+    getLatestForDocument: vi.fn(),
+  });
   documentIrToKnowledgeChunksMock.mockReturnValue([
     {
       id: 'chunk-1',
@@ -503,7 +538,7 @@ describe('orchestrateUploadProcessing', () => {
   });
 
   describe('PDF path (Phase 3-H-2 M1)', () => {
-    it('writes DocumentIR and chunks for direct PDFs', async () => {
+    it('writes DocumentIR, health eval, and chunks for direct PDFs', async () => {
       randomUUIDMock.mockReturnValue('doc-pdf-direct');
       curatorFlowMock.mockResolvedValue(curatorDirectResult);
 
@@ -520,10 +555,29 @@ describe('orchestrateUploadProcessing', () => {
         })
       );
       expect(documentIrToKnowledgeChunksMock).toHaveBeenCalled();
+      expect(runConversionEvalHealthCheckMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceSubtype: 'official-doc-pdf',
+          schemaValidity: { passed: true },
+        })
+      );
+      expect(appendConversionEvalMock).toHaveBeenCalledTimes(1);
+      expect(appendConversionEvalMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          docId: 'doc-pdf-direct',
+          revisionId: 'v1',
+          stage: 'health',
+        })
+      );
       expect(replaceChunksForDocumentMock).toHaveBeenCalledWith(
         'doc-pdf-direct',
         expect.any(Array),
         expect.objectContaining({ extractorInput: 'PDF body text' })
+      );
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          latestConversionEvalId: 'doc-pdf-direct:v1',
+        })
       );
       expect(maskerPipelineFlowMock).not.toHaveBeenCalled();
     });
@@ -542,14 +596,66 @@ describe('orchestrateUploadProcessing', () => {
         })
       );
       expect(writeDocumentIrSnapshotMock).toHaveBeenCalled();
-      expect(documentIrToKnowledgeChunksMock).not.toHaveBeenCalled();
+      expect(documentIrToKnowledgeChunksMock).toHaveBeenCalledTimes(1);
       expect(replaceChunksForDocumentMock).not.toHaveBeenCalled();
+      expect(appendConversionEvalMock).toHaveBeenCalledTimes(1);
       expect(updateMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          status: 'curated',
-          maskingPending: true,
+          latestConversionEvalId: 'doc-pdf-mask:v1',
         })
       );
+      const curatedParkCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).status === 'curated' &&
+          (payload as Record<string, unknown>).maskingPending === true
+      );
+      expect(curatedParkCall).toBeTruthy();
+      const parkCallIndex = updateMock.mock.calls.indexOf(curatedParkCall!);
+      const evalIdUpdateIndex = updateMock.mock.calls.findIndex(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).latestConversionEvalId ===
+            'doc-pdf-mask:v1'
+      );
+      expect(parkCallIndex).toBeGreaterThan(evalIdUpdateIndex);
+    });
+
+    it('continues PDF flow when health eval persistence fails', async () => {
+      const consoleWarnSpy = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        randomUUIDMock.mockReturnValue('doc-pdf-eval-fail');
+        curatorFlowMock.mockResolvedValue(curatorDirectResult);
+        appendConversionEvalMock.mockRejectedValue(new Error('eval write failed'));
+
+        const result = await orchestrateUploadProcessing(pdfBaseInput);
+
+        expect(result).toEqual(
+          expect.objectContaining({ kind: 'curated', docId: 'doc-pdf-eval-fail' })
+        );
+        expect(replaceChunksForDocumentMock).toHaveBeenCalledWith(
+          'doc-pdf-eval-fail',
+          expect.any(Array),
+          expect.objectContaining({ extractorInput: 'PDF body text' })
+        );
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          '[orchestrator] conversion eval health write skipped',
+          expect.any(Error)
+        );
+        const failedCall = updateMock.mock.calls.find(
+          ([payload]) =>
+            payload &&
+            typeof payload === 'object' &&
+            (payload as Record<string, unknown>).status === 'failed'
+        );
+        expect(failedCall).toBeUndefined();
+      } finally {
+        consoleWarnSpy.mockRestore();
+      }
     });
 
     it('marks failed and rethrows when DocumentIR write fails on direct path', async () => {

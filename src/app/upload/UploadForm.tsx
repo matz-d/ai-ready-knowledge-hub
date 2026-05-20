@@ -108,7 +108,7 @@ export function UploadForm() {
             className="upload-file-input"
             type="file"
             name="file"
-            accept=".txt,.md,.csv,.xlsx,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".txt,.md,.csv,.xlsx,.pdf,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf"
             disabled={status === 'uploading' || status === 'curating'}
           />
         </label>

@@ -19,6 +19,12 @@ export const CURATOR_SYSTEM_PROMPT = `あなたは税理・会計事務所向け
 - Confidential — 顧客・従業員・契約など機微情報を含む可能性が高い
 - Restricted — 個人を特定できる情報・極めてセンシティブな情報が含まれる
 
+### 公開様式・テンプレートの扱い
+- 公的機関や社内標準の未記入フォーム、公開テンプレート、記入例のない様式は、氏名・住所・賃金などの「記入欄ラベル」だけをもって実 PII とは判定しない。
+- 未記入の公開様式・テンプレートは原則 Public / direct とする。
+- ただし、氏名、住所、電話番号、メール、社員番号、具体的な賃金額などの実値が入っている場合は Confidential または Restricted とし、requires_masking または blocked を選ぶ。
+- 文書内で「synthetic」「evaluation only」「no real customer data」等が明示され、PII 形状の値が合成 fixture だと分かる場合は、マスキング評価対象として Confidential / requires_masking を選ぶ。実顧客・実従業員データ、credential、秘密鍵、実在の本人確認番号等と判断できる場合は Restricted / blocked を維持する。
+
 ## freshness（いずれか 1 語）
 - current — 現在有効そうな内容
 - superseded_candidate — 古い・版が不明・別版がある可能性が高い

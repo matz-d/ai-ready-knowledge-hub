@@ -128,6 +128,8 @@ export type FirestoreDocument = {
   maskerError: FirestoreErrorBlock | null;
   /** PDF conversion / DocumentIR write failures (Phase 3-H-2 M1). */
   conversionError?: FirestoreErrorBlock | null;
+  /** Latest append-only conversion eval id (`docId:revisionId`, Phase 3-H-2 M2). */
+  latestConversionEvalId?: string;
 };
 
 /**

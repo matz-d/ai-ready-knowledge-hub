@@ -68,8 +68,14 @@ export {
   evalContextPackageReadiness,
   evalSchemaValidity,
   rollupOverallStatus,
+  toHeuristicCiAxisStatuses,
   type ConversionEvalAxisStatuses,
+  type HeuristicCiAxisStatuses,
 } from './rollupOverallStatus';
+export {
+  evalCoverageAxisStatus,
+  evalLocatorQualityAxisStatus,
+} from './heuristic';
 export {
   HEALTH_CHECK_SUPPORTED_SUBTYPE,
   HEALTH_CHECK_SUPPORTED_SUBTYPES,

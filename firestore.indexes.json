@@ -7,6 +7,14 @@
         { "fieldPath": "externalSource.fileId", "order": "ASCENDING" },
         { "fieldPath": "sourceKind", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "conversion_eval",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "docId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

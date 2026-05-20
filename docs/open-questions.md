@@ -98,17 +98,18 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - Phase 3-C-5 バグ修正 6 件（malformed doc skip、txt/md chunk 生成、upload 後 auto-chunk、Docs route 分岐、Docs error mapping、backfill usage）
 - CodeRabbit review: 5 件 apply / 11 件 skip（[docs/decisions.md D-P3-C](decisions.md) に根拠記録）
 
-**次フェーズ（2026-05-18 現在）:**
+**次フェーズ（2026-05-20 現在）:**
 
 | 候補 | 内容 | 優先度 |
 |---|---|---|
 | ~~Phase 3-D~~ | ~~Cloud IAP + CI/CD（GitHub Actions → Cloud Run）~~ | **完了** (2026-05-14) |
-| ~~Phase 3-E~~ | ~~Processing Boundary + Cloud DLP Trust Modes（`cloud-managed` 標準化 / DLP polish / `purposeBinding` / AuditEvent 拡張方針）~~ | **完了** (2026-05-18) |
-| Phase 3-H | Document Conversion PoC（PDF / Slide / 画像 / Office を `DocumentIR` / `KnowledgeChunk` 相当へ変換） | **次に着手** |
-| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | Phase 3-H 後 |
+| ~~Phase 3-E~~ | ~~Processing Boundary + Cloud DLP Trust Modes~~ | **完了** (2026-05-18) |
+| ~~Phase 3-H / H-2~~ | ~~Document Conversion PoC + subtype 1 薄い本線統合 + Eval 育成ループ~~ | **完了** (2026-05-20) |
+| **Phase 3-H-3** | slide-pdf / scan-pdf 本線統合 + `inferenceDestination` | **次に着手** |
+| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | H-3 後 |
 | Phase 3-G | `cloud-sanitized-ingress` prototype | 高セキュリティ顧客向け後続 |
 
-**次のアクション**: Phase 3-H に着手する。正本は [docs/phase-3-h-direction.md](phase-3-h-direction.md)。提出まで一ヶ月以上あるため、Phase 3-F の polish よりも、扱える情報源を増やす Document Conversion を前倒しする。
+**次のアクション**: Phase 3-H-3 に着手する。前提は [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §13 Completion Snapshot と [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) 着手ゲート。
 
 ---
 
@@ -132,6 +133,27 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - 残未決: replacement token を DLP 既定の `[INFO_TYPE]` のまま使うか、既存 `SimpleMasker` と同じ `[REDACTED:TYPE]` に寄せるか
 - 残未決: 日本向け custom dictionary（顧客名、社内担当者、支店名など）をどの段階で導入するか
 
+### Phase 3-H-2 で解消した未決（2026-05-20）
+
+以下は [docs/decisions.md](decisions.md) と [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) に正本化済み。H-3 では再議論しない（変更時は新しい決定エントリを足す）。
+
+| 論点 | 解消内容 | 出典 |
+|---|---|---|
+| subtype 1 本線統合の有無・方式 | feature flag + Curator まで + `direct` のみ chunk 化 | `D-P3-H-3` / `D-P3-H-4` |
+| feature flag 粒度 | Firestore `feature_flags`、allow-list + `expiresAt` | `D-P3-H-4 Q1` |
+| DocumentIR / eval 保存先 | GCS `raw/{docId}/document-ir/v1.json`、Firestore `conversion_eval` | `D-P3-H-4 Q2–Q3` |
+| `requires_masking` PDF | `curated` + `maskingPending: true`、chunk なし | `D-P3-H-4 Q5`、IAP 実機確認 |
+| ConversionEval 型・runner・CI 三段 | `src/eval/conversion/*`、health 必須 / heuristic warn / golden 手動 | `D-P3-E Q8`、`D-P3-H-5b` |
+| subtype 1 heuristic 閾値（初期） | M2-D 分布 + DLP 実測 2 件 | `D-P3-H-5` |
+| golden の意味 | 重要フィールド recall（完全一致ではない） | §7.2、M4 実装 |
+| subtype 1 変換器 | `pdf-parse` 本線、MarkItDown は PoC のみ | `D-P3-H-1` |
+| 評価器 CI 接続タイミング | health = PR 必須 + ruleset、heuristic = warning、golden = 月次 | `D-P3-H-5b` |
+| 最初の縦串 subtype | `official-doc-pdf` | `D-P3-H-2` |
+
+**H-2 完了後の初回運用タスク（未決ではないが優先作業）:** golden `expected.json` チューニング（初回 recall ベースライン §7.4、[docs/phase-3-h-2-monthly-review.md](phase-3-h-2-monthly-review.md)）。
+
+---
+
 ### Phase 3-H-3（slide-pdf / scan-pdf 本線統合）
 
 **方針ドラフト（2026-05-20）:** [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) と [docs/decisions.md](decisions.md) `D-P3-H-6`（ドラフト）を正とする。実装着手前に以下を確定する。
@@ -145,15 +167,19 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - 残未決: `document.convert` の **`inferenceDestination`** に載せる model / region の tenant override 要否（固定 env のみで足りるか）
 - 残未決: PoC の `ocrUsage` / `ocrCost` を `ConversionEvalResult` 本線 schema に昇格するか
 
-### Document Conversion Eval（Phase 3-H に向けた未決）
-- **Phase 3-E 方針（2026-05-18）**: 6 評価軸・`ConversionEvalResult` の docs 上の型案・三段階成熟度（health / heuristic / golden）・`overall.status` ロールアップ規約（案B: blocker 軸方式）を [docs/phase-3-e-direction.md](phase-3-e-direction.md) §10 と [docs/decisions.md](decisions.md) D-P3-E Q8 に固定済み。`src/` への型実装、評価器ランナー、golden fixture、`poc/document-conversion/` 作成、CI への評価器接続は Phase 3-H へ送る。
-- 残未決: 各軸の fail / warn 閾値（特に `safety_readiness.maskableChunkRate` の下限、`context_package_readiness.oversizedChunks` の許容数、`coverage.pageCoverage` の最低値）
-- 残未決: golden fixture を sample-data から何件・どの種類で作るか（士業実案件 / テンプレ / 表 / 暗黙知メモ）
-- **方針固定**: golden eval は完璧な `DocumentIR` 全体との完全一致ではなく、残ってほしい重要情報の recall として扱う。
-- 残未決: `semantic_retention.missingExpectedFields` の「必ず残ってほしいフィールド」リストをどこに置くか（fixture 横の YAML / `eval/expected-conversion.json` / Firestore）
-- 残未決: 評価器ランナーを CI に接続するタイミング（health check は必須 gate、heuristic は warning gate、golden は手動という三段は仮置き）
-- 残未決: 案C（成熟度別 blocker 軸運用）への移行条件。現状は Phase 3-H で案 B を試走した後に再評価予定。
-- 残未決: Phase 3-H 着手時点で最初に比較する変換器セット（MarkItDown 単体 / Gemini 直 PDF / MarkItDown→Gemini 補正 の 3 系統を仮置き）の最終確定
+### Document Conversion Eval（H-3 以降の残未決）
+
+**Phase 3-H-2 で解消済み:** 6 軸契約、案 B ロールアップ、subtype 1 の型/runner/fixture/CI 三段、golden = recall、`*.expected.json` は fixture 横配置（`sample-data/document-conversion/official-doc-pdf/`）。
+
+**H-3 に持ち越す（subtype 1 運用・横断）:**
+
+- **`safety_readiness.maskableChunkRate` の再定義** — 公開文書 DLP 実測では観測のみ（`D-P3-H-5`）。PII-bearing 本線 eval または Masker 統合後に blocker 化するか再検討。
+- **golden `expected.json` チューニング** — 初回 recall 0.05〜0.19（§7.4）。chunk 分割に合わせた expected 更新が初回月次タスク。
+- **`coverage.pageCoverage` の再確認** — official-doc-pdf 観測が 10 件程度溜まったら `>= 1.0` pass の妥当性を見直す。
+- **案 C（成熟度別 blocker 軸）への移行条件** — 案 B 試走後の再評価（現状維持）。
+- **feature flag 公開範囲拡大条件** — subtype 1 は dev tenant 限定のまま。subtype 2/3 は別 flag で再判断。
+- **`inferenceDestination`** — subtype 2/3 の Vertex 呼出時に `document.convert` へ必須（[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §4.2）。
+- **Masker 本線統合（PDF 経路）** — `requires_masking` PDF の chunk 化と `safety_readiness` 本格評価（`D-P3-H-6 Q5` 推奨は後送り）。
 
 ### 提供形態
 
@@ -222,6 +248,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 
 ## 関連ドキュメント
 
+- [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) — Phase 3-H-2 完了スナップショット（§13）
 - [docs/decisions.md](decisions.md) — 確定事項
 - [docs/architecture.md](architecture.md) — 技術構成
 - [docs/concept.md](concept.md) — プロダクトコンセプト

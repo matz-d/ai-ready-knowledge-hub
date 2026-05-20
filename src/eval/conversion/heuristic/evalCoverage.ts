@@ -4,7 +4,7 @@
  * Surfaces three metrics from a DocumentIR:
  *  - `pageCoverage`: fraction of pages with at least one non-empty block.
  *    Initial thresholds (D-P3-H-5): `>= 1.0` pass / `>= 0.75` warn / `< 0.75` fail.
- *    This function only produces the metric; rollup applies the threshold.
+ *    Status mapping: {@link evalCoverageAxisStatus}.
  *  - `tableCandidates`: count of `kind === 'table'` blocks across the doc.
  *    Threshold-less (observation-only per §6.2).
  *  - `textDensityWarnings`: human-readable strings flagging pages that *had*
@@ -18,6 +18,11 @@
  *   PoC → mainline split.
  */
 import type { ConversionEvalResult } from '../conversionEvalResult';
+import {
+  isAxisMeasuredAtStage,
+  type ConversionEvalStage,
+} from '../conversionEvalStage';
+import type { AxisRollupStatus } from '../evalSafetyReadiness';
 import type { DocumentIrPage } from '../documentIr';
 import type { HeuristicEvalChunk, HeuristicEvalInput } from './types';
 
@@ -89,4 +94,26 @@ export function evalCoverage<TChunk extends HeuristicEvalChunk>(
       tableCandidates,
     },
   };
+}
+
+/**
+ * Canonical coverage axis status (Phase 3-H-2 M3).
+ * `textDensityWarnings` does not affect status; it remains in metrics for JSON / review.
+ */
+export function evalCoverageAxisStatus(
+  result: Pick<ConversionEvalResult, 'coverage'>,
+  stage: ConversionEvalStage
+): AxisRollupStatus {
+  if (!isAxisMeasuredAtStage('coverage', stage)) {
+    return 'pass';
+  }
+
+  const { pageCoverage } = result.coverage;
+  if (pageCoverage >= COVERAGE_PAGE_COVERAGE_PASS_THRESHOLD) {
+    return 'pass';
+  }
+  if (pageCoverage >= COVERAGE_PAGE_COVERAGE_WARN_THRESHOLD) {
+    return 'warn';
+  }
+  return 'fail';
 }

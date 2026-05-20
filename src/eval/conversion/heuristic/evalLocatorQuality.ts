@@ -10,8 +10,14 @@
  * on being able to point a reviewer at the source page. Without page
  * locators the Context Package cannot back its citations, which is why
  * `hasPageLocators` is promoted from observation to threshold in M3.
+ * Status mapping: {@link evalLocatorQualityAxisStatus}.
  */
 import type { ConversionEvalResult } from '../conversionEvalResult';
+import {
+  isAxisMeasuredAtStage,
+  type ConversionEvalStage,
+} from '../conversionEvalStage';
+import type { AxisRollupStatus } from '../evalSafetyReadiness';
 import type { HeuristicEvalChunk, HeuristicEvalInput } from './types';
 
 export function evalLocatorQuality<TChunk extends HeuristicEvalChunk>(
@@ -32,4 +38,26 @@ export function evalLocatorQuality<TChunk extends HeuristicEvalChunk>(
       hasTableLocators,
     },
   };
+}
+
+/**
+ * Canonical locator_quality axis status (Phase 3-H-2 M3).
+ * `hasTableLocators` is warning-only: missing table locators never fail the axis alone.
+ */
+export function evalLocatorQualityAxisStatus(
+  result: Pick<ConversionEvalResult, 'locatorQuality'>,
+  stage: ConversionEvalStage
+): AxisRollupStatus {
+  if (!isAxisMeasuredAtStage('locator_quality', stage)) {
+    return 'pass';
+  }
+
+  const { hasPageLocators, hasTableLocators } = result.locatorQuality;
+  if (!hasPageLocators) {
+    return 'fail';
+  }
+  if (!hasTableLocators) {
+    return 'warn';
+  }
+  return 'pass';
 }

@@ -11,16 +11,39 @@ export const AUDIT_EVENTS_COLLECTION = 'auditEvents';
 export type AuditEventAction =
   | 'document.import'
   | 'document.reimport'
+  | 'document.convert'
   | 'document.view'
   | 'document.export'
   | 'document.delete'
   | 'chunk.access'
   | 'mask.override';
 
+export type AuditDocumentSourceSubtype =
+  | 'official-doc-pdf'
+  | 'slide-pdf'
+  | 'scan-pdf';
+
+export type AuditConversionEvalStatus =
+  | 'pass'
+  | 'warn'
+  | 'fail'
+  | 'error';
+
+export type AuditEventConversion = {
+  converterId: string;
+  sourceSubtype: AuditDocumentSourceSubtype;
+  evalStatus: AuditConversionEvalStatus;
+};
+
 export type AuditEventResult = 'success' | 'failure' | 'partial';
 
 export type AuditProcessingProfile = ProcessingProfile;
 
+/** Minimal audit shape for Vertex inference destinations (matches Phase 3-E §6.1). */
+// TODO(Phase 3-H-3): For document.convert, require inferenceDestination only on
+// successful slide-pdf / scan-pdf paths that actually call Gemini via Vertex.
+// official-doc-pdf and pdf-parse-only fallback paths may omit it.
+// Source of truth: docs/phase-3-h-3-direction.md §4.2.
 export type AuditInferenceDestination = {
   vendor: 'vertex';
   region: string;
@@ -61,7 +84,15 @@ export type AuditEventWrite = {
   purposeBinding?: string;
   ruleSetVersion?: string;
   maskingMetrics?: AuditMaskingMetrics;
+  /**
+   * M2-C reserves the field at the type level; M2 document.convert writes do not set it.
+   * TODO(Phase 3-H-3): require this on successful document.convert events when
+   * conversion.sourceSubtype is slide-pdf or scan-pdf and the path called Vertex
+   * Gemini. official-doc-pdf / pdf-parse-only fallback paths may omit it.
+   * Spec: docs/phase-3-h-3-direction.md §4.2.
+   */
   inferenceDestination?: AuditInferenceDestination;
+  conversion?: AuditEventConversion;
   dataResidency?: AuditDataResidency;
 };
 

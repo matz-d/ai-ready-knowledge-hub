@@ -12,7 +12,6 @@
  *     text that pdf-parse emits both as grid cells and as raw prose.
  *   - `sourceKind: 'upload'` is hardcoded — this extractor is only for uploaded files.
  */
-import { PDFParse } from 'pdf-parse';
 import {
   DOCUMENT_IR_SCHEMA_VERSION,
   type DocumentIr,
@@ -45,6 +44,14 @@ const HEADING_PREFIX_PATTERNS: ReadonlyArray<{
 ];
 
 const HEADING_MAX_CHARS = 60;
+
+async function ensurePdfCanvasPolyfills(): Promise<void> {
+  const canvas = await import('@napi-rs/canvas');
+  const target = globalThis as Record<string, unknown>;
+  target.DOMMatrix ??= canvas.DOMMatrix;
+  target.ImageData ??= canvas.ImageData;
+  target.Path2D ??= canvas.Path2D;
+}
 
 function classifyLine(line: string): SegmentedTextBlock | null {
   const trimmed = line.trim();
@@ -126,6 +133,8 @@ export async function extractPdfFromBuffer(
   options: ExtractPdfFromBufferOptions
 ): Promise<ExtractPdfFromBufferResult> {
   const { buffer, fileName, sourceSubtype = 'official-doc-pdf' } = options;
+  await ensurePdfCanvasPolyfills();
+  const { PDFParse } = await import('pdf-parse');
 
   // Copy into a fresh ArrayBuffer to avoid DataCloneError.
   // pdf-parse's pdfjs worker uses structuredClone to transfer data;

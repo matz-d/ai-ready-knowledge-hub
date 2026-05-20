@@ -1,9 +1,13 @@
 import type { ConversionEvalResult } from './conversionEvalResult';
+import type { ConversionEvalStage } from './conversionEvalStage';
+import {
+  evalCoverageAxisStatus,
+  evalLocatorQualityAxisStatus,
+} from './heuristic';
 import {
   evalSafetyReadiness,
   type AxisRollupStatus,
 } from './evalSafetyReadiness';
-import type { ConversionEvalStage } from './conversionEvalStage';
 
 export type ConversionEvalAxisStatuses = {
   schemaValidity: AxisRollupStatus;
@@ -12,6 +16,13 @@ export type ConversionEvalAxisStatuses = {
   locatorQuality: AxisRollupStatus;
   semanticRetention: AxisRollupStatus;
   contextPackageReadiness: AxisRollupStatus;
+};
+
+/** CI / PR comment matrix keys (snake_case axis ids). */
+export type HeuristicCiAxisStatuses = {
+  coverage: AxisRollupStatus;
+  locator_quality: AxisRollupStatus;
+  safety_readiness: AxisRollupStatus;
 };
 
 export function evalSchemaValidity(
@@ -40,14 +51,24 @@ export function evalContextPackageReadiness(
   return 'pass';
 }
 
-/** Non-blocker axes: stubs return pass until subtype-specific thresholds exist. */
+/** Non-blocker axes that downgrade overall to warn when they fail. */
 export function collectNonBlockerFails(
-  result: ConversionEvalResult
+  result: ConversionEvalResult,
+  stage: ConversionEvalStage
 ): string[] {
+  const axes = deriveAxisStatuses(result, stage);
   const fails: string[] = [];
-  if (evalContextPackageReadiness(result) === 'fail') {
+
+  if (axes.contextPackageReadiness === 'fail') {
     fails.push('context_package_readiness');
   }
+  if (axes.coverage === 'fail') {
+    fails.push('coverage');
+  }
+  if (axes.locatorQuality === 'fail') {
+    fails.push('locator_quality');
+  }
+
   return fails;
 }
 
@@ -58,10 +79,24 @@ export function deriveAxisStatuses(
   return {
     schemaValidity: evalSchemaValidity(result),
     safetyReadiness: evalSafetyReadiness(result, stage),
-    coverage: 'pass',
-    locatorQuality: 'pass',
+    coverage: evalCoverageAxisStatus(result, stage),
+    locatorQuality: evalLocatorQualityAxisStatus(result, stage),
     semanticRetention: 'pass',
     contextPackageReadiness: evalContextPackageReadiness(result),
+  };
+}
+
+/**
+ * Subset of {@link deriveAxisStatuses} for heuristic-stage CI reports and PR comments.
+ */
+export function toHeuristicCiAxisStatuses(
+  result: ConversionEvalResult
+): HeuristicCiAxisStatuses {
+  const axes = deriveAxisStatuses(result, 'heuristic');
+  return {
+    coverage: axes.coverage,
+    locator_quality: axes.locatorQuality,
+    safety_readiness: axes.safetyReadiness,
   };
 }
 
@@ -75,7 +110,7 @@ export function rollupOverallStatus(
   const axes = deriveAxisStatuses(result, stage);
   const schema = axes.schemaValidity;
   const safety = axes.safetyReadiness;
-  const nonBlockerFails = collectNonBlockerFails(result);
+  const nonBlockerFails = collectNonBlockerFails(result, stage);
 
   const reasons: string[] = [];
 

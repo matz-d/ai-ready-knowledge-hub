@@ -3,19 +3,16 @@ import path from 'node:path';
 import {
   ConversionEvalStageSchema,
   documentIrToKnowledgeChunks,
-  evalSafetyReadiness,
   parseDocumentIr,
   runConversionEvalGoldenCheck,
   runConversionEvalHealthCheck,
+  toHeuristicCiAxisStatuses,
   type ConversionEvalResult,
   type ConversionEvalStage,
   type DocumentIr,
+  type HeuristicCiAxisStatuses,
 } from '../src/eval/conversion';
 import { runConversionEvalHeuristic } from '../src/eval/conversion/heuristic';
-import {
-  COVERAGE_PAGE_COVERAGE_PASS_THRESHOLD,
-  COVERAGE_PAGE_COVERAGE_WARN_THRESHOLD,
-} from '../src/eval/conversion/heuristic';
 import {
   KnowledgeChunkSchema,
   validateKnowledgeChunkInvariants,
@@ -51,16 +48,8 @@ type FixtureEvaluation = {
   documentId: FixtureBasename;
   overallStatus: ConversionEvalResult['overall']['status'];
   overallReasons: readonly string[];
-  heuristicAxisStatuses?: HeuristicAxisStatuses;
+  heuristicAxisStatuses?: HeuristicCiAxisStatuses;
   result: ConversionEvalResult;
-};
-
-type AxisStatus = 'pass' | 'warn' | 'fail';
-
-type HeuristicAxisStatuses = {
-  coverage: AxisStatus;
-  locator_quality: AxisStatus;
-  safety_readiness: AxisStatus;
 };
 
 type AxisSummary = {
@@ -91,39 +80,6 @@ type ChunkSchemaValidity = {
   passed: boolean;
   errors: string[];
 };
-
-function evalCoverageStatus(result: ConversionEvalResult): AxisStatus {
-  if (result.coverage.pageCoverage >= COVERAGE_PAGE_COVERAGE_PASS_THRESHOLD) {
-    return 'pass';
-  }
-  if (result.coverage.pageCoverage >= COVERAGE_PAGE_COVERAGE_WARN_THRESHOLD) {
-    return 'warn';
-  }
-  return 'fail';
-}
-
-function evalLocatorQualityStatus(result: ConversionEvalResult): AxisStatus {
-  if (!result.locatorQuality.hasPageLocators) {
-    return 'fail';
-  }
-  if (
-    result.coverage.tableCandidates > 0 &&
-    !result.locatorQuality.hasTableLocators
-  ) {
-    return 'warn';
-  }
-  return 'pass';
-}
-
-function evalHeuristicAxisStatuses(
-  result: ConversionEvalResult
-): HeuristicAxisStatuses {
-  return {
-    coverage: evalCoverageStatus(result),
-    locator_quality: evalLocatorQualityStatus(result),
-    safety_readiness: evalSafetyReadiness(result, 'heuristic'),
-  };
-}
 
 function createEmptyAxisSummary(): AxisSummary {
   return { pass: 0, warn: 0, fail: 0 };
@@ -291,7 +247,7 @@ async function evaluateFixture(
     overallStatus: result.overall.status,
     overallReasons: result.overall.reasons,
     heuristicAxisStatuses:
-      stage === 'heuristic' ? evalHeuristicAxisStatuses(result) : undefined,
+      stage === 'heuristic' ? toHeuristicCiAxisStatuses(result) : undefined,
     result,
   };
 }
