@@ -801,18 +801,13 @@ describe('orchestrateUploadProcessing', () => {
       });
     });
 
-    it('rethrows inferenceDestination invariant violations from document.convert audit', async () => {
+    it('fails the inferenceDestination invariant before any persistence on wiring bugs', async () => {
       const { ConversionInferenceDestinationInvariantError } =
         await vi.importActual<typeof import('../audit/auditEvent')>(
           '../audit/auditEvent'
         );
       randomUUIDMock.mockReturnValue('doc-pdf-audit-invariant');
       curatorFlowMock.mockResolvedValue(curatorDirectResult);
-      recordAuditEventMock.mockRejectedValue(
-        new ConversionInferenceDestinationInvariantError(
-          'document.convert: inferenceDestination is required for converterId=gemini-direct-read on sourceSubtype=slide-pdf'
-        )
-      );
 
       const slideDocumentIr: DocumentIr = {
         ...minimalDocumentIr,
@@ -841,6 +836,14 @@ describe('orchestrateUploadProcessing', () => {
           },
         })
       ).rejects.toBeInstanceOf(ConversionInferenceDestinationInvariantError);
+
+      // Pre-flight check must run before the curator phase, DocumentIR write,
+      // chunk persistence, and audit write — none of these side effects should
+      // be observable when the invariant rejects.
+      expect(curatorFlowMock).not.toHaveBeenCalled();
+      expect(writeDocumentIrSnapshotMock).not.toHaveBeenCalled();
+      expect(replaceChunksForDocumentMock).not.toHaveBeenCalled();
+      expect(recordAuditEventMock).not.toHaveBeenCalled();
     });
 
     it('continues curated upload when document.convert audit storage fails', async () => {

@@ -44,6 +44,7 @@ import {
 import { createChunkFirestoreAdapter } from './chunkFirestoreAdapter';
 import {
   ConversionInferenceDestinationInvariantError,
+  assertConversionInferenceDestinationInvariant,
   recordAuditEvent,
   type AuditConversionEvalStatus,
   type AuditConverterId,
@@ -978,6 +979,23 @@ async function orchestratePdfPath(args: {
   auditContext?: OrchestrateAuditContext;
   conversion: PdfConversionAudit;
 }): Promise<OrchestrateResult> {
+  // Pre-flight: catch extractor/orchestrator wiring bugs (Vertex converter
+  // missing inferenceDestination, or pdf-parse with one) before any chunks /
+  // DocumentIR / audit are persisted. The same invariant is enforced again at
+  // the audit write boundary; checking here keeps failure ordering symmetric
+  // with non-Vertex paths so a wiring bug cannot leave orphan chunks behind a
+  // failed document.
+  assertConversionInferenceDestinationInvariant({
+    conversion: {
+      converterId: args.conversion.converterId,
+      sourceSubtype: toAuditDocumentSourceSubtype(
+        args.documentIr.source.sourceSubtype
+      ),
+      evalStatus: 'pass',
+    },
+    inferenceDestination: args.conversion.inferenceDestination,
+  });
+
   let curatorOutput: { result: CuratorOutputResult; completedAt: Date };
   try {
     curatorOutput = await runPdfCuratorPhase({
