@@ -8,11 +8,13 @@ import type { PipelineOutput } from '../agents/masker/pipelineSchema';
 import { applyMaskerUpgrade } from '../agents/masker/upgrade';
 import type { DocumentIr, DocumentSourceSubtype } from '../eval/conversion/documentIr';
 import { documentIrToKnowledgeChunks } from '../eval/conversion/documentIrToKnowledgeChunk';
+import { runConversionEvalHealthCheck } from '../eval/conversion/runConversionEvalHealthCheck';
 import {
   DOCUMENTS_COLLECTION,
   buildRawObjectPath,
   sanitizeOriginalFileName,
 } from './documents';
+import { createConversionEvalStorage } from './conversionEvalStorage';
 import { FieldValue, getFirestoreClient } from './firestore';
 import {
   FIRESTORE_DOCUMENT_SCHEMA_VERSION,
@@ -35,8 +37,20 @@ import {
   uploadRawObject,
   getKnowledgeHubBucketName,
 } from './storage';
-import { writeDocumentIrSnapshot } from './documentIrStorage';
+import {
+  DOCUMENT_IR_GCS_VERSION,
+  writeDocumentIrSnapshot,
+} from './documentIrStorage';
 import { createChunkFirestoreAdapter } from './chunkFirestoreAdapter';
+import {
+  recordAuditEvent,
+  type AuditConversionEvalStatus,
+  type AuditDocumentSourceSubtype,
+  type AuditEventWrite,
+} from './audit/auditEvent';
+
+/** M1 official-doc-pdf upload path uses pdf-parse (no Vertex in M2). */
+const PDF_UPLOAD_CONVERTER_ID = 'pdf-parse';
 
 type FirestoreServerTimestamp = ReturnType<typeof FieldValue.serverTimestamp>;
 
@@ -113,6 +127,11 @@ export type FirestoreInitialDocumentDraft = {
 // 公開 API
 // ─────────────────────────────────────────────────────────────────────
 
+export type OrchestrateAuditContext = {
+  tenantId: string;
+  actor: AuditEventWrite['actor'];
+};
+
 export type OrchestrateInput = {
   displayName: string;
   contentType: string;
@@ -125,6 +144,8 @@ export type OrchestrateInput = {
   documentIr?: DocumentIr;
   /** Required when documentIr is present. */
   sourceSubtype?: DocumentSourceSubtype;
+  /** When set, PDF conversion records `document.convert` AuditEvent (Phase 3-H-2 M2). */
+  auditContext?: OrchestrateAuditContext;
 };
 
 export type MaskerSummary = {
@@ -302,6 +323,7 @@ export async function orchestrateUploadProcessing(
       contentSha256,
       storagePath,
       documentIr: input.documentIr,
+      auditContext: input.auditContext,
     });
   }
 
@@ -915,8 +937,9 @@ async function runPdfCuratorPhase(args: {
  *   1. Run PDF curator phase (AI classification).
  *   2. blocked → return immediately.
  *   3. Write DocumentIR to GCS (for both direct and requires_masking).
- *   4. direct → chunk via documentIrToKnowledgeChunks.
- *   5. requires_masking → park at curated + maskingPending:true (no Masker in M1).
+ *   4. Run health-stage conversion eval and persist to `conversion_eval`.
+ *   5. direct → chunk via documentIrToKnowledgeChunks.
+ *   6. requires_masking → park at curated + maskingPending:true (no Masker in M1).
  */
 async function orchestratePdfPath(args: {
   docRef: DocumentReference;
@@ -926,6 +949,7 @@ async function orchestratePdfPath(args: {
   contentSha256: string;
   storagePath: string;
   documentIr: DocumentIr;
+  auditContext?: OrchestrateAuditContext;
 }): Promise<OrchestrateResult> {
   let curatorOutput: { result: CuratorOutputResult; completedAt: Date };
   try {
@@ -970,9 +994,27 @@ async function orchestratePdfPath(args: {
         title: args.displayName,
         sensitivitySource: 'inherited',
       });
+      const { evalStatus } = await persistPdfHealthStageEval({
+        docRef: args.docRef,
+        docId: args.docId,
+        displayName: args.displayName,
+        content: args.content,
+        documentIr: args.documentIr,
+        documentSensitivity: curatorOutput.result.sensitivity,
+        chunksForEval: chunks,
+      });
       const adapter = createChunkFirestoreAdapter(db);
       await adapter.replaceChunksForDocument(args.docId, chunks, {
         extractorInput: args.content,
+      });
+
+      await recordDocumentConvertAudit({
+        auditContext: args.auditContext,
+        docId: args.docId,
+        displayName: args.displayName,
+        documentIr: args.documentIr,
+        sensitivity: curatorOutput.result.sensitivity,
+        evalStatus,
       });
 
       return {
@@ -983,6 +1025,24 @@ async function orchestratePdfPath(args: {
         curatorCompletedAt: curatorOutput.completedAt,
       };
     }
+
+    const { evalStatus } = await persistPdfHealthStageEval({
+      docRef: args.docRef,
+      docId: args.docId,
+      displayName: args.displayName,
+      content: args.content,
+      documentIr: args.documentIr,
+      documentSensitivity: curatorOutput.result.sensitivity,
+    });
+
+    await recordDocumentConvertAudit({
+      auditContext: args.auditContext,
+      docId: args.docId,
+      displayName: args.displayName,
+      documentIr: args.documentIr,
+      sensitivity: curatorOutput.result.sensitivity,
+      evalStatus,
+    });
 
     return {
       kind: 'curated',
@@ -995,6 +1055,108 @@ async function orchestratePdfPath(args: {
   } catch (e) {
     await recordConversionFailure(args.docRef, e);
     throw e;
+  }
+}
+
+async function persistPdfHealthStageEval(args: {
+  docRef: DocumentReference;
+  docId: string;
+  displayName: string;
+  content: string;
+  documentIr: DocumentIr;
+  documentSensitivity: CuratorOutputResult['sensitivity'];
+  chunksForEval?: ReturnType<typeof documentIrToKnowledgeChunks>;
+}): Promise<{ evalStatus: AuditConversionEvalStatus }> {
+  try {
+    const chunks =
+      args.chunksForEval ??
+      documentIrToKnowledgeChunks({
+        documentIr: args.documentIr,
+        docId: args.docId,
+        extractorInput: args.content,
+        documentSensitivity: args.documentSensitivity,
+        documentAiUsePolicy: 'direct',
+        title: args.displayName,
+        sensitivitySource: 'inherited',
+      });
+
+    const evalResult = runConversionEvalHealthCheck({
+      sourceSubtype: args.documentIr.source.sourceSubtype,
+      chunkDrafts: chunks.map((chunk) => ({ text: chunk.text })),
+      schemaValidity: { passed: true },
+    });
+    const conversionEvalStorage = createConversionEvalStorage(
+      getFirestoreClient()
+    );
+    const written = await conversionEvalStorage.appendConversionEval({
+      docId: args.docId,
+      revisionId: DOCUMENT_IR_GCS_VERSION,
+      stage: 'health',
+      result: evalResult,
+    });
+
+    await args.docRef.update({
+      latestConversionEvalId: written.evalId,
+    });
+    return { evalStatus: evalResult.overall.status };
+  } catch (error) {
+    console.warn('[orchestrator] conversion eval health write skipped', error);
+    return { evalStatus: 'error' };
+  }
+}
+
+function toAuditDocumentSourceSubtype(
+  sourceSubtype: DocumentSourceSubtype
+): AuditDocumentSourceSubtype {
+  if (
+    sourceSubtype === 'official-doc-pdf' ||
+    sourceSubtype === 'slide-pdf' ||
+    sourceSubtype === 'scan-pdf'
+  ) {
+    return sourceSubtype;
+  }
+  throw new Error(
+    `document.convert audit requires a PDF sourceSubtype, got ${sourceSubtype}`
+  );
+}
+
+async function recordDocumentConvertAudit(args: {
+  auditContext?: OrchestrateAuditContext;
+  docId: string;
+  displayName: string;
+  documentIr: DocumentIr;
+  sensitivity: Sensitivity;
+  evalStatus: AuditConversionEvalStatus;
+}): Promise<void> {
+  if (!args.auditContext) {
+    return;
+  }
+
+  try {
+    await recordAuditEvent({
+      tenantId: args.auditContext.tenantId,
+      actor: args.auditContext.actor,
+      action: 'document.convert',
+      target: {
+        docId: args.docId,
+        fileName: args.displayName,
+        sourceKind: 'upload',
+        sensitivity: args.sensitivity,
+      },
+      result:
+        args.evalStatus === 'fail' || args.evalStatus === 'error'
+          ? 'partial'
+          : 'success',
+      conversion: {
+        converterId: PDF_UPLOAD_CONVERTER_ID,
+        sourceSubtype: toAuditDocumentSourceSubtype(
+          args.documentIr.source.sourceSubtype
+        ),
+        evalStatus: args.evalStatus,
+      },
+    });
+  } catch (error) {
+    console.warn('[orchestrator] recordAuditEvent document.convert failed', error);
   }
 }
 

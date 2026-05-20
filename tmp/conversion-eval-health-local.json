@@ -1,0 +1,165 @@
+{
+  "stage": "health",
+  "dlpDryRun": true,
+  "generatedAt": "2026-05-20T09:28:28.527Z",
+  "fixtureCount": 4,
+  "summary": {
+    "pass": 3,
+    "warn": 1,
+    "fail": 0
+  },
+  "fixtures": [
+    {
+      "documentId": "mhlw-overtime-limit-guide",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 0,
+          "textDensityWarnings": [],
+          "tableCandidates": 0
+        },
+        "locatorQuality": {
+          "hasPageLocators": false,
+          "hasTableLocators": false
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 6,
+          "averageChunkLength": 28,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
+        }
+      }
+    },
+    {
+      "documentId": "mhlw-r07-model-work-rules",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 0,
+          "textDensityWarnings": [],
+          "tableCandidates": 0
+        },
+        "locatorQuality": {
+          "hasPageLocators": false,
+          "hasTableLocators": false
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 7,
+          "averageChunkLength": 27.714285714285715,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
+        }
+      }
+    },
+    {
+      "documentId": "mhlw-labor-conditions-notice-general",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 0,
+          "textDensityWarnings": [],
+          "tableCandidates": 0
+        },
+        "locatorQuality": {
+          "hasPageLocators": false,
+          "hasTableLocators": false
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 6,
+          "averageChunkLength": 13.666666666666666,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
+        }
+      }
+    },
+    {
+      "documentId": "synthetic-employment-context-with-pii",
+      "overallStatus": "warn",
+      "overallReasons": [
+        "context_package_readiness: fail (downgraded to warn)"
+      ],
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 0,
+          "textDensityWarnings": [],
+          "tableCandidates": 0
+        },
+        "locatorQuality": {
+          "hasPageLocators": false,
+          "hasTableLocators": false
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 5,
+          "averageChunkLength": 24.4,
+          "oversizedChunks": 0,
+          "emptyChunks": 1
+        },
+        "overall": {
+          "status": "warn",
+          "reasons": [
+            "context_package_readiness: fail (downgraded to warn)"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -160,7 +160,8 @@ export async function POST(request: Request) {
         fileName: displayName,
         sourceSubtype: 'official-doc-pdf',
       });
-    } catch {
+    } catch (error) {
+      console.error('[documents] PDF extraction failed', error);
       return NextResponse.json(
         { error: 'PDF ファイルを解析できませんでした。' },
         { status: 400 }
@@ -203,6 +204,9 @@ export async function POST(request: Request) {
   }
 
   const contentType = mime ? mime : defaultContentTypeForExt(extCheck);
+  const pdfAuditContext = pdfExtractionResult
+    ? auditActorFromRequest(request)
+    : undefined;
 
   try {
     const result = await orchestrateUploadProcessing({
@@ -214,6 +218,7 @@ export async function POST(request: Request) {
         ? {
             documentIr: pdfExtractionResult.documentIr,
             sourceSubtype: 'official-doc-pdf',
+            auditContext: pdfAuditContext,
           }
         : {}),
     });

@@ -1,7 +1,25 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { createMock, getFirestoreClientMock, serverTimestampMock } = vi.hoisted(
+  () => ({
+    createMock: vi.fn(),
+    getFirestoreClientMock: vi.fn(),
+    serverTimestampMock: vi.fn(),
+  })
+);
+
+vi.mock('../../firestore', () => ({
+  FieldValue: {
+    serverTimestamp: serverTimestampMock,
+  },
+  getFirestoreClient: getFirestoreClientMock,
+}));
+
 import {
+  AUDIT_EVENTS_COLLECTION,
   auditActorFromRequest,
   ipAddressFromHeaders,
+  recordAuditEvent,
   userAgentFromHeaders,
 } from '../auditEvent';
 import { IAP_AUTHENTICATED_USER_EMAIL_HEADER } from '../../auth/resolveTenantIdFromAuth';
@@ -37,6 +55,121 @@ describe('audit request metadata helpers', () => {
         userAgent: 'vitest',
       },
     });
+  });
+});
+
+describe('recordAuditEvent', () => {
+  beforeEach(() => {
+    createMock.mockReset();
+    getFirestoreClientMock.mockReset();
+    serverTimestampMock.mockReturnValue('SERVER_TIMESTAMP');
+    getFirestoreClientMock.mockReturnValue({
+      collection: vi.fn(() => ({
+        doc: vi.fn(() => ({
+          create: createMock,
+        })),
+      })),
+    });
+  });
+
+  it('appends document.convert with conversion metadata and no inferenceDestination', async () => {
+    const eventId = await recordAuditEvent({
+      tenantId: 'customer.example',
+      actor: {
+        userId: 'alice@customer.example',
+        ipAddress: '203.0.113.10',
+        userAgent: 'vitest',
+      },
+      action: 'document.convert',
+      target: {
+        docId: 'doc-pdf-1',
+        fileName: 'sample.pdf',
+        sourceKind: 'upload',
+        sensitivity: 'Internal',
+      },
+      result: 'success',
+      conversion: {
+        converterId: 'pdf-parse',
+        sourceSubtype: 'official-doc-pdf',
+        evalStatus: 'pass',
+      },
+    });
+
+    expect(eventId).toMatch(/^[0-9a-z]+-[0-9a-f]{16}$/);
+    expect(getFirestoreClientMock).toHaveBeenCalledTimes(1);
+    expect(createMock).toHaveBeenCalledTimes(1);
+
+    const [written] = createMock.mock.calls[0] as [Record<string, unknown>];
+    expect(written).toEqual(
+      expect.objectContaining({
+        eventId,
+        occurredAt: 'SERVER_TIMESTAMP',
+        tenantId: 'customer.example',
+        action: 'document.convert',
+        result: 'success',
+        conversion: {
+          converterId: 'pdf-parse',
+          sourceSubtype: 'official-doc-pdf',
+          evalStatus: 'pass',
+        },
+      })
+    );
+    expect(written.inferenceDestination).toBeUndefined();
+    expect(getFirestoreClientMock.mock.results[0]?.value.collection).toHaveBeenCalledWith(
+      AUDIT_EVENTS_COLLECTION
+    );
+  });
+
+  it('accepts warn and fail evalStatus values on document.convert', async () => {
+    await recordAuditEvent({
+      tenantId: 'customer.example',
+      actor: {
+        userId: 'alice@customer.example',
+        ipAddress: '203.0.113.10',
+        userAgent: 'vitest',
+      },
+      action: 'document.convert',
+      target: {
+        docId: 'doc-pdf-2',
+        fileName: 'scan.pdf',
+        sourceKind: 'upload',
+        sensitivity: 'Confidential',
+      },
+      result: 'partial',
+      conversion: {
+        converterId: 'pdf-parse',
+        sourceSubtype: 'scan-pdf',
+        evalStatus: 'warn',
+      },
+    });
+
+    await recordAuditEvent({
+      tenantId: 'customer.example',
+      actor: {
+        userId: 'alice@customer.example',
+        ipAddress: '203.0.113.10',
+        userAgent: 'vitest',
+      },
+      action: 'document.convert',
+      target: {
+        docId: 'doc-pdf-3',
+        fileName: 'slides.pdf',
+        sourceKind: 'upload',
+        sensitivity: 'Internal',
+      },
+      result: 'partial',
+      conversion: {
+        converterId: 'pdf-parse',
+        sourceSubtype: 'slide-pdf',
+        evalStatus: 'fail',
+      },
+    });
+
+    expect(createMock).toHaveBeenCalledTimes(2);
+    const warnBody = createMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    const failBody = createMock.mock.calls[1]?.[0] as Record<string, unknown>;
+    expect((warnBody.conversion as { evalStatus: string }).evalStatus).toBe('warn');
+    expect((failBody.conversion as { evalStatus: string }).evalStatus).toBe('fail');
   });
 });
 

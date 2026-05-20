@@ -11,16 +11,37 @@ export const AUDIT_EVENTS_COLLECTION = 'auditEvents';
 export type AuditEventAction =
   | 'document.import'
   | 'document.reimport'
+  | 'document.convert'
   | 'document.view'
   | 'document.export'
   | 'document.delete'
   | 'chunk.access'
   | 'mask.override';
 
+export type AuditDocumentSourceSubtype =
+  | 'official-doc-pdf'
+  | 'slide-pdf'
+  | 'scan-pdf';
+
+export type AuditConversionEvalStatus =
+  | 'pass'
+  | 'warn'
+  | 'fail'
+  | 'error';
+
+export type AuditEventConversion = {
+  converterId: string;
+  sourceSubtype: AuditDocumentSourceSubtype;
+  evalStatus: AuditConversionEvalStatus;
+};
+
 export type AuditEventResult = 'success' | 'failure' | 'partial';
 
 export type AuditProcessingProfile = ProcessingProfile;
 
+/** Vertex 推論先の監査用最小形（Phase 3-E §6.1 と同形）。 */
+// TODO(Phase 3-H-3): document.convert では subtype 2/3 で Gemini（Vertex）を実際に呼んだ成功パスのみ
+// inferenceDestination を必須で埋める。条件の正本は docs/phase-3-h-3-direction.md §4.2。
 export type AuditInferenceDestination = {
   vendor: 'vertex';
   region: string;
@@ -61,7 +82,14 @@ export type AuditEventWrite = {
   purposeBinding?: string;
   ruleSetVersion?: string;
   maskingMetrics?: AuditMaskingMetrics;
+  /**
+   * M2-C: 型のみ予約。M2 実装では document.convert に未設定。
+   * TODO(Phase 3-H-3): document.convert かつ conversion.sourceSubtype が slide-pdf | scan-pdf で
+   * Vertex Gemini 呼出があった成功パスでは必須。official-doc-pdf / pdf-parse-fallback のみは省略可。
+   * 仕様: docs/phase-3-h-3-direction.md §4.2
+   */
   inferenceDestination?: AuditInferenceDestination;
+  conversion?: AuditEventConversion;
   dataResidency?: AuditDataResidency;
 };
 

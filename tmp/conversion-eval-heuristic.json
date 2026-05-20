@@ -1,0 +1,212 @@
+{
+  "stage": "heuristic",
+  "dlpDryRun": true,
+  "generatedAt": "2026-05-20T09:52:11.189Z",
+  "fixtureCount": 4,
+  "summary": {
+    "pass": 3,
+    "warn": 1,
+    "fail": 0
+  },
+  "heuristicAxisSummary": {
+    "coverage": {
+      "pass": 3,
+      "warn": 1,
+      "fail": 0
+    },
+    "locator_quality": {
+      "pass": 3,
+      "warn": 1,
+      "fail": 0
+    },
+    "safety_readiness": {
+      "pass": 4,
+      "warn": 0,
+      "fail": 0
+    }
+  },
+  "fixtures": [
+    {
+      "documentId": "mhlw-overtime-limit-guide",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "heuristicAxisStatuses": {
+        "coverage": "pass",
+        "locator_quality": "pass",
+        "safety_readiness": "pass"
+      },
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 1,
+          "textDensityWarnings": [
+            "page 3: low text density (27 chars across 3 block(s); threshold=50)"
+          ],
+          "tableCandidates": 3
+        },
+        "locatorQuality": {
+          "hasPageLocators": true,
+          "hasTableLocators": true
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 6,
+          "averageChunkLength": 28,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
+        }
+      }
+    },
+    {
+      "documentId": "mhlw-r07-model-work-rules",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "heuristicAxisStatuses": {
+        "coverage": "pass",
+        "locator_quality": "pass",
+        "safety_readiness": "pass"
+      },
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 1,
+          "textDensityWarnings": [
+            "page 3: low text density (23 chars across 2 block(s); threshold=50)",
+            "page 4: low text density (23 chars across 1 block(s); threshold=50)"
+          ],
+          "tableCandidates": 2
+        },
+        "locatorQuality": {
+          "hasPageLocators": true,
+          "hasTableLocators": true
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 7,
+          "averageChunkLength": 27.714285714285715,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
+        }
+      }
+    },
+    {
+      "documentId": "mhlw-labor-conditions-notice-general",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "heuristicAxisStatuses": {
+        "coverage": "pass",
+        "locator_quality": "pass",
+        "safety_readiness": "pass"
+      },
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 1,
+          "textDensityWarnings": [
+            "page 2: low text density (28 chars across 1 block(s); threshold=50)"
+          ],
+          "tableCandidates": 4
+        },
+        "locatorQuality": {
+          "hasPageLocators": true,
+          "hasTableLocators": true
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 6,
+          "averageChunkLength": 13.666666666666666,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
+        }
+      }
+    },
+    {
+      "documentId": "synthetic-employment-context-with-pii",
+      "overallStatus": "warn",
+      "overallReasons": [
+        "context_package_readiness: fail (downgraded to warn)"
+      ],
+      "heuristicAxisStatuses": {
+        "coverage": "warn",
+        "locator_quality": "warn",
+        "safety_readiness": "pass"
+      },
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 0.75,
+          "textDensityWarnings": [
+            "page 3: all blocks are empty after trim",
+            "page 4: low text density (7 chars across 1 block(s); threshold=50)"
+          ],
+          "tableCandidates": 0
+        },
+        "locatorQuality": {
+          "hasPageLocators": true,
+          "hasTableLocators": false
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 5,
+          "averageChunkLength": 24.4,
+          "oversizedChunks": 0,
+          "emptyChunks": 1
+        },
+        "overall": {
+          "status": "warn",
+          "reasons": [
+            "context_package_readiness: fail (downgraded to warn)"
+          ]
+        }
+      }
+    }
+  ]
+}

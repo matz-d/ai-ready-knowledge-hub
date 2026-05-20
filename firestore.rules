@@ -8,6 +8,14 @@ service cloud.firestore {
       allow update, delete: if false; // append-only 保証
     }
 
+    // Conversion eval — read/write exclusively via Admin SDK (Cloud Run behind IAP).
+    // Client SDK has no direct access; eval rows are append-only at the adapter layer.
+    match /conversion_eval/{evalId} {
+      allow create: if false;
+      allow read: if false;
+      allow update, delete: if false;
+    }
+
     // Feature flags — read/write exclusively via Admin SDK (Cloud Run).
     // Client SDK has no direct access; flags are served only through the
     // /api/* routes after IAP authentication.

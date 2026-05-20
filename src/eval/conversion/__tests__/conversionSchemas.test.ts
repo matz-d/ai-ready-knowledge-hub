@@ -142,9 +142,33 @@ describe('safety_readiness health rollup', () => {
 
   it('passes heuristic rollup when maskable chunk rate is low but no unmaskable PII is found', () => {
     const result = createEmptyConversionEvalResult();
+    result.coverage.pageCoverage = 1;
+    result.locatorQuality.hasPageLocators = true;
+    result.locatorQuality.hasTableLocators = true;
     result.safetyReadiness.unmaskablePiiFindings = 0;
     result.safetyReadiness.maskableChunkRate = 0.5;
     expect(evalSafetyReadiness(result, 'heuristic')).toBe('pass');
+    expect(rollupOverallStatus(result, 'heuristic')).toEqual({
+      status: 'pass',
+      reasons: [],
+    });
+  });
+});
+
+describe('heuristic axis rollup (coverage / locator_quality)', () => {
+  it('keeps health stage coverage and locator as pass', () => {
+    const result = createEmptyConversionEvalResult();
+    result.coverage.pageCoverage = 0;
+    result.locatorQuality.hasPageLocators = false;
+    expect(rollupOverallStatus(result, 'health').status).toBe('pass');
+  });
+
+  it('keeps overall pass when coverage is warn-only (non-blocker)', () => {
+    const result = createEmptyConversionEvalResult();
+    result.coverage.pageCoverage = 0.8;
+    result.locatorQuality.hasPageLocators = true;
+    result.locatorQuality.hasTableLocators = true;
+    result.safetyReadiness.unmaskablePiiFindings = 0;
     expect(rollupOverallStatus(result, 'heuristic')).toEqual({
       status: 'pass',
       reasons: [],

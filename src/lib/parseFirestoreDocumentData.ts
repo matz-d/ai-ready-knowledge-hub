@@ -120,6 +120,7 @@ const firestoreDocumentDataSchema = z
     maskerError: z.union([z.null(), firestoreErrorBlockSchema]),
     maskingPending: z.boolean().nullable().optional(),
     conversionError: z.union([z.null(), firestoreErrorBlockSchema]).optional(),
+    latestConversionEvalId: z.string().nullable().optional(),
   })
   .passthrough();
 
