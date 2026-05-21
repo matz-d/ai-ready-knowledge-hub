@@ -44,11 +44,14 @@ import {
 import { createChunkFirestoreAdapter } from './chunkFirestoreAdapter';
 import {
   ConversionInferenceDestinationInvariantError,
+  ConversionUnmaskablePiiFindingsInvariantError,
   assertConversionInferenceDestinationInvariant,
+  assertConversionUnmaskablePiiFindingsInvariant,
   recordAuditEvent,
   type AuditConversionEvalStatus,
   type AuditConverterId,
   type AuditDocumentSourceSubtype,
+  type AuditEventConversion,
   type AuditEventWrite,
   type AuditInferenceDestination,
 } from './audit/auditEvent';
@@ -66,6 +69,11 @@ import {
 export type PdfConversionAudit = {
   converterId: AuditConverterId;
   inferenceDestination?: AuditInferenceDestination;
+  /**
+   * Count of Gemini OCR `piiFindings` with `maskability === 'unmaskable'`.
+   * Required on scan-pdf `gemini-vertex-ocr` success paths (set at route boundary).
+   */
+  unmaskablePiiFindingsCount?: number;
 };
 
 const DEFAULT_PDF_CONVERSION_AUDIT: PdfConversionAudit = {
@@ -985,15 +993,29 @@ async function orchestratePdfPath(args: {
   // the audit write boundary; checking here keeps failure ordering symmetric
   // with non-Vertex paths so a wiring bug cannot leave orphan chunks behind a
   // failed document.
+  const auditSourceSubtype = toAuditDocumentSourceSubtype(
+    args.documentIr.source.sourceSubtype
+  );
+  const preflightConversion: AuditEventConversion = {
+    converterId: args.conversion.converterId,
+    sourceSubtype: auditSourceSubtype,
+    evalStatus: 'pass',
+    ...(args.conversion.unmaskablePiiFindingsCount !== undefined
+      ? {
+          unmaskablePiiFindings: {
+            count: args.conversion.unmaskablePiiFindingsCount,
+          },
+        }
+      : {}),
+  };
+
   assertConversionInferenceDestinationInvariant({
-    conversion: {
-      converterId: args.conversion.converterId,
-      sourceSubtype: toAuditDocumentSourceSubtype(
-        args.documentIr.source.sourceSubtype
-      ),
-      evalStatus: 'pass',
-    },
+    conversion: preflightConversion,
     inferenceDestination: args.conversion.inferenceDestination,
+  });
+  assertConversionUnmaskablePiiFindingsInvariant({
+    conversion: preflightConversion,
+    result: 'success',
   });
 
   let curatorOutput: { result: CuratorOutputResult; completedAt: Date };
@@ -1216,13 +1238,25 @@ async function recordDocumentConvertAudit(args: {
         converterId: args.conversion.converterId,
         sourceSubtype,
         evalStatus: args.evalStatus,
+        ...(args.conversion.converterId === 'gemini-vertex-ocr' &&
+        sourceSubtype === 'scan-pdf' &&
+        args.conversion.unmaskablePiiFindingsCount !== undefined
+          ? {
+              unmaskablePiiFindings: {
+                count: args.conversion.unmaskablePiiFindingsCount,
+              },
+            }
+          : {}),
       },
       ...(args.conversion.inferenceDestination
         ? { inferenceDestination: args.conversion.inferenceDestination }
         : {}),
     });
   } catch (error) {
-    if (error instanceof ConversionInferenceDestinationInvariantError) {
+    if (
+      error instanceof ConversionInferenceDestinationInvariantError ||
+      error instanceof ConversionUnmaskablePiiFindingsInvariantError
+    ) {
       throw error;
     }
     console.warn('[orchestrator] recordAuditEvent document.convert failed', error);

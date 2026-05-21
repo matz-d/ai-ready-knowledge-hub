@@ -12,6 +12,7 @@ export {
   COVERAGE_PAGE_COVERAGE_PASS_THRESHOLD,
   COVERAGE_PAGE_COVERAGE_WARN_THRESHOLD,
   LOW_DENSITY_PAGE_CHAR_THRESHOLD,
+  type EvalCoverageOptions,
 } from './evalCoverage';
 export {
   evalLocatorQuality,

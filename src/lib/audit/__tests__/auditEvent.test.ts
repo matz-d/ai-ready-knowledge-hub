@@ -18,6 +18,7 @@ vi.mock('../../firestore', () => ({
 import {
   AUDIT_EVENTS_COLLECTION,
   assertConversionInferenceDestinationInvariant,
+  assertConversionUnmaskablePiiFindingsInvariant,
   auditActorFromRequest,
   ipAddressFromHeaders,
   recordAuditEvent,
@@ -212,7 +213,7 @@ describe('recordAuditEvent', () => {
     );
   });
 
-  it('appends document.convert for scan-pdf gemini-vertex-ocr with inferenceDestination', async () => {
+  it('appends document.convert for scan-pdf gemini-vertex-ocr with inferenceDestination and unmaskablePiiFindings count', async () => {
     await recordAuditEvent({
       tenantId: 'customer.example',
       actor: {
@@ -232,6 +233,7 @@ describe('recordAuditEvent', () => {
         converterId: 'gemini-vertex-ocr',
         sourceSubtype: 'scan-pdf',
         evalStatus: 'pass',
+        unmaskablePiiFindings: { count: 0 },
       },
       inferenceDestination: {
         vendor: 'vertex',
@@ -246,6 +248,10 @@ describe('recordAuditEvent', () => {
       region: 'us-central1',
       model: 'gemini-2.5-pro',
     });
+    expect(
+      (written.conversion as { unmaskablePiiFindings: { count: number } })
+        .unmaskablePiiFindings
+    ).toEqual({ count: 0 });
   });
 
   it('appends document.convert for slide-pdf pdf-parse-fallback without inferenceDestination', async () => {
@@ -458,6 +464,77 @@ describe('assertConversionInferenceDestinationInvariant', () => {
           region: 'asia-northeast1',
           model: 'gemini-2.5-flash',
         },
+      })
+    ).toThrow(/must not be set/);
+  });
+});
+
+describe('assertConversionUnmaskablePiiFindingsInvariant', () => {
+  it('accepts scan-pdf + gemini-vertex-ocr + success + count 0', () => {
+    expect(() =>
+      assertConversionUnmaskablePiiFindingsInvariant({
+        conversion: {
+          converterId: 'gemini-vertex-ocr',
+          sourceSubtype: 'scan-pdf',
+          evalStatus: 'pass',
+          unmaskablePiiFindings: { count: 0 },
+        },
+        result: 'success',
+      })
+    ).not.toThrow();
+  });
+
+  it('accepts scan-pdf + gemini-vertex-ocr + success + count 3', () => {
+    expect(() =>
+      assertConversionUnmaskablePiiFindingsInvariant({
+        conversion: {
+          converterId: 'gemini-vertex-ocr',
+          sourceSubtype: 'scan-pdf',
+          evalStatus: 'pass',
+          unmaskablePiiFindings: { count: 3 },
+        },
+        result: 'success',
+      })
+    ).not.toThrow();
+  });
+
+  it('throws when scan-pdf + gemini-vertex-ocr + success + count is missing', () => {
+    expect(() =>
+      assertConversionUnmaskablePiiFindingsInvariant({
+        conversion: {
+          converterId: 'gemini-vertex-ocr',
+          sourceSubtype: 'scan-pdf',
+          evalStatus: 'pass',
+        },
+        result: 'success',
+      })
+    ).toThrow(/unmaskablePiiFindings\.count is required/);
+  });
+
+  it('throws when slide-pdf + gemini-direct-read + success + unmaskablePiiFindings set', () => {
+    expect(() =>
+      assertConversionUnmaskablePiiFindingsInvariant({
+        conversion: {
+          converterId: 'gemini-direct-read',
+          sourceSubtype: 'slide-pdf',
+          evalStatus: 'pass',
+          unmaskablePiiFindings: { count: 1 },
+        },
+        result: 'success',
+      })
+    ).toThrow(/must not be set/);
+  });
+
+  it('throws when scan-pdf + pdf-parse-fallback + success + unmaskablePiiFindings set', () => {
+    expect(() =>
+      assertConversionUnmaskablePiiFindingsInvariant({
+        conversion: {
+          converterId: 'pdf-parse-fallback',
+          sourceSubtype: 'scan-pdf',
+          evalStatus: 'warn',
+          unmaskablePiiFindings: { count: 1 },
+        },
+        result: 'success',
       })
     ).toThrow(/must not be set/);
   });

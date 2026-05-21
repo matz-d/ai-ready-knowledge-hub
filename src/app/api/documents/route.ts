@@ -27,6 +27,7 @@ import { documentUploadSuccessBodyFromOrchestrate } from '../../../lib/documentU
 import { xlsxToNormalizedMarkdown } from '../../../lib/extractors/xlsxExtractor';
 import { extractPdfFromBuffer } from '../../../lib/extractors/pdfDocumentExtractor';
 import { extractSlidePdfFromBuffer } from '../../../lib/extractors/slidePdfDocumentExtractor';
+import { extractScanPdfFromBuffer } from '../../../lib/extractors/scanPdfDocumentExtractor';
 import { replaceChunksForDoc } from '../../../lib/chunkRegenerator';
 import { auditActorFromRequest, recordAuditEvent } from '../../../lib/audit/auditEvent';
 import { getFeatureFlag, isFeatureEnabled } from '../../../lib/featureFlags';
@@ -54,11 +55,43 @@ type PdfExtractionResult = {
 };
 
 type PdfSubtypePreFlightConfig = {
-  flagId: 'pdf-conversion-subtype-1' | 'pdf-conversion-subtype-2';
+  flagId:
+    | 'pdf-conversion-subtype-1'
+    | 'pdf-conversion-subtype-2'
+    | 'pdf-conversion-subtype-3';
   extract: (args: { buffer: Buffer; fileName: string }) => Promise<PdfExtractionResult>;
 };
 
+/** Gemini OCR `piiFindings` only — not heuristic DLP / Masker output. */
+function countUnmaskablePiiFromGeminiOcr(
+  piiFindings: ReadonlyArray<{ maskability: 'maskable' | 'unmaskable' }>
+): number {
+  return piiFindings.filter((finding) => finding.maskability === 'unmaskable')
+    .length;
+}
+
 const PDF_SUBTYPE_PRE_FLIGHT_CONFIGS: readonly PdfSubtypePreFlightConfig[] = [
+  {
+    flagId: 'pdf-conversion-subtype-3',
+    extract: async ({ buffer, fileName }) => {
+      const result = await extractScanPdfFromBuffer({ buffer, fileName });
+      return {
+        textContent: result.textContent,
+        documentIr: result.documentIr,
+        conversion: {
+          converterId: result.conversion.converterId,
+          inferenceDestination: {
+            vendor: 'vertex',
+            region: result.conversion.region,
+            model: result.conversion.model,
+          },
+          unmaskablePiiFindingsCount: countUnmaskablePiiFromGeminiOcr(
+            result.conversion.piiFindings
+          ),
+        },
+      };
+    },
+  },
   {
     flagId: 'pdf-conversion-subtype-2',
     extract: async ({ buffer, fileName }) => {
@@ -95,7 +128,7 @@ const PDF_SUBTYPE_PRE_FLIGHT_CONFIGS: readonly PdfSubtypePreFlightConfig[] = [
 ] as const;
 
 const PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE =
-  'PDF 変換の feature flag が競合しています。同一テナントで official-doc-pdf と slide-pdf を同時に有効にできません。';
+  'PDF 変換の feature flag が競合しています。同一テナントで PDF 変換 subtype flag (official-doc-pdf / slide-pdf / scan-pdf) を複数同時に有効にできません。';
 
 /** Whole mebibytes for client-facing copy (limit is defined in binary units). */
 function formatBytesAsMB(bytes: number): string {

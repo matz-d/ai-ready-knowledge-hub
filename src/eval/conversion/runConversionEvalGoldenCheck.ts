@@ -91,5 +91,5 @@ export async function runConversionEvalGoldenCheck<
   };
 
   assertConversionEvalResultStageShape(result, GOLDEN_CHECK_STAGE);
-  return attachOverallStatus(result, GOLDEN_CHECK_STAGE);
+  return attachOverallStatus(result, GOLDEN_CHECK_STAGE, input.sourceSubtype);
 }

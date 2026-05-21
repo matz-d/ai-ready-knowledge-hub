@@ -55,6 +55,14 @@ export type AuditEventConversion = {
   converterId: AuditConverterId;
   sourceSubtype: AuditDocumentSourceSubtype;
   evalStatus: AuditConversionEvalStatus;
+  /**
+   * Gemini OCR `piiFindings` with `maskability === 'unmaskable'` (scan-pdf
+   * `gemini-vertex-ocr` success only). Not heuristic DLP or Masker output.
+   * Validated at write time by {@link assertConversionUnmaskablePiiFindingsInvariant}.
+   */
+  unmaskablePiiFindings?: {
+    count: number;
+  };
 };
 
 export type AuditEventResult = 'success' | 'failure' | 'partial';
@@ -112,6 +120,49 @@ export function assertConversionInferenceDestinationInvariant(input: {
   if (!requireInferenceDestination && input.inferenceDestination) {
     throw new ConversionInferenceDestinationInvariantError(
       `document.convert: inferenceDestination must not be set for converterId=${input.conversion.converterId} on sourceSubtype=${input.conversion.sourceSubtype}`
+    );
+  }
+}
+
+/** Thrown by {@link assertConversionUnmaskablePiiFindingsInvariant} on wiring violations. */
+export class ConversionUnmaskablePiiFindingsInvariantError extends Error {
+  override readonly name = 'ConversionUnmaskablePiiFindingsInvariantError';
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+/**
+ * Enforce scan-pdf Vertex OCR audit metadata at the `document.convert` boundary.
+ *
+ * `conversion.unmaskablePiiFindings.count` MUST be present iff
+ * sourceSubtype is scan-pdf, converterId is gemini-vertex-ocr, and result is
+ * success or partial (eval-driven partial counts as success-like).
+ *
+ * MUST NOT be set on official-doc-pdf, slide-pdf, pdf-parse, or
+ * pdf-parse-fallback paths.
+ */
+export function assertConversionUnmaskablePiiFindingsInvariant(input: {
+  conversion: AuditEventConversion;
+  result: AuditEventResult;
+}): void {
+  const vertexOcrSuccessPath =
+    input.conversion.sourceSubtype === 'scan-pdf' &&
+    input.conversion.converterId === 'gemini-vertex-ocr';
+  const successLike =
+    input.result === 'success' || input.result === 'partial';
+  const requireCount = vertexOcrSuccessPath && successLike;
+  const count = input.conversion.unmaskablePiiFindings?.count;
+
+  if (requireCount && count === undefined) {
+    throw new ConversionUnmaskablePiiFindingsInvariantError(
+      `document.convert: conversion.unmaskablePiiFindings.count is required for converterId=${input.conversion.converterId} on sourceSubtype=${input.conversion.sourceSubtype} with result=${input.result}`
+    );
+  }
+  if (!vertexOcrSuccessPath && input.conversion.unmaskablePiiFindings !== undefined) {
+    throw new ConversionUnmaskablePiiFindingsInvariantError(
+      `document.convert: conversion.unmaskablePiiFindings must not be set for converterId=${input.conversion.converterId} on sourceSubtype=${input.conversion.sourceSubtype}`
     );
   }
 }
@@ -228,6 +279,10 @@ export async function recordAuditEvent(
     assertConversionInferenceDestinationInvariant({
       conversion: input.conversion,
       inferenceDestination: input.inferenceDestination,
+    });
+    assertConversionUnmaskablePiiFindingsInvariant({
+      conversion: input.conversion,
+      result: input.result,
     });
   }
 

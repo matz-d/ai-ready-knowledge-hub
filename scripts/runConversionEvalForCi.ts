@@ -285,7 +285,9 @@ async function evaluateFixture(
     overallStatus: result.overall.status,
     overallReasons: result.overall.reasons,
     heuristicAxisStatuses:
-      stage === 'heuristic' ? toHeuristicCiAxisStatuses(result) : undefined,
+      stage === 'heuristic'
+        ? toHeuristicCiAxisStatuses(result, fixture.sourceSubtype)
+        : undefined,
     result,
   };
 }

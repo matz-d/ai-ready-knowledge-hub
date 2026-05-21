@@ -7,6 +7,7 @@ const {
   getKnowledgeHubBucketNameMock,
   extractPdfFromBufferMock,
   extractSlidePdfFromBufferMock,
+  extractScanPdfFromBufferMock,
   getFeatureFlagMock,
   isFeatureEnabledMock,
   getFirestoreClientMock,
@@ -38,6 +39,7 @@ const {
     getKnowledgeHubBucketNameMock: vi.fn(),
     extractPdfFromBufferMock: vi.fn(),
     extractSlidePdfFromBufferMock: vi.fn(),
+    extractScanPdfFromBufferMock: vi.fn(),
     getFeatureFlagMock: vi.fn(),
     isFeatureEnabledMock: vi.fn(),
     getFirestoreClientMock: vi.fn(),
@@ -71,6 +73,10 @@ vi.mock('../../../../lib/extractors/pdfDocumentExtractor', () => ({
 
 vi.mock('../../../../lib/extractors/slidePdfDocumentExtractor', () => ({
   extractSlidePdfFromBuffer: extractSlidePdfFromBufferMock,
+}));
+
+vi.mock('../../../../lib/extractors/scanPdfDocumentExtractor', () => ({
+  extractScanPdfFromBuffer: extractScanPdfFromBufferMock,
 }));
 
 vi.mock('../../../../lib/featureFlags', () => ({
@@ -172,6 +178,53 @@ const minimalSlidePdfExtraction = {
   },
 };
 
+const minimalScanPdfExtraction = {
+  textContent: 'Scan PDF OCR body text',
+  documentIr: {
+    schemaVersion: 1,
+    source: {
+      fileName: 'sample.pdf',
+      mediaType: 'application/pdf',
+      sourceKind: 'upload',
+      sourceSubtype: 'scan-pdf',
+    },
+    pages: [
+      {
+        pageNumber: 1,
+        blocks: [
+          {
+            blockId: 'p1-ocr1',
+            kind: 'paragraph',
+            text: 'Scan PDF OCR body text',
+          },
+        ],
+      },
+    ],
+  },
+  conversion: {
+    converterId: 'gemini-vertex-ocr' as const,
+    calledVertex: true as const,
+    model: 'gemini-2.5-flash',
+    region: 'asia-northeast1',
+    piiFindings: [
+      {
+        pageNumber: 1,
+        category: 'person_name' as const,
+        evidenceSnippet: '山田太郎',
+        maskability: 'maskable' as const,
+        reason: 'full name visible',
+      },
+      {
+        pageNumber: 1,
+        category: 'address' as const,
+        evidenceSnippet: '東京都...',
+        maskability: 'unmaskable' as const,
+        reason: 'partial visibility',
+      },
+    ],
+  },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   getKnowledgeHubBucketNameMock.mockReturnValue('bucket-1');
@@ -184,6 +237,7 @@ beforeEach(() => {
   isFeatureEnabledMock.mockImplementation((flag) => flag?.defaultEnabled ?? false);
   extractPdfFromBufferMock.mockResolvedValue(minimalPdfExtraction);
   extractSlidePdfFromBufferMock.mockResolvedValue(minimalSlidePdfExtraction);
+  extractScanPdfFromBufferMock.mockResolvedValue(minimalScanPdfExtraction);
   replaceChunksForDocMock.mockResolvedValue(undefined);
   orchestrateUploadProcessingMock.mockResolvedValue({
     kind: 'curated',
@@ -765,6 +819,7 @@ describe('POST /api/documents', () => {
       );
       expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
       expect(extractSlidePdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractScanPdfFromBufferMock).not.toHaveBeenCalled();
       expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
     });
 
@@ -793,7 +848,11 @@ describe('POST /api/documents', () => {
     });
 
     it('returns 403 when both pdf-conversion-subtype-1 and subtype-2 flags are enabled', async () => {
-      isFeatureEnabledMock.mockReturnValue(true);
+      isFeatureEnabledMock.mockImplementation(
+        (flag) =>
+          flag?.flagId === 'pdf-conversion-subtype-1' ||
+          flag?.flagId === 'pdf-conversion-subtype-2'
+      );
 
       const response = await POST(buildRequestWithFile(pdfFile()));
 
@@ -805,6 +864,7 @@ describe('POST /api/documents', () => {
       );
       expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
       expect(extractSlidePdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractScanPdfFromBufferMock).not.toHaveBeenCalled();
       expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
     });
 
@@ -822,6 +882,7 @@ describe('POST /api/documents', () => {
         })
       );
       expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractScanPdfFromBufferMock).not.toHaveBeenCalled();
       expect(orchestrateUploadProcessingMock).toHaveBeenCalledWith(
         expect.objectContaining({
           displayName: 'sample.pdf',
@@ -840,6 +901,126 @@ describe('POST /api/documents', () => {
         })
       );
       expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+    });
+
+    it('uses scan-pdf extractor and forwards scan subtype + Vertex inferenceDestination when subtype-3 is enabled', async () => {
+      isFeatureEnabledMock.mockImplementation(
+        (flag) => flag?.flagId === 'pdf-conversion-subtype-3'
+      );
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(200);
+      expect(extractScanPdfFromBufferMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileName: 'sample.pdf',
+        })
+      );
+      expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractSlidePdfFromBufferMock).not.toHaveBeenCalled();
+      expect(orchestrateUploadProcessingMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          displayName: 'sample.pdf',
+          contentType: 'application/pdf',
+          content: 'Scan PDF OCR body text',
+          documentIr: minimalScanPdfExtraction.documentIr,
+          sourceSubtype: 'scan-pdf',
+          conversion: expect.objectContaining({
+            converterId: 'gemini-vertex-ocr',
+            inferenceDestination: {
+              vendor: 'vertex',
+              region: 'asia-northeast1',
+              model: 'gemini-2.5-flash',
+            },
+          }),
+        })
+      );
+      expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when scan-pdf extraction fails and does not call orchestrator', async () => {
+      isFeatureEnabledMock.mockImplementation(
+        (flag) => flag?.flagId === 'pdf-conversion-subtype-3'
+      );
+      extractScanPdfFromBufferMock.mockRejectedValue(
+        new Error('Gemini OCR timeout')
+      );
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(400);
+      await expect(parseJson(response)).resolves.toEqual(
+        expect.objectContaining({
+          error: 'PDF ファイルを解析できませんでした。',
+        })
+      );
+      expect(extractScanPdfFromBufferMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileName: 'sample.pdf',
+        })
+      );
+      expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractSlidePdfFromBufferMock).not.toHaveBeenCalled();
+      expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 403 when both subtype-1 and subtype-3 flags are enabled (3-way mutex)', async () => {
+      isFeatureEnabledMock.mockImplementation(
+        (flag) =>
+          flag?.flagId === 'pdf-conversion-subtype-1' ||
+          flag?.flagId === 'pdf-conversion-subtype-3'
+      );
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(403);
+      await expect(parseJson(response)).resolves.toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('feature flag が競合'),
+        })
+      );
+      expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractSlidePdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractScanPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 403 when both subtype-2 and subtype-3 flags are enabled (3-way mutex)', async () => {
+      isFeatureEnabledMock.mockImplementation(
+        (flag) =>
+          flag?.flagId === 'pdf-conversion-subtype-2' ||
+          flag?.flagId === 'pdf-conversion-subtype-3'
+      );
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(403);
+      await expect(parseJson(response)).resolves.toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('feature flag が競合'),
+        })
+      );
+      expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractSlidePdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractScanPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 403 when subtype-1, subtype-2, and subtype-3 flags are all enabled (3-way mutex)', async () => {
+      isFeatureEnabledMock.mockReturnValue(true);
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(403);
+      await expect(parseJson(response)).resolves.toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('feature flag が競合'),
+        })
+      );
+      expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractSlidePdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractScanPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
     });
 
     it('returns 400 when PDF parse fails and does not call orchestrator', async () => {
