@@ -2,9 +2,17 @@
 
 `runner.ts` は Gemini/Vertex AI OCR で scan PDF を観察する PoC runner。
 
-## Degraded fail-closed fixture
+## OCR fail-closed fixture (<=5 MiB)
 
-`fixtures/generate-degraded.sh` は、白紙の労働条件通知書 scan を 150 dpi 相当に rasterize し、5 度傾け、Gaussian noise と低コントラスト化を加えて、OCR fail-closed 観察用の `degraded-scan-fail-closed.pdf` を生成する。
+`fixtures/generate-ocr-fail-closed.sh` は、白紙の労働条件通知書 scan を低解像度化・二値化・ノイズ付与して、**5 MiB 以下**の `ocr-fail-closed-preflight.pdf` を生成する。`degraded-scan-fail-closed.pdf`（6 MB）は 413 size-limit 証跡専用であり、この用途には使わない。
+
+```bash
+bash poc/document-conversion/scan-pdf/fixtures/generate-ocr-fail-closed.sh
+```
+
+## Degraded size-limit fixture (413 evidence)
+
+`fixtures/generate-degraded.sh` は、白紙の労働条件通知書 scan を 150 dpi 相当に rasterize し、5 度傾け、Gaussian noise と低コントラスト化を加えて、`degraded-scan-fail-closed.pdf` を生成する。**役割は 5 MiB 超の 413 size-limit 証跡のみ**。
 
 ```bash
 bash poc/document-conversion/scan-pdf/fixtures/generate-degraded.sh

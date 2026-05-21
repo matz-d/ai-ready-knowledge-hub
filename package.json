@@ -12,6 +12,8 @@
     "poc:conversion:official-doc-pdf:compare": "tsx poc/document-conversion/official-doc-pdf/compare/runCompare.ts",
     "poc:conversion:slide-pdf": "tsx poc/document-conversion/slide-pdf/runner.ts",
     "poc:conversion:scan-pdf": "tsx poc/document-conversion/scan-pdf/runner.ts",
+    "fixtures:scan-pdf:unmaskable:verify": "tsx scripts/verifyScanPdfUnmaskableFixture.ts",
+    "fixtures:scan-pdf:ocr-fail-closed": "bash poc/document-conversion/scan-pdf/fixtures/generate-ocr-fail-closed.sh",
     "fixtures:scan-pdf:invoice": "tsx poc/document-conversion/scan-pdf/fixtures/generate-synthetic-invoice.ts",
     "test": "vitest run",
     "test:e2e:smoke": "vitest run --config vitest.e2e.smoke.config.ts",

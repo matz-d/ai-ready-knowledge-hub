@@ -1,26 +1,26 @@
 {
   "stage": "heuristic",
   "dlpDryRun": true,
-  "generatedAt": "2026-05-20T09:52:11.189Z",
-  "fixtureCount": 4,
+  "generatedAt": "2026-05-21T08:00:08.294Z",
+  "fixtureCount": 7,
   "summary": {
-    "pass": 3,
+    "pass": 6,
     "warn": 1,
     "fail": 0
   },
   "heuristicAxisSummary": {
     "coverage": {
-      "pass": 3,
+      "pass": 6,
       "warn": 1,
       "fail": 0
     },
     "locator_quality": {
-      "pass": 3,
-      "warn": 1,
+      "pass": 5,
+      "warn": 2,
       "fail": 0
     },
     "safety_readiness": {
-      "pass": 4,
+      "pass": 7,
       "warn": 0,
       "fail": 0
     }
@@ -205,6 +205,132 @@
           "reasons": [
             "context_package_readiness: fail (downgraded to warn)"
           ]
+        }
+      }
+    },
+    {
+      "documentId": "synthetic-context-package-deck",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "heuristicAxisStatuses": {
+        "coverage": "pass",
+        "locator_quality": "pass",
+        "safety_readiness": "pass"
+      },
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 1,
+          "textDensityWarnings": [],
+          "tableCandidates": 1
+        },
+        "locatorQuality": {
+          "hasPageLocators": true,
+          "hasTableLocators": true
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 12,
+          "averageChunkLength": 47.333333333333336,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
+        }
+      }
+    },
+    {
+      "documentId": "nta-withholding-form-blank-scan",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "heuristicAxisStatuses": {
+        "coverage": "pass",
+        "locator_quality": "warn",
+        "safety_readiness": "pass"
+      },
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 1,
+          "textDensityWarnings": [],
+          "tableCandidates": 0
+        },
+        "locatorQuality": {
+          "hasPageLocators": true,
+          "hasTableLocators": false
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 7,
+          "averageChunkLength": 22.714285714285715,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
+        }
+      }
+    },
+    {
+      "documentId": "synthetic-invoice-with-pii-scan",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "heuristicAxisStatuses": {
+        "coverage": "pass",
+        "locator_quality": "pass",
+        "safety_readiness": "pass"
+      },
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 1,
+          "textDensityWarnings": [],
+          "tableCandidates": 1
+        },
+        "locatorQuality": {
+          "hasPageLocators": true,
+          "hasTableLocators": true
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 6,
+          "averageChunkLength": 29.333333333333332,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
         }
       }
     }

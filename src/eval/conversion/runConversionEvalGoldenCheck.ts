@@ -17,10 +17,11 @@ import {
 } from './heuristic';
 import { attachOverallStatus } from './rollupOverallStatus';
 
-/** Subtype 1 + 2 golden eval (Phase 3-H-2 §7). */
+/** Subtype 1 + 2 + 3 golden eval (Phase 3-H-2/3 §7). */
 export const GOLDEN_CHECK_SUPPORTED_SUBTYPES = [
   'official-doc-pdf',
   'slide-pdf',
+  'scan-pdf',
 ] as const satisfies readonly DocumentSourceSubtype[];
 
 export type GoldenCheckSupportedSubtype =

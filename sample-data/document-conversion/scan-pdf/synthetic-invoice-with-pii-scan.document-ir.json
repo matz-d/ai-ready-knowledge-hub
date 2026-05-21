@@ -12,45 +12,669 @@
       "blocks": [
         {
           "blockId": "p1-ocr1",
-          "kind": "heading",
-          "text": "請求書",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "kind": "image_text",
+          "text": "請求書番号: SYN-INV-2026-0501",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              595,
+              69,
+              777,
+              82
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
         },
         {
           "blockId": "p1-ocr2",
-          "kind": "paragraph",
-          "text": "請求番号: INV-2025-0042　　発行日: 2025年3月31日",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "kind": "image_text",
+          "text": "発行日: 2026年5月21日",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              595,
+              86,
+              727,
+              99
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
         },
         {
           "blockId": "p1-ocr3",
-          "kind": "paragraph",
-          "text": "請求先: 株式会社サンプル商事　〒100-0001 東京都千代田区丸の内1-1-1",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "kind": "heading",
+          "text": "請求書",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              69,
+              310,
+              99
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
         },
         {
           "blockId": "p1-ocr4",
-          "kind": "paragraph",
-          "text": "担当者: 田中　太郎　様",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "kind": "image_text",
+          "text": "SYNTHETIC FIXTURE / EVALUATION ONLY / NO REAL CUSTOMER DATA",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              118,
+              608,
+              131
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
         },
         {
           "blockId": "p1-ocr5",
-          "kind": "table",
-          "text": "品目\t数量\t単価\t金額\nシステム保守費用\t1\t150,000円\t150,000円\nクラウド利用料\t1\t30,000円\t30,000円",
-          "locator": { "pageNumber": 1, "tableIndex": 1, "rowIndex": 0 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr", "columnCount": 4 }
+          "kind": "image_text",
+          "text": "株式会社サンプル製作所 御中",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              160,
+              447,
+              180
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
         },
         {
           "blockId": "p1-ocr6",
-          "kind": "paragraph",
-          "text": "合計金額（税込）: 198,000円",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "kind": "image_text",
+          "text": "経理担当: 齋藤 試花",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              194,
+              360,
+              207
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr7",
+          "kind": "image_text",
+          "text": "住所: 東京都千代田区サンプル町1-2-3 サンプルビル4F",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              219,
+              490,
+              232
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr8",
+          "kind": "image_text",
+          "text": "電話: 03-XXXX-XXXX",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              251,
+              350,
+              264
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr9",
+          "kind": "image_text",
+          "text": "合成税理士法人",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              579,
+              160,
+              700,
+              173
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr10",
+          "kind": "image_text",
+          "text": "担当税理士: 橘 誠司",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              579,
+              185,
+              710,
+              198
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr11",
+          "kind": "image_text",
+          "text": "東京都千代田区サンプル町9-8-7",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              579,
+              210,
+              740,
+              223
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr12",
+          "kind": "image_text",
+          "text": "合成会計タワー6F",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              579,
+              235,
+              680,
+              248
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr13",
+          "kind": "image_text",
+          "text": "電話: 0120-XXX-XXXX",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              579,
+              260,
+              710,
+              273
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr14",
+          "kind": "image_text",
+          "text": "下記のとおりご請求申し上げます。",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              170,
+              317,
+              410,
+              330
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr15",
+          "kind": "image_text",
+          "text": "請求項目",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              190,
+              340,
+              250,
+              353
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr16",
+          "kind": "image_text",
+          "text": "金額",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              730,
+              340,
+              770,
+              353
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr17",
+          "kind": "image_text",
+          "text": "月次顧問契約料 (2026年5月分)",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              190,
+              370,
+              400,
+              383
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr18",
+          "kind": "image_text",
+          "text": "¥385,000",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              710,
+              370,
+              770,
+              383
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr19",
+          "kind": "image_text",
+          "text": "決算書作成・申告準備",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              190,
+              410,
+              340,
+              423
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr20",
+          "kind": "image_text",
+          "text": "¥440,000",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              710,
+              410,
+              770,
+              423
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr21",
+          "kind": "image_text",
+          "text": "年末調整資料レビュー",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              190,
+              450,
+              340,
+              463
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr22",
+          "kind": "image_text",
+          "text": "¥125,000",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              710,
+              450,
+              770,
+              463
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr23",
+          "kind": "image_text",
+          "text": "給与支払報告書整理支援",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              190,
+              490,
+              360,
+              503
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr24",
+          "kind": "image_text",
+          "text": "¥80,000",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              720,
+              490,
+              770,
+              503
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr25",
+          "kind": "image_text",
+          "text": "小計",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              540,
+              545,
+              570,
+              558
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr26",
+          "kind": "image_text",
+          "text": "¥1,030,000",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              620,
+              545,
+              700,
+              558
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr27",
+          "kind": "image_text",
+          "text": "消費税 10%",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              540,
+              570,
+              610,
+              583
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr28",
+          "kind": "image_text",
+          "text": "¥103,000",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              620,
+              570,
+              700,
+              583
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr29",
+          "kind": "image_text",
+          "text": "請求合計",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              540,
+              615,
+              620,
+              635
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr30",
+          "kind": "image_text",
+          "text": "¥1,133,000",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              680,
+              615,
+              770,
+              635
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr31",
+          "kind": "image_text",
+          "text": "振込先",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              680,
+              270,
+              693
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr32",
+          "kind": "image_text",
+          "text": "合成銀行 サンプル町支店 普通 7654321",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              170,
+              705,
+              430,
+              718
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr33",
+          "kind": "image_text",
+          "text": "口座名義: ゴウセイゼイリシホウジン",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              170,
+              730,
+              430,
+              743
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr34",
+          "kind": "image_text",
+          "text": "確認用マイナンバー風値",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              540,
+              690,
+              690,
+              703
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr35",
+          "kind": "image_text",
+          "text": "123456789012",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              540,
+              715,
+              690,
+              735
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr36",
+          "kind": "image_text",
+          "text": "12桁 / チェックデジット不適合の合致値",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              540,
+              740,
+              770,
+              753
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr37",
+          "kind": "image_text",
+          "text": "この PDF は scan-pdf 評価用に生成した印刷元です。氏名、住所、電話、口座、番号等はすべて合成です。",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              915,
+              640,
+              928
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
         }
       ]
     }

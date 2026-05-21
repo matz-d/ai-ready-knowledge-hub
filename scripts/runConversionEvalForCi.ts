@@ -1,3 +1,17 @@
+/**
+ * Conversion eval CI runner (Phase 3-H-2 M5 / Phase 3-H-3 M6 W6).
+ *
+ * CI never calls Vertex for scan-pdf: each scan fixture loads a committed
+ * `*.document-ir.json` sidecar that pins a prior Vertex Gemini OCR output.
+ * Regenerate sidecars via `pnpm tsx scripts/regenerateScanPdfGoldenSidecars.ts`
+ * (mainline extractor) locally, not in this workflow. PoC runner is auxiliary only.
+ *
+ * `degraded-scan-fail-closed.pdf` (6 MB) is excluded from all stages here; it
+ * is a route-level 413 size-limit evidence artifact only (see sample-data README).
+ * `synthetic-unmaskable-pii-scan.pdf` is also excluded: W5b assigns it to live
+ * smoke `document.convert` audit evidence, and CI has no pinned DocumentIR
+ * sidecar for that fixture.
+ */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -23,7 +37,17 @@ const FIXTURE_ROOT_DIR = path.resolve(
   'sample-data/document-conversion'
 );
 
-const FIXTURES = [
+type FixtureDefinition = {
+  readonly directory: string;
+  readonly documentId: string;
+  readonly sourceSubtype:
+    | 'official-doc-pdf'
+    | 'slide-pdf'
+    | 'scan-pdf';
+};
+
+/** Subtype 1 + 2 fixtures shared across health / heuristic / golden. */
+const MAINLINE_FIXTURES = [
   {
     directory: 'official-doc-pdf',
     documentId: 'mhlw-overtime-limit-guide',
@@ -49,10 +73,64 @@ const FIXTURES = [
     documentId: 'synthetic-context-package-deck',
     sourceSubtype: 'slide-pdf',
   },
-] as const;
+] as const satisfies readonly FixtureDefinition[];
 
-type FixtureDefinition = (typeof FIXTURES)[number];
-type FixtureDocumentId = FixtureDefinition['documentId'];
+/** scan-pdf sidecars for CI health gate (chunk/schema invariants only). */
+const SCAN_PDF_HEALTH_FIXTURES = [
+  {
+    directory: 'scan-pdf',
+    documentId: 'synthetic-employment-form-scan',
+    sourceSubtype: 'scan-pdf',
+  },
+  {
+    directory: 'scan-pdf',
+    documentId: 'synthetic-invoice-with-pii-scan',
+    sourceSubtype: 'scan-pdf',
+  },
+] as const satisfies readonly FixtureDefinition[];
+
+/** scan-pdf sidecars for heuristic axis observation (coverage / locator / safety). */
+const SCAN_PDF_HEURISTIC_FIXTURES = [
+  {
+    directory: 'scan-pdf',
+    documentId: 'nta-withholding-form-blank-scan',
+    sourceSubtype: 'scan-pdf',
+  },
+  {
+    directory: 'scan-pdf',
+    documentId: 'synthetic-invoice-with-pii-scan',
+    sourceSubtype: 'scan-pdf',
+  },
+] as const satisfies readonly FixtureDefinition[];
+
+/** scan-pdf golden recall baselines (`*.expected.json` only). */
+const SCAN_PDF_GOLDEN_FIXTURES = [
+  {
+    directory: 'scan-pdf',
+    documentId: 'synthetic-employment-form-scan',
+    sourceSubtype: 'scan-pdf',
+  },
+  {
+    directory: 'scan-pdf',
+    documentId: 'synthetic-invoice-with-pii-scan',
+    sourceSubtype: 'scan-pdf',
+  },
+] as const satisfies readonly FixtureDefinition[];
+
+function fixturesForStage(stage: ConversionEvalStage): readonly FixtureDefinition[] {
+  switch (stage) {
+    case 'health':
+      return [...MAINLINE_FIXTURES, ...SCAN_PDF_HEALTH_FIXTURES];
+    case 'heuristic':
+      return [...MAINLINE_FIXTURES, ...SCAN_PDF_HEURISTIC_FIXTURES];
+    case 'golden':
+      return [...MAINLINE_FIXTURES, ...SCAN_PDF_GOLDEN_FIXTURES];
+    default: {
+      const _exhaustive: never = stage;
+      return _exhaustive;
+    }
+  }
+}
 
 type ExpectedFieldsFixture = {
   documentId: string;
@@ -67,7 +145,7 @@ type CliOptions = {
 };
 
 type FixtureEvaluation = {
-  documentId: FixtureDocumentId;
+  documentId: string;
   overallStatus: ConversionEvalResult['overall']['status'];
   overallReasons: readonly string[];
   heuristicAxisStatuses?: HeuristicCiAxisStatuses;
@@ -296,8 +374,9 @@ async function runConversionEvalForCi(
   options: CliOptions
 ): Promise<ConversionEvalCiReport> {
   const dlpDryRun = resolveDlpDryRun();
+  const fixtureSet = fixturesForStage(options.stage);
   const fixtures = await Promise.all(
-    FIXTURES.map((fixture) =>
+    fixtureSet.map((fixture) =>
       evaluateFixture(options.stage, fixture, dlpDryRun)
     )
   );

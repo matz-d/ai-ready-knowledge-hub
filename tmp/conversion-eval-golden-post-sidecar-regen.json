@@ -1,7 +1,7 @@
 {
   "stage": "golden",
   "dlpDryRun": true,
-  "generatedAt": "2026-05-21T08:00:08.297Z",
+  "generatedAt": "2026-05-21T12:21:29.123Z",
   "fixtureCount": 7,
   "summary": {
     "pass": 6,
@@ -345,8 +345,8 @@
           "maskableChunkRate": 1
         },
         "contextPackageReadiness": {
-          "chunkCount": 19,
-          "averageChunkLength": 17.42105263157895,
+          "chunkCount": 20,
+          "averageChunkLength": 26.35,
           "oversizedChunks": 0,
           "emptyChunks": 0
         },
@@ -368,11 +368,11 @@
         "coverage": {
           "pageCoverage": 1,
           "textDensityWarnings": [],
-          "tableCandidates": 1
+          "tableCandidates": 0
         },
         "locatorQuality": {
           "hasPageLocators": true,
-          "hasTableLocators": true
+          "hasTableLocators": false
         },
         "semanticRetention": {
           "keyFieldRecall": 1,
@@ -383,8 +383,8 @@
           "maskableChunkRate": 1
         },
         "contextPackageReadiness": {
-          "chunkCount": 6,
-          "averageChunkLength": 29.333333333333332,
+          "chunkCount": 37,
+          "averageChunkLength": 14.054054054054054,
           "oversizedChunks": 0,
           "emptyChunks": 0
         },

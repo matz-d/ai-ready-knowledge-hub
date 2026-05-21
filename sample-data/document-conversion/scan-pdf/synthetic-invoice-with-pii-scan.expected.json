@@ -1,0 +1,16 @@
+{
+  "documentId": "synthetic-invoice-with-pii-scan",
+  "expectedFields": [
+    "請求書",
+    "請求書番号: SYN-INV-2026-0501",
+    "発行日: 2026年5月21日",
+    "株式会社サンプル製作所 御中",
+    "経理担当: 齋藤 試花",
+    "住所: 東京都千代田区サンプル町1-2-3 サンプルビル4F",
+    "月次顧問契約料 (2026年5月分)",
+    "請求合計",
+    "¥1,133,000",
+    "123456789012"
+  ],
+  "notes": "2026-05-21: mainline extractScanPdfFromBuffer (gemini-2.5-flash) で再生成した sidecar から recall baseline を選定。旧 expected（印刷元 PDF 向け INV-2025 表記）は本線 OCR と未整合だったため更新。"
+}
