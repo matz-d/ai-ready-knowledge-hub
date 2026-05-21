@@ -484,13 +484,13 @@ D-P3-B-7 で「旧 raw を保護」と言ったが、Firestore overwrite と raw
 
 ## 8. Phase 3-C 以降への送り
 
-Phase 3-B の範囲外だが、Phase 3-C 以降で扱う候補。
+Phase 3-B の範囲外だが、Phase 3-C 以降で扱う候補。**次フェーズ表と Ingest 起票の正本は [docs/open-questions.md](open-questions.md)**（2026-05-21 集約）。Drive 同期・フォルダ一括・画像単体・ローカル一括は同ファイル §Ingest 拡張を参照。
 
 - **HTTP API 認証 / 認可 / レート制限**（IAP / token / Cloud Armor 等）
-- **自動同期**（cron / Cloud Scheduler / Drive Push notification）
+- **自動同期**（cron / Cloud Scheduler / Drive Push notification）→ open-questions **Workspace: Drive sync**
 - **履歴型 archive**（status='archived' + Inventory フィルタ）
 - **2-phase 上書き**（partial failure 時の旧 raw 完全保護）
-- **Gmail / Slides / Drive 任意ファイル取り込み**
+- **Gmail / Slides / Drive 任意ファイル取り込み** → open-questions **Ingest: Drive folder bulk**（フォルダ配下一括）に含める
 - **OAuth user delegation**
 - **`gid` / シート / range 選択**
 - **`displayTitle` / `canonicalTitle` 等の AI-ready タイトル field**

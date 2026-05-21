@@ -255,10 +255,17 @@ sample-data/
 
 ### 次にやること
 
-- **Phase 3-F**: PDF 3 subtype を含むデモ polish・動画シナリオ・見栄え調整。正本候補は `docs/open-questions.md`。
-- **Masker 本線統合（PDF 経路）**: `requires_masking` PDF の chunk 化と Context Package 接続。scan-pdf 公開範囲拡大は Masker 統合 + `unmaskablePiiFindings` 閾値再評価後に別 decision（`D-P3-H-7 Q4`）。
-- **提供形態の整理**: Managed SaaS / Dedicated SaaS / Customer-managed / Sanitized ingress の位置づけは `docs/offering-model.md` に固定済み。
-- **Phase 3-G**: `cloud-sanitized-ingress` prototype。高セキュリティ顧客向けの信頼境界検証として後続候補。
+正本の一覧・Ingest 起票の詳細は [docs/open-questions.md](docs/open-questions.md)（次フェーズ表 + §Ingest 拡張）。
+
+- **Phase 3-F**: PDF 3 subtype を含むデモ polish・動画シナリオ・見栄え調整。
+- **Masker 本線統合（PDF 経路）**: `requires_masking` PDF の chunk 化と Context Package 接続。scan-pdf 公開範囲拡大は Masker 統合後の別 decision（`D-P3-H-7 Q4`）。
+- **Ingest 拡張（起票済み・未着手）**:
+  - **standalone images** — PNG/JPEG 等の画像ファイル単体（scan-pdf とは別）
+  - **Drive folder bulk** — 共有フォルダ配下のバッチ import
+  - **local directory batch** — ローカルディレクトリ / 複数ファイル一括投入
+  - **Drive sync** — 鮮度検知に基づく自動 re-import（3-B 手動の延長）
+- **Phase 3-H `office-native`**: `.pptx` / `.docx` 原本（優先 4・時間があれば）。
+- **Phase 3-G**: `cloud-sanitized-ingress` prototype。
 
 ---
 

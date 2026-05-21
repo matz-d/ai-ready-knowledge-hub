@@ -238,6 +238,8 @@ Phase 3-H は次を満たしたら完了とする。
 | ~~Phase 3-H-2~~ | ~~**subtype 1（`official-doc-pdf`）本線統合**~~ — **完了** (2026-05-20)。[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) |
 | ~~Phase 3-H-3~~ | ~~subtype 2（`slide-pdf`）/ subtype 3（`scan-pdf`）本線統合~~ — **完了** (2026-05-20 / 2026-05-21 M6)。[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8.2–8.3 |
 | Phase 3-F | 統合済み subtype を含むデモ polish・動画シナリオ更新。 |
+| Ingest 拡張 | standalone images / Drive folder bulk / local directory batch / Drive sync — [docs/open-questions.md](open-questions.md) §Ingest 拡張（起票 2026-05-21） |
+| `office-native` | subtype 4（`.pptx` / `.docx`）。Phase 3-H 優先 4・未着手。 |
 | Phase 3-G | `cloud-sanitized-ingress` prototype。高セキュリティ顧客向けの境界検証。 |
 | Phase 4 | Dedicated / customer-managed 提供、BigQuery write-once audit、CMEK / VPC-SC。 |
 
