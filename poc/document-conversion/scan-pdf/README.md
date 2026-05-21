@@ -15,3 +15,9 @@ bash poc/document-conversion/scan-pdf/fixtures/generate-degraded.sh
 ```bash
 brew install imagemagick
 ```
+
+Homebrew の ImageMagick で PDF delegate の `gs` が見つからない場合は Ghostscript も入れる。
+
+```bash
+brew install ghostscript
+```
