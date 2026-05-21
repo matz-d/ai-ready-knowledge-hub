@@ -94,12 +94,13 @@ async function main(): Promise<void> {
       expectedUpdate = {
         documentId,
         expectedFields: candidateFields,
-        notes:
+        notes: (
           `${prior.notes ?? ''} ` +
           `Regenerated ${new Date().toISOString().slice(0, 10)} from mainline ` +
           `extractScanPdfFromBuffer (model=${extracted.conversion.model}, ` +
-          `recall=${semanticRetention.keyFieldRecall?.toFixed(2)}).`,
-      }.trim();
+          `recall=${semanticRetention.keyFieldRecall?.toFixed(2)}).`
+        ).trim(),
+      };
       const expectedPath = path.join(FIXTURE_ROOT, `${documentId}.expected.json`);
       await writeFile(
         expectedPath,
