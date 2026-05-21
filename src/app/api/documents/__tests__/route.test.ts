@@ -964,6 +964,34 @@ describe('POST /api/documents', () => {
       expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
     });
 
+    it('returns 400 on scan-pdf OCR fail-closed pre-flight and does not proceed to document/chunk/document.convert audit paths', async () => {
+      isFeatureEnabledMock.mockImplementation(
+        (flag) => flag?.flagId === 'pdf-conversion-subtype-3'
+      );
+      extractScanPdfFromBufferMock.mockRejectedValue(
+        new Error('scan-pdf ocr fail-closed: gemini-output-empty')
+      );
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(400);
+      await expect(parseJson(response)).resolves.toEqual(
+        expect.objectContaining({
+          error: 'PDF ファイルを解析できませんでした。',
+        })
+      );
+      expect(extractScanPdfFromBufferMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileName: 'sample.pdf',
+        })
+      );
+      expect(extractPdfFromBufferMock).not.toHaveBeenCalled();
+      expect(extractSlidePdfFromBufferMock).not.toHaveBeenCalled();
+      expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
+      expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+      expect(recordAuditEventMock).not.toHaveBeenCalled();
+    });
+
     it('returns 403 when both subtype-1 and subtype-3 flags are enabled (3-way mutex)', async () => {
       isFeatureEnabledMock.mockImplementation(
         (flag) =>

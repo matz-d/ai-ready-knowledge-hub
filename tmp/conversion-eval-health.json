@@ -1,10 +1,10 @@
 {
   "stage": "health",
   "dlpDryRun": true,
-  "generatedAt": "2026-05-20T08:50:16.935Z",
-  "fixtureCount": 4,
+  "generatedAt": "2026-05-21T08:00:08.289Z",
+  "fixtureCount": 7,
   "summary": {
-    "pass": 3,
+    "pass": 6,
     "warn": 1,
     "fail": 0
   },
@@ -158,6 +158,117 @@
           "reasons": [
             "context_package_readiness: fail (downgraded to warn)"
           ]
+        }
+      }
+    },
+    {
+      "documentId": "synthetic-context-package-deck",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 0,
+          "textDensityWarnings": [],
+          "tableCandidates": 0
+        },
+        "locatorQuality": {
+          "hasPageLocators": false,
+          "hasTableLocators": false
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 12,
+          "averageChunkLength": 47.333333333333336,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
+        }
+      }
+    },
+    {
+      "documentId": "synthetic-employment-form-scan",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 0,
+          "textDensityWarnings": [],
+          "tableCandidates": 0
+        },
+        "locatorQuality": {
+          "hasPageLocators": false,
+          "hasTableLocators": false
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 19,
+          "averageChunkLength": 17.42105263157895,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
+        }
+      }
+    },
+    {
+      "documentId": "synthetic-invoice-with-pii-scan",
+      "overallStatus": "pass",
+      "overallReasons": [],
+      "result": {
+        "schemaValidity": {
+          "passed": true,
+          "errors": []
+        },
+        "coverage": {
+          "pageCoverage": 0,
+          "textDensityWarnings": [],
+          "tableCandidates": 0
+        },
+        "locatorQuality": {
+          "hasPageLocators": false,
+          "hasTableLocators": false
+        },
+        "semanticRetention": {
+          "missingExpectedFields": []
+        },
+        "safetyReadiness": {
+          "unmaskablePiiFindings": 0,
+          "maskableChunkRate": 1
+        },
+        "contextPackageReadiness": {
+          "chunkCount": 6,
+          "averageChunkLength": 29.333333333333332,
+          "oversizedChunks": 0,
+          "emptyChunks": 0
+        },
+        "overall": {
+          "status": "pass",
+          "reasons": []
         }
       }
     }
