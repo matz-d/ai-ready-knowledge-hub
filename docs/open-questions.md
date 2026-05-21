@@ -98,7 +98,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - Phase 3-C-5 バグ修正 6 件（malformed doc skip、txt/md chunk 生成、upload 後 auto-chunk、Docs route 分岐、Docs error mapping、backfill usage）
 - CodeRabbit review: 5 件 apply / 11 件 skip（[docs/decisions.md D-P3-C](decisions.md) に根拠記録）
 
-**次フェーズ（2026-05-20 現在）:**
+**次フェーズ（2026-05-21 現在）:**
 
 | 候補 | 内容 | 優先度 |
 |---|---|---|
@@ -107,11 +107,69 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | ~~Phase 3-H / H-2~~ | ~~Document Conversion PoC + subtype 1 薄い本線統合 + Eval 育成ループ~~ | **完了** (2026-05-20) |
 | ~~Phase 3-H-3 subtype 2~~ | ~~slide-pdf 本線統合 + `inferenceDestination` + live smoke~~ | **完了** (2026-05-20, PR #3) |
 | ~~Phase 3-H-3 subtype 3 (M6)~~ | ~~scan-pdf 本線統合 + OCR fail-closed + `unmaskablePiiFindings` warn~~ | **完了** (2026-05-21, live smoke DoD YES) |
-| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | M6 後 |
-| Masker 本線統合（PDF 経路） | `requires_masking` PDF の chunk 化と公開拡大要件 | M6 後（`D-P3-H-7 Q4`） |
+| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | 提出・デモ向け |
+| Masker 本線統合（PDF 経路） | `requires_masking` PDF の chunk 化と Context Package 接続 | 製品ロジック（`D-P3-H-7 Q4` の公開拡大前提） |
+| **Ingest: standalone images** | `image/jpeg` / `image/png` 等を upload ソースとして追加（scan-pdf とは別。写真・図面・スクショ単体） | 情報源拡張（下記 §Ingest 起票） |
+| **Ingest: Drive folder bulk** | SA 共有フォルダ配下のファイル列挙 → バッチ import（URL 1 本ずつからの脱却） | 情報源拡張（下記 §Ingest 起票） |
+| **Ingest: local directory batch** | ローカルディレクトリ walk または複数ファイル一括投入（CLI / UI） | 情報源拡張（下記 §Ingest 起票） |
+| **Workspace: Drive sync** | 鮮度検知 → 自動 re-import（Scheduler / Drive Push。3-B 手動 re-import の延長） | 運用効率（下記 §Ingest 起票） |
+| Phase 3-H `office-native` | `.pptx` / `.docx` 原本の conversion subtype 4 | Phase 3-H 優先 4・時間があれば |
 | Phase 3-G | `cloud-sanitized-ingress` prototype | 高セキュリティ顧客向け後続 |
 
-**次のアクション**: M6 は dev tenant live smoke まで完了したため、PDF `requires_masking` の本線統合と scan-pdf 公開範囲拡大判断を別フェーズで起票する。M6 証跡は [docs/phase-3-h-3-scan-pdf-live-smoke.md](phase-3-h-3-scan-pdf-live-smoke.md)、完了条件は [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8.3。
+**次のアクション**: Masker PDF 本線または Phase 3-F のどちらを先にするか product 判断。scan-pdf 公開拡大は Masker 統合 + `unmaskablePiiFindings` 再評価の別 decision（`D-P3-H-7 Q4`）。**情報源の幅**を伸ばす候補（画像単体・Drive/ローカル一括・Drive 同期）は下記 §Ingest 拡張に起票済み — 着手前に decision エントリを足す。
+
+### Ingest 拡張（起票 2026-05-21）
+
+M6 完了後、docs 上バラバラだった「画像ソース」「一括投入」「Drive 同期」を次フェーズ候補として正本化する。実装着手前は [docs/decisions.md](decisions.md) に `D-P3-I-*`（仮）を追加し、本節は候補の説明に留める。
+
+**現状（ベースライン）**
+
+| 経路 | いまできること | できないこと |
+|---|---|---|
+| `/upload` | 1 ファイルずつ（txt/md/csv/xlsx/pdf 等、subtype flag 次第） | ディレクトリ一括、zip 一括、画像単体（`image/*`） |
+| `/import/google-sheets` | Sheets / Docs の **URL 1 本**、手動 re-import、鮮度バッジ | フォルダ配下一括、自動同期、Drive 全体クロール |
+| scan-pdf（M6） | **画像化された PDF** の OCR | PNG/JPEG 単体ファイル |
+
+**候補 1 — Ingest: standalone images**
+
+- **目的**: スキャン PDF 以外に、写真・白板撮影・FAX 画像・スクショなど **画像ファイル単体** を Inventory に載せる。
+- **スコープ案**: 新 subtype（例: `image-scan`）または scan-pdf extractor の media 拡張。`DocumentIR` + Conversion Eval + Masker 方針を subtype 3 と揃える。
+- **着手前に決める**: 対応 MIME（`image/jpeg`, `image/png`, `image/webp` 等）、サイズ上限、Vertex/Gemini OCR か Cloud Vision か、`requires_masking` 既定、feature flag tenant。
+- **依存**: Masker 本線統合（PII あり画像）と eval fixture（合成画像 PII）。
+- **スコープ外（継続）**: 動画・音声（[docs/scope.md](scope.md)）。
+
+**候補 2 — Ingest: Drive folder bulk**
+
+- **目的**: 共有済み Drive **フォルダ** を指定し、配下の Sheets / Docs / PDF 等を **バッチで** snapshot import する（運用担当の手作業 URL 貼り付けを減らす）。
+- **スコープ案**: `POST /api/import/google-drive/batch`（仮）または admin script。列挙 → 既存 `importedSnapshotOrchestrator` / upload 経路へ fan-out。進捗・失敗 docId のレポート。
+- **着手前に決める**: 列挙深度、MIME フィルタ、1 run の件数上限、レート制限、非同期化（Cloud Tasks）要否。**OAuth user delegation は使わない**（SA + 共有モデル維持か要 decision）。
+- **依存**: IAP 認可・レート制限（[phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) §8 候補）、chunks async 化（大量時）。
+- **スコープ外（継続）**: Drive **全体クロール**、顧客ドライブ全自動スキャン（[docs/scope.md](scope.md)）。
+
+**候補 3 — Ingest: local directory batch**
+
+- **目的**: 社内 NAS / デスクトップ上の **フォルダツリー** をまとめて投入する（士業の「資料フォルダ丸ごと」ニーズ）。
+- **スコープ案**: (a) `pnpm ingest:directory <path>` CLI（デモ・移行用）、(b) UI で複数ファイル選択 + ドラッグ&ドロップフォルダ（ブラウザ制約あり）。各ファイルは既存 `/api/documents` 相当のパイプラインへ。
+- **着手前に決める**: CLI の tenant 認証、再実行 idempotency（パス hash）、除外規則（`~$`、`.git`）、最大ファイル数 / 合計サイズ。
+- **依存**: 単発 upload の安定性、PDF subtype flag、Masker（機密フォルダ想定）。
+
+**候補 4 — Workspace: Drive sync**
+
+- **目的**: Phase 3-B の **手動 re-import** と鮮度バッジを、定期またはイベント駆動で自動化する（「Drive 的な同期」）。
+- **スコープ案**: Cloud Scheduler + `modifiedTime` ポーリング、または Drive Push → Pub/Sub → re-import job。3-B の `contentSha256` スキップと de-dup を再利用。
+- **着手前に決める**: 同期対象（登録済み `fileId` のみ vs フォルダ watch）、頻度、失敗時リトライ、tenant ごとのコスト上限、ユーザー向け「同期 ON/OFF」UI。
+- **依存**: 候補 2（フォルダ bulk）と非同期 orchestration。HTTP API 認可（3-D IAP は UI 向け、バッチ用 SA は別検討）。
+- **関連**: [phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) §8「自動同期」— 本節へ集約。
+
+**推奨着手順（仮・product 未確定）**
+
+1. Masker PDF 本線（既存 PDF が Context Package まで届かない穴を塞ぐ）
+2. Ingest: local directory batch **または** Drive folder bulk（デモ・実務で効く一括のどちらか先）
+3. Ingest: standalone images
+4. Workspace: Drive sync（2/3 が安定してから）
+5. Phase 3-F / 3-G は並行またはポスト提出
+
+**M6 証跡**: [docs/phase-3-h-3-scan-pdf-live-smoke.md](phase-3-h-3-scan-pdf-live-smoke.md)。DoD: [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8.3。
 
 ---
 

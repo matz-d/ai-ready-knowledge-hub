@@ -2,6 +2,8 @@
 
 `runner.ts` は Gemini/Vertex AI OCR で scan PDF を観察する PoC runner。
 
+**本線統合（M6 完了 2026-05-21）:** upload route は `src/lib/extractors/scanPdfDocumentExtractor.ts` を使用（`pdf-conversion-subtype-3` flag、`m-grow-ai.com` のみ）。PoC runner は fixture 観察・コスト実測・sidecar 再現用。DoD / live smoke: [docs/phase-3-h-3-direction.md](../../../docs/phase-3-h-3-direction.md) §8.3、[docs/phase-3-h-3-scan-pdf-live-smoke.md](../../../docs/phase-3-h-3-scan-pdf-live-smoke.md)。
+
 ## OCR fail-closed fixture (<=5 MiB)
 
 `fixtures/generate-ocr-fail-closed.sh` は、白紙の労働条件通知書 scan を低解像度化・二値化・ノイズ付与して、**5 MiB 以下**の `ocr-fail-closed-preflight.pdf` を生成する。`degraded-scan-fail-closed.pdf`（6 MB）は 413 size-limit 証跡専用であり、この用途には使わない。
