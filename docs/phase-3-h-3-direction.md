@@ -338,7 +338,7 @@ PR #3（`38d15ff`）で M1〜M5 + live smoke 完了:
 - [x] subtype 2 M1〜M5 + live smoke 完了（`D-P3-H-7` 着手ゲート 1）
 - [x] `D-P3-H-7` Q1〜Q4 確定（2026-05-21）
 - [ ] **Q1 fixture #2〜#5 取得と [sample-data README](../sample-data/document-conversion/README.md) inventory 追記**（着手ゲート 4）
-- [ ] **Q3 PoC 実測完了（fixture 全件 × 3 回）と `D-P3-H-7 Q3` への数値追補**（着手ゲート 3）
+- [x] **Q3 PoC 実測完了（fixture 全件 × 3 回）と `D-P3-H-7 Q3` への数値追補**（2026-05-21）— timeout 60s、5 MiB、$0.66/月 確定。詳細: [docs/phase-3-h-3-scan-pdf-poc-measurement.md](phase-3-h-3-scan-pdf-poc-measurement.md)
 
 **M6 マイルストーン別 DoD:**
 

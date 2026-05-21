@@ -1488,10 +1488,22 @@ Phase 3-H-3 の **実装**に入る前に次を満たす:
 - 初期値を docs に固定しないと、M6-3（AuditEvent 必須化）と M6-4（heuristic 閾値）の判断材料が揃わない。
 - 数値の確定を本決定の確定後に倒すのは、`D-P3-H-6 Q2`（fail-closed）が既に確定しているため安全。「Gemini OCR が timeout / quota / schema 失敗したら fail-closed」という境界自体は本決定時点で確定済みで、残るのは具体値だけ。
 
-**確定境界（数値は M6-1 着手時に追記）:**
-- 入力サイズ超過: 既存 `MAX_UPLOAD_BYTES`（5 MiB）を踏襲、超過は 413 で拒否
-- Gemini OCR timeout / quota 超過 / schema 失敗: **fail-closed**（chunk 化せず `document.convert` を `evalStatus: 'error'` で記録）
-- 月次コスト超過: dev tenant 観測フェーズでは alerting のみ。本格上限は Masker 統合後の公開拡大判断で別 decision
+**確定境界（M6-1 着手時、2026-05-21 確定）:**
+
+全 fixture × 3 試行（15 試行）の実測結果: [docs/phase-3-h-3-scan-pdf-poc-measurement.md](phase-3-h-3-scan-pdf-poc-measurement.md)
+
+| 項目 | 確定値 | 根拠 |
+|---|---|---|
+| Timeout 上限 | **60 秒** | max(p95_wall_ms × 2, 60s) = max(29190 × 2, 60000) = 60s |
+| 入力サイズ上限 | **5 MiB**（変更なし） | `MAX_UPLOAD_BYTES` 踏襲。6 MB の degraded fixture は本線 upload で 413 拒否（期待挙動） |
+| 月次コスト上限（dev tenant） | **< $5/月**（50 件/月で $0.66） | max cost/call = $0.01313（nta-withholding 相当）× 50 件 = $0.66 |
+| fail-closed 境界 | Gemini OCR timeout / quota 超過 / schema 失敗時 | `evalStatus: 'error'` で記録、chunk 化なし |
+| 月次コスト超過時 | dev tenant は alerting のみ | 本格上限は Masker 統合後の公開拡大判断で別 decision |
+
+**実測の注目所見（M6-4 heuristic への示唆）:**
+- NTA 白紙様式で `piiFindings.total = 13`（すべて maskable）。OCR がフォームラベルを PII と誤認識。`D-P3-H-7 Q2` の通り **`unmaskablePiiFindings > 0` のみを warn** とする方針を実測で裏付け。
+- degraded fixture で `health = pass`。ImageMagick 劣化では fail-closed は発火しない。M6-4 heuristic には block_count / output_token_count などの別指標が必要。
+- 入力トークンは常に 1440（システムプロンプトのみ）。コスト差は `outputTokens` に現れる（nta: 5078 vs employment: 1820）。
 
 **代替案:**
 - (a) PoC 実測後に確定 ← 採用
