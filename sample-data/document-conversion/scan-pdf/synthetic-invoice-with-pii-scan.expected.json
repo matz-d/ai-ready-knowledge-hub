@@ -1,0 +1,15 @@
+{
+  "documentId": "synthetic-invoice-with-pii-scan",
+  "expectedFields": [
+    "請求書",
+    "請求番号: INV-2025-0042",
+    "発行日: 2025年3月31日",
+    "請求先: 株式会社サンプル商事",
+    "〒100-0001 東京都千代田区丸の内1-1-1",
+    "担当者: 田中　太郎　様",
+    "システム保守費用",
+    "クラウド利用料",
+    "合計金額（税込）: 198,000円"
+  ],
+  "notes": "M6 W5-A sidecar actual (synthetic-invoice-with-pii-scan.document-ir.json) から、請求基本情報 + PII（氏名・住所）を中心に recall baseline を選定。"
+}

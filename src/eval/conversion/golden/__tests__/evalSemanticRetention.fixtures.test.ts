@@ -1,6 +1,6 @@
 /**
- * Golden semantic retention against the four `official-doc-pdf` fixtures and
- * their `*.expected.json` sidecars (Phase 3-H-2 §7.2).
+ * Golden semantic retention against official-doc-pdf + scan-pdf fixtures and
+ * their `*.expected.json` sidecars (Phase 3-H-2/3 §7.2).
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -10,19 +10,45 @@ import { parseDocumentIr, type DocumentIr } from '../../documentIr';
 import { evalSemanticRetention } from '../evalSemanticRetention';
 import { runConversionEvalGoldenCheck } from '../../runConversionEvalGoldenCheck';
 
-const FIXTURE_DIR = resolve(
+const FIXTURE_ROOT_DIR = resolve(
   process.cwd(),
-  'sample-data/document-conversion/official-doc-pdf'
+  'sample-data/document-conversion'
 );
 
-const FIXTURE_BASENAMES = [
-  'mhlw-overtime-limit-guide',
-  'mhlw-r07-model-work-rules',
-  'mhlw-labor-conditions-notice-general',
-  'synthetic-employment-context-with-pii',
+const FIXTURE_DEFINITIONS = [
+  {
+    directory: 'official-doc-pdf',
+    basename: 'mhlw-overtime-limit-guide',
+    sourceSubtype: 'official-doc-pdf',
+  },
+  {
+    directory: 'official-doc-pdf',
+    basename: 'mhlw-r07-model-work-rules',
+    sourceSubtype: 'official-doc-pdf',
+  },
+  {
+    directory: 'official-doc-pdf',
+    basename: 'mhlw-labor-conditions-notice-general',
+    sourceSubtype: 'official-doc-pdf',
+  },
+  {
+    directory: 'official-doc-pdf',
+    basename: 'synthetic-employment-context-with-pii',
+    sourceSubtype: 'official-doc-pdf',
+  },
+  {
+    directory: 'scan-pdf',
+    basename: 'synthetic-employment-form-scan',
+    sourceSubtype: 'scan-pdf',
+  },
+  {
+    directory: 'scan-pdf',
+    basename: 'synthetic-invoice-with-pii-scan',
+    sourceSubtype: 'scan-pdf',
+  },
 ] as const;
 
-type FixtureBasename = (typeof FIXTURE_BASENAMES)[number];
+type FixtureDefinition = (typeof FIXTURE_DEFINITIONS)[number];
 
 type ExpectedFieldsFixture = {
   documentId: string;
@@ -30,13 +56,21 @@ type ExpectedFieldsFixture = {
   notes?: string;
 };
 
-function loadIr(basename: FixtureBasename): DocumentIr {
-  const filePath = resolve(FIXTURE_DIR, `${basename}.document-ir.json`);
+function loadIr(fixture: FixtureDefinition): DocumentIr {
+  const filePath = resolve(
+    FIXTURE_ROOT_DIR,
+    fixture.directory,
+    `${fixture.basename}.document-ir.json`
+  );
   return parseDocumentIr(JSON.parse(readFileSync(filePath, 'utf8')));
 }
 
-function loadExpected(basename: FixtureBasename): ExpectedFieldsFixture {
-  const filePath = resolve(FIXTURE_DIR, `${basename}.expected.json`);
+function loadExpected(fixture: FixtureDefinition): ExpectedFieldsFixture {
+  const filePath = resolve(
+    FIXTURE_ROOT_DIR,
+    fixture.directory,
+    `${fixture.basename}.expected.json`
+  );
   return JSON.parse(readFileSync(filePath, 'utf8')) as ExpectedFieldsFixture;
 }
 
@@ -51,25 +85,21 @@ function chunksFromIr(ir: DocumentIr, basename: string) {
   });
 }
 
-const FIXTURES = FIXTURE_BASENAMES.reduce(
-  (acc, name) => {
-    acc[name] = {
-      ir: loadIr(name),
-      expected: loadExpected(name),
-    };
-    return acc;
-  },
-  {} as Record<
-    FixtureBasename,
-    { ir: DocumentIr; expected: ExpectedFieldsFixture }
-  >
-);
+type LoadedFixture = FixtureDefinition & {
+  ir: DocumentIr;
+  expected: ExpectedFieldsFixture;
+};
+
+const FIXTURES: LoadedFixture[] = FIXTURE_DEFINITIONS.map((fixture) => ({
+  ...fixture,
+  ir: loadIr(fixture),
+  expected: loadExpected(fixture),
+}));
 
 describe('evalSemanticRetention (golden fixtures)', () => {
-  it.each(FIXTURE_BASENAMES)(
-    '%s computes keyFieldRecall from expected.json',
-    (basename) => {
-      const { ir, expected } = FIXTURES[basename];
+  it.each(FIXTURES)(
+    '$basename computes keyFieldRecall from expected.json',
+    ({ basename, ir, expected }) => {
       expect(expected.documentId).toBe(basename);
 
       const chunks = chunksFromIr(ir, basename);
@@ -93,14 +123,13 @@ describe('evalSemanticRetention (golden fixtures)', () => {
 });
 
 describe('runConversionEvalGoldenCheck (golden fixtures)', () => {
-  it.each(FIXTURE_BASENAMES)(
-    '%s returns golden-stage semanticRetention without calling DLP',
-    async (basename) => {
-      const { ir, expected } = FIXTURES[basename];
+  it.each(FIXTURES)(
+    '$basename returns golden-stage semanticRetention without calling DLP',
+    async ({ basename, sourceSubtype, ir, expected }) => {
       const chunks = chunksFromIr(ir, basename);
 
       const result = await runConversionEvalGoldenCheck({
-        sourceSubtype: 'official-doc-pdf',
+        sourceSubtype,
         documentIr: ir,
         chunks,
         expectedFields: expected.expectedFields,

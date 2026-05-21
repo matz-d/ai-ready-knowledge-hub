@@ -1,0 +1,376 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "fileName": "synthetic-employment-form-scan.pdf",
+    "mediaType": "application/pdf",
+    "sourceKind": "poc",
+    "sourceSubtype": "scan-pdf"
+  },
+  "pages": [
+    {
+      "pageNumber": 1,
+      "blocks": [
+        {
+          "blockId": "p1-ocr1",
+          "kind": "heading",
+          "text": "Synthetic Employment Information Form",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              70,
+              780,
+              100
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr2",
+          "kind": "paragraph",
+          "text": "For document-conversion OCR fixture only. All personal data is synthetic.",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              110,
+              780,
+              125
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr3",
+          "kind": "paragraph",
+          "text": "Employee name",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              160,
+              350,
+              175
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr4",
+          "kind": "paragraph",
+          "text": "XXXX Taro",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              385,
+              160,
+              500,
+              175
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr5",
+          "kind": "paragraph",
+          "text": "Address",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              210,
+              290,
+              225
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr6",
+          "kind": "paragraph",
+          "text": "1-2-3 XXXX-cho, Shibuya-ku, Tokyo",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              385,
+              210,
+              700,
+              225
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr7",
+          "kind": "paragraph",
+          "text": "Phone",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              260,
+              270,
+              275
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr8",
+          "kind": "paragraph",
+          "text": "090-1234-5678",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              385,
+              260,
+              550,
+              275
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr9",
+          "kind": "paragraph",
+          "text": "Email",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              310,
+              265,
+              325
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr10",
+          "kind": "paragraph",
+          "text": "taro.xxxx@example.test",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              385,
+              310,
+              600,
+              325
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr11",
+          "kind": "paragraph",
+          "text": "Employee ID",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              360,
+              320,
+              375
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr12",
+          "kind": "paragraph",
+          "text": "EMP-XXXX-042",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              385,
+              360,
+              530,
+              375
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr13",
+          "kind": "paragraph",
+          "text": "Bank account",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              410,
+              330,
+              425
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr14",
+          "kind": "paragraph",
+          "text": "Mizuho Bank 0001 / 1234567",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              385,
+              410,
+              650,
+              425
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr15",
+          "kind": "paragraph",
+          "text": "My Number-like",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              460,
+              340,
+              475
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr16",
+          "kind": "paragraph",
+          "text": "1234-5678-9012",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              385,
+              460,
+              550,
+              475
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr17",
+          "kind": "paragraph",
+          "text": "Start date",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              510,
+              300,
+              525
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr18",
+          "kind": "paragraph",
+          "text": "2026-04-01",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              385,
+              510,
+              500,
+              525
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr19",
+          "kind": "heading",
+          "text": "Notes",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              580,
+              275,
+              595
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        },
+        {
+          "blockId": "p1-ocr20",
+          "kind": "note",
+          "text": "Masker should be able to span-mask exact strings such as phone, email, address, bank\naccount, and My Number-like values. If OCR fragments the text, safety_readiness may\nreport unmaskable findings.",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              218,
+              620,
+              720,
+              675
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.99
+          }
+        }
+      ]
+    }
+  ]
+}
