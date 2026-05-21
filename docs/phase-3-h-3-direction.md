@@ -306,21 +306,111 @@ scan-pdf の実装は次の順に進める。
 
 ---
 
-## 8. DoD（docs フェーズ）
+## 8. DoD
 
-Phase 3-H-2 M6 の docs 完了条件 — **すべて達成（2026-05-20）:**
+### 8.1 docs DoD（完了 2026-05-20）
+
+Phase 3-H-2 M6 の docs 完了条件 — **すべて達成:**
 
 - [x] [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) が本ファイルとして存在する
 - [x] [docs/decisions.md](decisions.md) に `D-P3-H-6` 確定エントリがある（2026-05-20 確定）
 - [x] 未決が [docs/open-questions.md](open-questions.md) に H-2 解消 / H-3 持ち越しとして整理されている
 - [x] 関連リンク（phase-3-e §6.1、phase-3-h-2 §13、auditEvent.ts）が切れていない
 
-**Phase 3-H-3 実装着手の追加ゲート（docs 以外）:**
+### 8.2 subtype 2（slide-pdf）実装 DoD（完了 2026-05-20）
 
-- [x] H-2 CI gate + observation loop（上記 §1 必須条件 1）
-- [x] `D-P3-H-6` Q2（slide fallback）/ Q5（Masker タイミング）の product 確定（2026-05-20）: Q2 = 本線 fallback なし（fail-closed）、Q5 = H-3 スコープ外
+PR #3（`38d15ff`）で M1〜M5 + live smoke 完了:
 
-実装 DoD は `D-P3-H-6` 確定後に本ファイルへ §8 として追加する。
+- [x] M1: `pdf-conversion-subtype-2` flag + slide extractor 本線昇格 + Vertex 成功時 `inferenceDestination` 必須
+- [x] M2: subtype 2 観測（`conversion_eval`、export script）
+- [x] M3: slide-pdf 用 heuristic 閾値
+- [x] M4: golden fixture（`sample-data/document-conversion/slide-pdf/synthetic-context-package-deck.pdf`）
+- [x] M5: CI health gate 拡張、ruleset required check 追加
+- [x] live smoke 証跡: [docs/phase-3-h-3-slide-pdf-live-smoke.md](phase-3-h-3-slide-pdf-live-smoke.md)
+- [x] feature flag 同時 ON（subtype-1 + subtype-2）の fail-closed 拒否（`957f5a3`）
+
+### 8.3 subtype 3（scan-pdf）M6 実装 DoD（`D-P3-H-7` 確定 2026-05-21）
+
+`D-P3-H-7` 4 項目（Q1〜Q4）確定を前提に、M6-1〜M6-7 を以下の DoD で進める。
+
+**M6 着手前ゲート（実装着手の前提）:**
+
+- [x] subtype 2 M1〜M5 + live smoke 完了（`D-P3-H-7` 着手ゲート 1）
+- [x] `D-P3-H-7` Q1〜Q4 確定（2026-05-21）
+- [ ] **Q1 fixture #2〜#5 取得と [sample-data README](../sample-data/document-conversion/README.md) inventory 追記**（着手ゲート 4）
+- [ ] **Q3 PoC 実測完了（fixture 全件 × 3 回）と `D-P3-H-7 Q3` への数値追補**（着手ゲート 3）
+
+**M6 マイルストーン別 DoD:**
+
+| Milestone | DoD |
+|---|---|
+| M6-1 | `src/lib/extractors/scanPdfDocumentExtractor.ts` 新設、Q3 PoC 実測値で timeout / size 上限を `D-P3-H-7` に追補、`pdf-parse` fallback を持たない（`D-P3-H-6 Q2`）、`converterId = gemini-vertex-ocr`（仮、実装時確定） |
+| M6-2 | `pdf-conversion-subtype-3` flag 新設（dev tenant allow-list + `expiresAt`）、`/api/documents` の「flag ちょうど 1 つ」ルールに subtype 3 追加（1+3 / 2+3 / 1+2+3 同時 ON は 403） |
+| M6-3 | `document.convert` に Vertex 成功時 `inferenceDestination` 必須化を subtype 3 にも適用、`unmaskablePiiFindings.count` を AuditEvent に必須記録（`D-P3-H-7 Q2`）、subtype 3 用 audit test ケース追加 |
+| M6-4 | scan-pdf 専用 health / heuristic 閾値。`unmaskablePiiFindings` は warn 扱いだが閾値超過時の挙動を別途定義、PoC 暫定表をコピーしない |
+| M6-5 | `sample-data/document-conversion/scan-pdf/*.expected.json` golden fixture（recall ベース、氏名 / 住所 / 電話 / マイナンバー風値中心） |
+| M6-6 | `.github/workflows/conversion-eval.yml` に subtype 3 を health 必須 gate として追加、ruleset main required checks 更新（`D-P3-H-5b` 踏襲） |
+| M6-7 | live smoke 証跡を `docs/phase-3-h-3-scan-pdf-live-smoke.md`（命名 subtype 2 踏襲）に残す |
+
+**M6 完了の判定基準:**
+
+- [ ] CI で subtype 3 の health gate が merge 必須として稼働している
+- [ ] dev tenant 上で `synthetic-employment-form-scan.pdf` / `synthetic-invoice-with-pii-scan.pdf` を upload して `unmaskablePiiFindings.count > 0` の AuditEvent が Firestore に記録される
+- [ ] Gemini OCR timeout / quota / schema 失敗時に fail-closed（chunk 化されず、`evalStatus: 'error'`）
+- [ ] `degraded-scan-fail-closed.pdf` で fail-closed 動作が観測される
+- [ ] live smoke 証跡 docs に 1 件以上の Vertex `inferenceDestination` 付き AuditEvent ID が記録されている
+
+**M6 完了後の公開拡大判断（`D-P3-H-7 Q4`）:**
+
+scan-pdf の公開範囲拡大は M6 完了で自動的には実施しない。**Masker 本線統合完了 + `unmaskablePiiFindings` 閾値再評価** を経て別 decision で起票する（`D-P3-H-7 Q4`）。
+
+---
+
+## 9. Fixture policy（scan-pdf M6）
+
+`D-P3-H-7 Q1` で確定した fixture 調達方針の運用詳細。fixture 自体は [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) の inventory を正本とし、本節は方針の説明に留める。
+
+### 9.1 commit する fixture（5 本想定）
+
+| # | fixture 名（仮） | 役割 | 調達元 | PII | License |
+|---|---|---|---|---|---|
+| 1 | `synthetic-employment-form-scan.pdf`（既存維持） | safety_readiness + PII recall baseline | local synthetic | 合成 PII | Repo fixture |
+| 2 | `mhlw-labor-conditions-notice-blank-scan.pdf` | OCR coverage（表組み、PII フリー） | 既存 [mhlw-labor-conditions-notice-general.pdf](../sample-data/document-conversion/official-doc-pdf/mhlw-labor-conditions-notice-general.pdf) 由来の白紙様式 → 紙化 / 印刷 → scan | なし | 公共データ利用規約 1.0、出典明記 |
+| 3 | `nta-withholding-form-blank-scan.pdf` | locator quality（複雑な表） | 国税庁公開様式（白紙） → scan | なし | 国税庁利用規約、出典明記 |
+| 4 | `synthetic-invoice-with-pii-scan.pdf` | 士業ドメイン、合成 PII、フォーム欄 | local synthetic（公開請求書テンプレ + 合成会社名 / 口座 / 担当者氏名） | 合成 PII | Repo fixture |
+| 5 | `degraded-scan-fail-closed.pdf`（任意） | fail-closed 発火確認 | #2 を ImageMagick で 5度傾け + ノイズ追加 | なし | 公共データ利用規約 1.0、出典明記 |
+
+各 fixture を追加するごとに [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) の inventory 表に行を追加する。
+
+### 9.2 自社資料の扱い（commit 不可）
+
+自社資料は **ローカル検証のみ** とし、repo には commit しない（CLAUDE.md Safety Invariant、`D-P3-H-7 Q1` 確定）。次の運用を取る:
+
+1. 自社資料を `tmp/` など `.gitignore` 配下のディレクトリに置く
+2. `pnpm poc:conversion:scan-pdf <path>` で OCR を走らせ、失敗パターン / PII 検出パターンを観察する
+3. 観察した知見（OCR 失敗の傾向、PII 抽出可否、locator drift など）を docs に転記する
+4. 観察した失敗パターンを **synthetic fixture として再現** し、再現版を repo に commit する
+
+自社資料を masking して commit する案は採用しない（masking で漏れた PII が repo に残るリスク、Safety Invariant 違反リスク）。
+
+### 9.3 合成 PII fixture の生成方針
+
+`synthetic-employment-form-scan.pdf` / `synthetic-invoice-with-pii-scan.pdf` 等の合成 PII は次のルールで生成する。
+
+- **氏名**: 実在しない組合せ（一般姓 + 一般名のランダム組合せ、ただし著名人 / 既存従業員 / 既存顧客と一致しないことを確認）
+- **住所**: 実在しない番地（市区町村は実在で良いが番地は架空、または「東京都千代田区 XX-XX-XX」のように XX 形式）
+- **電話番号**: `0120-XXX-XXXX` / `03-XXXX-XXXX` のように XXX で埋める、または NTT 公開のテスト用番号
+- **マイナンバー風値**: 12 桁の数字列だがチェックデジット不適合（実在マイナンバーになり得ない値）
+- **口座番号**: 実在しない金融機関コードまたは XXX-XXXXXXX 形式
+
+合成 PII の生成スクリプトは PoC 配下に置く（commit 可、`poc/document-conversion/scan-pdf/fixtures/` 等）。生成元のスクリプトと生成後の PDF を両方 commit することで再現性を担保する。
+
+### 9.4 fixture 追加時の手順
+
+1. [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) の inventory 表に行を追加（fixture file / subtype / Source URL / License / PII）
+2. 公的文書由来の場合は出典明記（URL + 取得日）
+3. 合成 PII fixture の場合は生成スクリプトを `poc/document-conversion/scan-pdf/fixtures/` に置く
+4. 該当 fixture を `pnpm poc:conversion:scan-pdf <path>` で走らせ、`D-P3-H-7 Q3` 実測手順の対象に加える
 
 ---
 
@@ -330,6 +420,8 @@ Phase 3-H-2 M6 の docs 完了条件 — **すべて達成（2026-05-20）:**
 - [docs/phase-3-h-direction.md](phase-3-h-direction.md) — subtype 優先順位・変換器表
 - [docs/phase-3-e-direction.md](phase-3-e-direction.md) — `ProcessingRecord` / Eval 契約
 - [docs/phase-3-h-slide-pdf-poc.md](phase-3-h-slide-pdf-poc.md) — slide-pdf PoC コスト・fallback
-- [docs/decisions.md](decisions.md) — `D-P3-H-4` / `D-P3-H-5` / `D-P3-H-6`
+- [docs/phase-3-h-3-slide-pdf-live-smoke.md](phase-3-h-3-slide-pdf-live-smoke.md) — slide-pdf 本線 live smoke 証跡
+- [docs/decisions.md](decisions.md) — `D-P3-H-4` / `D-P3-H-5` / `D-P3-H-6` / `D-P3-H-7`
 - [docs/open-questions.md](open-questions.md) — Phase 3-H-3 未決
 - [poc/document-conversion/README.md](../poc/document-conversion/README.md) — PoC runner 一覧
+- [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) — fixture inventory 正本

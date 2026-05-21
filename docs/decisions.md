@@ -1419,6 +1419,125 @@ Phase 3-H-3 の **実装**に入る前に次を満たす:
 
 ---
 
+## D-P3-H-7: Phase 3-H-3 subtype 3（scan-pdf）M6 実装方針（2026-05-21、確定）
+
+**ステータス**: 確定（2026-05-21）。`D-P3-H-6 Q2b` で別フェーズ送りとした scan-pdf 昇格（M6）について、実装着手前に必要な 4 項目（fixture 調達、`unmaskablePiiFindings` 閾値、quota / timeout / コスト上限、公開範囲拡大条件）を本エントリで正本化する。実装入口は [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §6（M6）+ §7（昇格差分）+ §8（実装 DoD）+ §9（fixture policy）。
+
+**決定**: scan-pdf 本線統合は、(a) 公開公的様式 + 合成 PII fixture 3〜5 本を repo に commit、(b) `unmaskablePiiFindings` は **warn + count 必須記録**、(c) quota / timeout / コスト上限は **PoC 実測値で M6-1 着手前に確定**、(d) 公開範囲拡大は **subtype 1 M5 踏襲 + Masker 本線統合完了を追加要件** とする。`D-P3-H-6 Q2` 系（fail-closed・fallback 不採用）と Q5（Masker は H-3 外）は本決定でも維持する。
+
+### Q1: scan-pdf fixture 調達ミックス
+
+**決定**: **公開公的様式の scan + 合成 PII fixture 3〜5 本** を `sample-data/document-conversion/scan-pdf/` に commit する。自社資料は**ローカル検証のみ**で、観測知見だけを docs に転記する。fixture 自体は CLAUDE.md Safety Invariant と [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) の「公開・PII フリーの公的文書を一次ソースとし、顧客実データは使わない」方針に従う。
+
+**fixture 構成（初期セット）:**
+
+| # | fixture 名（仮） | 役割 | 調達元 | PII |
+|---|---|---|---|---|
+| 1 | `synthetic-employment-form-scan.pdf`（既存維持） | safety_readiness + PII recall baseline | 既存 | 合成 PII あり |
+| 2 | `mhlw-labor-conditions-notice-blank-scan.pdf` | OCR coverage（表組み、PII フリー） | 既存 official-doc-pdf 同名の白紙様式 → 紙化 / 印刷後 scan | なし |
+| 3 | `nta-withholding-form-blank-scan.pdf` | locator quality（複雑な表） | 国税庁公開様式（白紙） → scan | なし |
+| 4 | `synthetic-invoice-with-pii-scan.pdf` | 士業ドメイン、合成 PII、フォーム欄 | 自前生成（公開請求書テンプレ + 合成会社名 / 口座） | 合成 PII あり |
+| 5 | `degraded-scan-fail-closed.pdf`（任意） | fail-closed 発火確認 | #2 を ImageMagick で 5度傾け + ノイズ追加 | なし |
+
+**理由:**
+- scan-pdf の評価軸は **OCR coverage / locator quality / safety_readiness / golden recall / fail-closed 動作** の 5 つで、1 fixture では分離評価できない（subtype 2 が `synthetic-context-package-deck.pdf` 1 本で済んだのは、PDF media 直読みで OCR 失敗パターンが本質的に発生しないため）。
+- 公開公的様式（厚労省・国税庁・e-Gov）は CLAUDE.md Safety Invariant と既存 [sample-data README](../sample-data/document-conversion/README.md) の方針に最も整合する。
+- 自社資料を masking して commit する案は、masking で漏れた PII が repo に残るリスクが高いため不採用（Safety Invariant の精神に反する）。自社資料は **ローカル only で観測 → 学んだ失敗パターンを synthetic fixture として再現** という分離を取る。
+- #5 の劣化版は本線 fail-closed 動作の証跡確保専用で、合成元（#2）から再現できれば良いので任意。
+
+**代替案:**
+- (a) 公的文書 + 合成 PII（3〜5 本） ← 採用
+- (b) 公的文書のみ（2〜3 本）。PII fixture は既存 1 本に依存（safety 評価が薄い）
+- (c) 自社資料を masking して commit（Safety Invariant 違反リスク）
+
+### Q2: `unmaskablePiiFindings` の閾値
+
+**決定**: `unmaskablePiiFindings` 検出時は **`evalStatus: 'warn'` で chunk 化を通す**。同時に **`unmaskablePiiFindings.count` の AuditEvent 記録を必須**化する（`document.convert` の `conversion` メタデータ拡張、または `safety` メタデータの新設で対応。フィールド名は M6-3 実装時確定）。
+
+**理由:**
+- dev tenant 限定の H-3 段階では **観測データ収集を優先**する。1 件でも fail にすると heuristic / golden の評価データが集まらず、後続フェーズ（Masker 統合や公開範囲拡大）での閾値判断ができなくなる。
+- `count` を AuditEvent に必須記録することで「警告したが通した」証跡を残し、Phase 3-G / Phase 4 audit 移送時にトレース可能にする。採点軸「とどける」（Gemini 利用証跡 + safety 検知証跡）の両方を厚くする。
+- subtype 1 `D-P3-H-4 Q5` の `requires_masking` PDF は **maskingPending: true で停止**する別ルートが既にあり、`unmaskablePiiFindings` は Curator が `direct` 判定した PDF に対して OCR レベルで残った PII を指す。役割が違うため fail-closed にする必然性はこの段階では薄い。
+- 公開範囲拡大（Q4 で Masker 統合完了が前提）のタイミングで、`unmaskablePiiFindings` を fail に切り替えるかは別 decision で再判断する。
+
+**代替案:**
+- (a) warn + count 必須記録 ← 採用
+- (b) fail-closed（1 件でも検出で chunk 化拒否）
+
+**運用上の含意:**
+- `synthetic-employment-form-scan.pdf` / `synthetic-invoice-with-pii-scan.pdf` を本線で走らせると warn が出るが chunk 化される。これは観測フェーズの **期待挙動**。
+- 公開拡大前の `unmaskablePiiFindings` 閾値再判断は、Masker 本線統合完了後の別 decision として起票する。
+
+### Q3: quota / timeout / コスト上限
+
+**決定**: **PoC 実測値で M6-1 実装着手前に確定**する。`poc/document-conversion/scan-pdf/runner.ts` で本決定の Q1 fixture 全件を走らせ、token / latency / コストを記録した上で初期値を決める。slide-pdf 実測値は scan-pdf に流用しない。
+
+**実測手順（M6-1 着手前のゲート）:**
+
+1. Q1 fixture #1〜#4 を `pnpm poc:conversion:scan-pdf <path>` で各 3 回実行する（cold / warm / warm の 3 回で latency 分散を見る）。
+2. 各実行で記録する観測値:
+   - 入力サイズ（bytes）、ページ数
+   - Gemini OCR レスポンス latency（p50 / p95）
+   - 入出力 token 数（Vertex SDK の usage metadata）
+   - JSON schema validation 成否
+3. 上記から **timeout 上限 = max(p95 latency × 2, 60 秒)**、**入力サイズ上限 = 既存 `MAX_UPLOAD_BYTES` の 5 MiB を維持**、**1 月あたりの想定コスト上限 = dev tenant 観測規模（数十件 / 月）で月 < $5** を仮置きする。
+4. 上記初期値を本ファイル `D-P3-H-7 Q3` の **追補（M6-1 着手時、2026-XX-XX 確定）** として追記し、`docs/phase-3-h-3-direction.md` §6 M6-1 に反映する。
+
+**理由:**
+- scan-pdf は画像化 PDF を OCR するため、slide-pdf（PDF media 直読み）と比べて **token / latency が桁違いに跳ねる**可能性が高い。slide-pdf 実測値の流用は誤判断のリスクが大きい。
+- 初期値を docs に固定しないと、M6-3（AuditEvent 必須化）と M6-4（heuristic 閾値）の判断材料が揃わない。
+- 数値の確定を本決定の確定後に倒すのは、`D-P3-H-6 Q2`（fail-closed）が既に確定しているため安全。「Gemini OCR が timeout / quota / schema 失敗したら fail-closed」という境界自体は本決定時点で確定済みで、残るのは具体値だけ。
+
+**確定境界（数値は M6-1 着手時に追記）:**
+- 入力サイズ超過: 既存 `MAX_UPLOAD_BYTES`（5 MiB）を踏襲、超過は 413 で拒否
+- Gemini OCR timeout / quota 超過 / schema 失敗: **fail-closed**（chunk 化せず `document.convert` を `evalStatus: 'error'` で記録）
+- 月次コスト超過: dev tenant 観測フェーズでは alerting のみ。本格上限は Masker 統合後の公開拡大判断で別 decision
+
+**代替案:**
+- (a) PoC 実測後に確定 ← 採用
+- (b) slide-pdf 値（timeout 60 秒、5 MiB）を仮流用して M6-1 を先行
+
+### Q4: 公開範囲拡大条件
+
+**決定**: subtype 3 の公開範囲拡大は、**subtype 1 M5 踏襲（heuristic / golden / コスト実測完了）+ Masker 本線統合完了 を追加要件**とする。dev tenant 限定のまま Phase 3-H-3 を閉じ、公開拡大判断は Masker 統合フェーズ完了後に **新規 decision** として起票する。
+
+**必須要件（5 つすべて）:**
+
+1. M6-4 heuristic 閾値が PR warning として CI で稼働している（subtype 1 / 2 同型）
+2. M6-5 golden recall fixture の expected が 30 日以上 stable（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §7.4 と同型）
+3. Q3 で確定したコスト上限が dev tenant 観測で 90 日 reach されていない（または上限見直しが完了している）
+4. **Masker 本線統合（PDF 経路）が完了し、`requires_masking` scan-pdf が `maskingPending: true` ではなく chunk 化されている**
+5. `unmaskablePiiFindings` の閾値が Masker 統合後の実観測を踏まえて再評価され、`fail-closed` への切替判断が別 decision として確定している
+
+**理由:**
+- scan-pdf は本質的に PII を含む文書を扱う想定（士業ドメインの申請書・契約書・請求書 scan）。Masker 未統合のまま全 tenant 公開すると、`unmaskablePiiFindings` を warn にしている本決定 Q2 と組み合わさり、PII が残った chunk が Context Package に到達するリスクが高い。
+- subtype 1 M5 の判断（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §3）は PII フリー公的様式中心の subtype を前提にしており、PII を本質的に扱う subtype 3 にそのまま適用するのは不十分。
+- `D-P3-H-6 Q5`（Masker 本線統合は H-3 外）と整合する。H-3 内で公開拡大に踏み切らないこと自体は H-3 のスコープと矛盾しない。
+- ハッカソン採点軸「とどける」は **dev tenant 限定 + 採点用 demo tenant + 証跡 docs** で十分説明できる。公開拡大は採点後の本番要件で良い。
+
+**代替案:**
+- (a) subtype 1 M5 踏襲 + Masker 統合完了 ← 採用
+- (b) subtype 1 M5 そのまま踏襲（Masker 統合を必須要件にしない）
+
+### 着手ゲート（M6 実装の前提）
+
+scan-pdf M6 の実装に入る前に次を満たす:
+
+1. ~~Phase 3-H-3 subtype 2（slide-pdf）M1〜M5 + live smoke 完了~~ — **達成（2026-05-20）**、PR #3 merged（`38d15ff`）
+2. ~~`D-P3-H-7` の 4 項目（Q1〜Q4）確定~~ — **本決定で達成（2026-05-21）**
+3. **Q3 実測手順（fixture 全件 × 3 回）の完了と数値追記** — M6-1 着手前ゲート（未達 → 本決定の追補として後日追記）
+4. **Q1 fixture #2〜#5 の取得と inventory 追記**（[sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md)）— M6-1 着手前ゲート
+
+### 影響範囲（予定）
+
+- 新規 fixture: `sample-data/document-conversion/scan-pdf/{mhlw-labor-conditions-notice-blank-scan,nta-withholding-form-blank-scan,synthetic-invoice-with-pii-scan,degraded-scan-fail-closed}.pdf`
+- 新規 extractor: `src/lib/extractors/scanPdfDocumentExtractor.ts`（M6-1）
+- 新規 flag: `pdf-conversion-subtype-3`（dev tenant allow-list + `expiresAt`、M6-2）
+- 修正: `uploadOrchestrator.ts`（同時 ON 拒否ルールに subtype 3 を追加）、`auditEvent.ts`（`unmaskablePiiFindings.count` 必須化、M6-3）、`featureFlags.ts` flagId union
+- docs: 本ファイル（Q3 数値追補）、[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8 / §9 追記、[docs/open-questions.md](open-questions.md) 残未決解消
+
+---
+
 ## 関連ドキュメント
 
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
