@@ -424,6 +424,7 @@ scan-pdf の公開範囲拡大は M6 完了で自動的には実施しない。*
 - [docs/phase-3-e-direction.md](phase-3-e-direction.md) — `ProcessingRecord` / Eval 契約
 - [docs/phase-3-h-slide-pdf-poc.md](phase-3-h-slide-pdf-poc.md) — slide-pdf PoC コスト・fallback
 - [docs/phase-3-h-3-slide-pdf-live-smoke.md](phase-3-h-3-slide-pdf-live-smoke.md) — slide-pdf 本線 live smoke 証跡
+- [docs/phase-3-h-3-scan-pdf-golden-baseline.md](phase-3-h-3-scan-pdf-golden-baseline.md) — scan-pdf golden recall 初回ベースライン + sidecar 本線化
 - [docs/decisions.md](decisions.md) — `D-P3-H-4` / `D-P3-H-5` / `D-P3-H-6` / `D-P3-H-7`
 - [docs/open-questions.md](open-questions.md) — Phase 3-H-3 未決
 - [poc/document-conversion/README.md](../poc/document-conversion/README.md) — PoC runner 一覧

@@ -175,23 +175,23 @@ describe('synthetic-invoice-with-pii-scan fixture', () => {
     expect(ir.source.sourceSubtype).toBe('scan-pdf');
   });
 
-  it('coverage: full pageCoverage (1 page), 1 table candidate', () => {
+  it('coverage: full pageCoverage (1 page), no table blocks in mainline sidecar', () => {
     const { coverage } = evalCoverage(
       { documentIr: ir, chunks: [] },
       { sourceSubtype: 'scan-pdf' }
     );
     expect(coverage.pageCoverage).toBe(1);
-    expect(coverage.tableCandidates).toBe(1);
+    expect(coverage.tableCandidates).toBe(0);
     expect(coverage.textDensityWarnings).toHaveLength(0);
   });
 
-  it('locatorQuality: page locators present, table locators present', () => {
+  it('locatorQuality: page locators present, table locators absent (image_text blocks)', () => {
     const { locatorQuality } = evalLocatorQuality({ documentIr: ir, chunks: [] });
     expect(locatorQuality.hasPageLocators).toBe(true);
-    expect(locatorQuality.hasTableLocators).toBe(true);
+    expect(locatorQuality.hasTableLocators).toBe(false);
   });
 
-  it('deriveAxisStatuses with dry-run DLP: safety=pass (unmaskable=0 from PoC)', () => {
+  it('deriveAxisStatuses with dry-run DLP: safety=pass when unmaskable=0', () => {
     const result = createEmptyConversionEvalResult();
     result.coverage = evalCoverage(
       { documentIr: ir, chunks: [] },
@@ -205,7 +205,7 @@ describe('synthetic-invoice-with-pii-scan fixture', () => {
 
     const axes = deriveAxisStatuses(result, 'heuristic', 'scan-pdf');
     expect(axes.coverage).toBe('pass');
-    expect(axes.locatorQuality).toBe('pass');
+    expect(axes.locatorQuality).toBe('warn');
     expect(axes.safetyReadiness).toBe('pass');
   });
 });

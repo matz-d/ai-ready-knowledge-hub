@@ -3,8 +3,8 @@
  *
  * CI never calls Vertex for scan-pdf: each scan fixture loads a committed
  * `*.document-ir.json` sidecar that pins a prior Vertex Gemini OCR output.
- * Regenerate sidecars via `pnpm poc:conversion:scan-pdf` locally, not in this
- * workflow.
+ * Regenerate sidecars via `pnpm tsx scripts/regenerateScanPdfGoldenSidecars.ts`
+ * (mainline extractor) locally, not in this workflow. PoC runner is auxiliary only.
  *
  * `degraded-scan-fail-closed.pdf` (6 MB) is excluded from all stages here; it
  * is a route-level 413 size-limit evidence artifact only (see sample-data README).

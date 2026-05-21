@@ -1,0 +1,54 @@
+{
+  "generatedAt": "2026-05-21T11:25:12.385Z",
+  "fixtures": [
+    {
+      "documentId": "synthetic-employment-form-scan",
+      "expectedFieldCount": 9,
+      "sidecar": {
+        "keyFieldRecall": 1,
+        "missingExpectedFields": [],
+        "chunkCount": 19,
+        "sourceKind": "poc",
+        "pinned": true
+      },
+      "mainline": {
+        "keyFieldRecall": 1,
+        "missingExpectedFields": [],
+        "chunkCount": 20,
+        "sourceKind": "upload",
+        "model": "gemini-2.5-flash",
+        "region": "asia-northeast1",
+        "durationMs": 9572
+      }
+    },
+    {
+      "documentId": "synthetic-invoice-with-pii-scan",
+      "expectedFieldCount": 9,
+      "sidecar": {
+        "keyFieldRecall": 1,
+        "missingExpectedFields": [],
+        "chunkCount": 6,
+        "sourceKind": "upload",
+        "pinned": true
+      },
+      "mainline": {
+        "keyFieldRecall": 0.1111111111111111,
+        "missingExpectedFields": [
+          "請求番号: INV-2025-0042",
+          "発行日: 2025年3月31日",
+          "請求先: 株式会社サンプル商事",
+          "〒100-0001 東京都千代田区丸の内1-1-1",
+          "担当者: 田中　太郎　様",
+          "システム保守費用",
+          "クラウド利用料",
+          "合計金額（税込）: 198,000円"
+        ],
+        "chunkCount": 37,
+        "sourceKind": "upload",
+        "model": "gemini-2.5-flash",
+        "region": "asia-northeast1",
+        "durationMs": 15660
+      }
+    }
+  ]
+}
