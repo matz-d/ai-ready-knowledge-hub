@@ -1554,7 +1554,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 **degraded fixture 役割（確定）:** `degraded-scan-fail-closed.pdf`（6 MB）は **5 MiB 超による 413 size-limit 証跡** のみ。OCR fail-closed 証跡は **≤5 MiB 専用 fixture + `scanPdfDocumentExtractor` integration test** で取る。
 
-**M6 完了時 `unmaskablePiiFindings` 観測（確定）:** live smoke / DoD の `count > 0` 観測は、既存 employment / invoice fixture の upload だけに依存せず、**新規 deterministic 合成 fixture** で達成する（M6-7 DoD）。
+**M6 完了時 `unmaskablePiiFindings` 観測（確定）:** live smoke / DoD の `count > 0` 観測は、既存 employment / invoice fixture の upload だけに依存せず、**upload と同じ mainline scan extractor で反復確認済みの新規 deterministic 合成 fixture** で達成する（M6-7 DoD）。PoC runner の観測 artifact だけでは DoD gate を閉じない。
 
 ### 影響範囲（予定）
 

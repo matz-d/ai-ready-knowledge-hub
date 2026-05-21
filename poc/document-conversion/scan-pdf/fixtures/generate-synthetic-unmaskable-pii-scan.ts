@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-// Generates a deterministic low-quality synthetic scan for the W5b
+// Generates a deterministic low-quality synthetic fax copy for the W5b
 // unmaskable PII live-smoke path. All PII-like strings are invented fixtures.
 import { once } from 'node:events';
 import { createWriteStream, existsSync } from 'node:fs';
@@ -80,14 +80,14 @@ async function writeSourcePdf(sourcePath: string): Promise<void> {
   doc
     .fillColor('#111827')
     .fontSize(24)
-    .text('Synthetic fax intake slip', 54, 54)
+    .text('Synthetic damaged fax intake', 54, 54)
     .fillColor('#9b1c1c')
     .fontSize(10)
     .text('EVALUATION ONLY. ALL PII-LIKE FIELDS BELOW ARE SYNTHETIC.', 54, 92)
     .fillColor('#374151')
     .fontSize(10)
     .text(
-      'The copied page has fold damage across the contact fields. OCR should keep the warning that a downstream masker cannot rely on an exact span.',
+      'Fax copy quality note: a fold damaged the contact fields. Compare the source page before retyping any partial contact value.',
       54,
       116,
       { width: 480 }
@@ -101,10 +101,10 @@ async function writeSourcePdf(sourcePath: string): Promise<void> {
     .stroke()
     .restore();
 
-  drawDamagedField(doc, 'Employee name', 'XXXX Taro', 199, 221, 63);
-  drawDamagedField(doc, 'Phone', '090-1234-5678', 254, 275, 68);
-  drawDamagedField(doc, 'Address', '1-2-3 XXXX-cho, Shibuya-ku', 309, 309, 92);
-  drawDamagedField(doc, 'My Number-like', '1234-5678-9012', 364, 266, 86);
+  drawDamagedField(doc, 'Employee name', 'XXXX Taro', 199, 192, 160);
+  drawDamagedField(doc, 'Phone', '090-1234-5678', 254, 200, 194);
+  drawDamagedField(doc, 'Address', '1-2-3 XXXX-cho, Shibuya-ku', 309, 190, 268);
+  drawDamagedField(doc, 'My Number-like', '1234-5678-9012', 364, 198, 198);
 
   doc
     .save()
@@ -122,7 +122,7 @@ async function writeSourcePdf(sourcePath: string): Promise<void> {
     .text('Visible fragments came from synthetic values only:', 54, 487)
     .fontSize(9)
     .text(
-      'name / phone / address / My Number-like row are deliberately clipped by deterministic fold bands and fax noise.',
+      'Name, phone, address, and My Number-like rows are clipped by fold bands and fax noise.',
       54,
       506,
       { width: 480 }

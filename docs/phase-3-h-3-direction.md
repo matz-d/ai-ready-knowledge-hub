@@ -351,12 +351,12 @@ PR #3（`38d15ff`）で M1〜M5 + live smoke 完了:
 | M6-4 | scan-pdf 専用 health / heuristic 閾値。`unmaskablePiiFindings` は warn 扱い（Q2）。PoC 暫定表をコピーしない。OCR fail-closed 証跡は **extractor integration test + ≤5 MiB 専用 fixture**（degraded 6 MB は 413 専用、§9 末尾参照） |
 | M6-5 | `sample-data/document-conversion/scan-pdf/*.expected.json` golden fixture（recall ベース、氏名 / 住所 / 電話 / マイナンバー風値中心） |
 | M6-6 | `.github/workflows/conversion-eval.yml` に subtype 3 を health 必須 gate として追加、ruleset main required checks 更新（`D-P3-H-5b` 踏襲） |
-| M6-7 | live smoke 証跡を `docs/phase-3-h-3-scan-pdf-live-smoke.md` に残す。**tenant scope = `m-grow-ai.com` のみ**（`D-P3-H-7` 2026-05-21 追補 Q4）。`unmaskablePiiFindings.count > 0` 観測は **新規 deterministic 合成 fixture** で達成（既存 employment / invoice upload だけに依存しない） |
+| M6-7 | live smoke 証跡を `docs/phase-3-h-3-scan-pdf-live-smoke.md` に残す。**tenant scope = `m-grow-ai.com` のみ**（`D-P3-H-7` 2026-05-21 追補 Q4）。`unmaskablePiiFindings.count > 0` 観測は **新規 deterministic 合成 fixture** で達成（既存 employment / invoice upload だけに依存しない）。fixture 採用は PoC runner 単独ではなく upload と同じ mainline scan extractor の反復確認を前提にする |
 
 **M6 完了の判定基準（v2、2026-05-21 追補）:**
 
 - [ ] CI で subtype 3 の health gate が merge 必須として稼働している
-- [ ] **`m-grow-ai.com` tenant** 上で **新規 deterministic 合成 fixture** を upload し、`AuditEventConversion.unmaskablePiiFindings.count > 0` の `document.convert` AuditEvent が Firestore に記録される（employment / invoice 既存 fixture のみに依存しない）
+- [ ] **`m-grow-ai.com` tenant** 上で **mainline extractor 反復確認済みの新規 deterministic 合成 fixture** を upload し、`AuditEventConversion.unmaskablePiiFindings.count > 0` の `document.convert` AuditEvent が Firestore に記録される（employment / invoice 既存 fixture のみに依存しない。PoC runner は補助 artifact であり DoD gate ではない）
 - [ ] Gemini OCR timeout / quota / schema 失敗時は **pre-flight fail-closed（HTTP 400）** — chunk 化されず、`document` / `chunk` / `document.convert` AuditEvent は作らない（`evalStatus: 'error'` は使わない）
 - [ ] `degraded-scan-fail-closed.pdf`（6 MB）で **5 MiB 超による 413 size-limit 拒否** が観測される（OCR fail-closed 証跡用ではない）
 - [ ] live smoke 証跡 docs に 1 件以上の Vertex `inferenceDestination` 付き AuditEvent ID が記録されている
