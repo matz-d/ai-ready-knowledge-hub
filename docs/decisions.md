@@ -1437,13 +1437,13 @@ Phase 3-H-3 の **実装**に入る前に次を満たす:
 | 2 | `mhlw-labor-conditions-notice-blank-scan.pdf` | OCR coverage（表組み、PII フリー） | 既存 official-doc-pdf 同名の白紙様式 → 紙化 / 印刷後 scan | なし |
 | 3 | `nta-withholding-form-blank-scan.pdf` | locator quality（複雑な表） | 国税庁公開様式（白紙） → scan | なし |
 | 4 | `synthetic-invoice-with-pii-scan.pdf` | 士業ドメイン、合成 PII、フォーム欄 | 自前生成（公開請求書テンプレ + 合成会社名 / 口座） | 合成 PII あり |
-| 5 | `degraded-scan-fail-closed.pdf`（任意） | fail-closed 発火確認 | #2 を ImageMagick で 5度傾け + ノイズ追加 | なし |
+| 5 | `degraded-scan-fail-closed.pdf`（任意） | **5 MiB 超 → 413 size-limit 証跡**（OCR fail-closed 用ではない） | #2 を ImageMagick で 5度傾け + ノイズ → Ghostscript 120dpi 圧縮（6 MB） | なし |
 
 **理由:**
 - scan-pdf の評価軸は **OCR coverage / locator quality / safety_readiness / golden recall / fail-closed 動作** の 5 つで、1 fixture では分離評価できない（subtype 2 が `synthetic-context-package-deck.pdf` 1 本で済んだのは、PDF media 直読みで OCR 失敗パターンが本質的に発生しないため）。
 - 公開公的様式（厚労省・国税庁・e-Gov）は CLAUDE.md Safety Invariant と既存 [sample-data README](../sample-data/document-conversion/README.md) の方針に最も整合する。
 - 自社資料を masking して commit する案は、masking で漏れた PII が repo に残るリスクが高いため不採用（Safety Invariant の精神に反する）。自社資料は **ローカル only で観測 → 学んだ失敗パターンを synthetic fixture として再現** という分離を取る。
-- #5 の劣化版は本線 fail-closed 動作の証跡確保専用で、合成元（#2）から再現できれば良いので任意。
+- #5 の劣化版（6 MB）は本線 **413 size-limit 拒否** の証跡専用。OCR fail-closed は ≤5 MiB の専用 fixture + extractor integration test で取る（2026-05-21 追補）。
 
 **代替案:**
 - (a) 公的文書 + 合成 PII（3〜5 本） ← 採用
@@ -1452,7 +1452,7 @@ Phase 3-H-3 の **実装**に入る前に次を満たす:
 
 ### Q2: `unmaskablePiiFindings` の閾値
 
-**決定**: `unmaskablePiiFindings` 検出時は **`evalStatus: 'warn'` で chunk 化を通す**。同時に **`unmaskablePiiFindings.count` の AuditEvent 記録を必須**化する（`document.convert` の `conversion` メタデータ拡張、または `safety` メタデータの新設で対応。フィールド名は M6-3 実装時確定）。
+**決定**: `unmaskablePiiFindings` 検出時は **`evalStatus: 'warn'` で chunk 化を通す**。同時に **`AuditEventConversion.unmaskablePiiFindings.count` の記録を必須**化する（2026-05-21 追補でフィールド確定 — 下記「2026-05-21 追補」参照）。
 
 **理由:**
 - dev tenant 限定の H-3 段階では **観測データ収集を優先**する。1 件でも fail にすると heuristic / golden の評価データが集まらず、後続フェーズ（Masker 統合や公開範囲拡大）での閾値判断ができなくなる。
@@ -1497,7 +1497,7 @@ Phase 3-H-3 の **実装**に入る前に次を満たす:
 | Timeout 上限 | **60 秒** | max(p95_wall_ms × 2, 60s) = max(29190 × 2, 60000) = 60s |
 | 入力サイズ上限 | **5 MiB**（変更なし） | `MAX_UPLOAD_BYTES` 踏襲。6 MB の degraded fixture は本線 upload で 413 拒否（期待挙動） |
 | 月次コスト上限（dev tenant） | **< $5/月**（50 件/月で $0.66） | max cost/call = $0.01313（nta-withholding 相当）× 50 件 = $0.66 |
-| fail-closed 境界 | Gemini OCR timeout / quota 超過 / schema 失敗時 | `evalStatus: 'error'` で記録、chunk 化なし |
+| fail-closed 境界 | Gemini OCR timeout / quota 超過 / schema 失敗時 | **pre-flight fail-closed（HTTP 400）**。`document` / `chunk` / `document.convert` AuditEvent は作らない（2026-05-21 追補 Q3） |
 | 月次コスト超過時 | dev tenant は alerting のみ | 本格上限は Masker 統合後の公開拡大判断で別 decision |
 
 **実測の注目所見（M6-4 heuristic への示唆）:**
@@ -1537,8 +1537,24 @@ scan-pdf M6 の実装に入る前に次を満たす:
 
 1. ~~Phase 3-H-3 subtype 2（slide-pdf）M1〜M5 + live smoke 完了~~ — **達成（2026-05-20）**、PR #3 merged（`38d15ff`）
 2. ~~`D-P3-H-7` の 4 項目（Q1〜Q4）確定~~ — **本決定で達成（2026-05-21）**
-3. **Q3 実測手順（fixture 全件 × 3 回）の完了と数値追記** — M6-1 着手前ゲート（未達 → 本決定の追補として後日追記）
-4. **Q1 fixture #2〜#5 の取得と inventory 追記**（[sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md)）— M6-1 着手前ゲート
+3. ~~**Q3 実測手順（fixture 全件 × 3 回）の完了と数値追記**~~ — **達成（2026-05-21）**。[docs/phase-3-h-3-scan-pdf-poc-measurement.md](phase-3-h-3-scan-pdf-poc-measurement.md)
+4. ~~**Q1 fixture #2〜#5 の取得と inventory 追記**~~ — **達成（2026-05-21）**。[sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) L36
+
+### 2026-05-21 追補（M6 実装着手前・docs 同期）
+
+W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させる追補。
+
+**Q2 実装形（確定）:** `AuditEventConversion.unmaskablePiiFindings.count`（`document.convert` の `conversion` メタデータ内）。
+
+- **理由:** 値は scan-pdf converter の Gemini OCR 出力に由来する変換メタデータであり、`document.convert` 専用。Phase 4 で safety 汎用化が必要になったら **別 decision** に分離する（本追補では `safety` メタデータ新設は採用しない）。
+
+**Q4 M6 内 tenant scope（確定）:** **`m-grow-ai.com` のみ**。demo tenant（採点用）への smoke は **M6 完了後** の別手順とする。公開範囲拡大条件（Q4 必須要件 5 つ）は変更しない。
+
+**Q3 補追（pre-flight fail-closed）:** Gemini OCR timeout / quota / JSON schema 失敗は **extractor 呼出前または失敗時に HTTP 400 で fail-closed** とする。`document` / `KnowledgeChunk` / `document.convert` AuditEvent は作成しない。`evalStatus` は **health stage が健全に完了した変換** の結果のみ記録する（pre-flight extraction failure では `evalStatus: 'error'` を使わない）。
+
+**degraded fixture 役割（確定）:** `degraded-scan-fail-closed.pdf`（6 MB）は **5 MiB 超による 413 size-limit 証跡** のみ。OCR fail-closed 証跡は **≤5 MiB 専用 fixture + `scanPdfDocumentExtractor` integration test** で取る。
+
+**M6 完了時 `unmaskablePiiFindings` 観測（確定）:** live smoke / DoD の `count > 0` 観測は、既存 employment / invoice fixture の upload だけに依存せず、**新規 deterministic 合成 fixture** で達成する（M6-7 DoD）。
 
 ### 影響範囲（予定）
 

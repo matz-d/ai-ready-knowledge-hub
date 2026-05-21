@@ -5,6 +5,7 @@
 
 ## 変更履歴
 
+- **2026-05-21 (v4)**: §8.3 M6 着手ゲート #4 完了、完了判定基準 v2（pre-flight 400 / 413 degraded / deterministic unmaskable fixture）、M6-1〜M6-7 に `D-P3-H-7` 2026-05-21 追補反映。§9 末尾に OCR fail-closed 証跡方針を追記。
 - **2026-05-20 (v3)**: Phase 3-H-2 完了を前提に着手ゲートを更新（CI gate + 観測ループ確立済み）。
 - **2026-05-20 (v1)**: 初版。Phase 3-H-2 §9 骨子に沿い、ゴール / Vertex 統合方針 / feature flag / `inferenceDestination` / Masker タイミングを記載。
 - **2026-05-20 (v2)**: §4.2 に `AuditInferenceDestination` の `document.convert` 必須化条件を仕様として確定（M2-C 型予約の実装引き継ぎ）。
@@ -337,27 +338,27 @@ PR #3（`38d15ff`）で M1〜M5 + live smoke 完了:
 
 - [x] subtype 2 M1〜M5 + live smoke 完了（`D-P3-H-7` 着手ゲート 1）
 - [x] `D-P3-H-7` Q1〜Q4 確定（2026-05-21）
-- [ ] **Q1 fixture #2〜#5 取得と [sample-data README](../sample-data/document-conversion/README.md) inventory 追記**（着手ゲート 4）
+- [x] **Q1 fixture #2〜#5 取得と [sample-data README](../sample-data/document-conversion/README.md) inventory 追記**（着手ゲート 4、2026-05-21 完了 — README L36）
 - [x] **Q3 PoC 実測完了（fixture 全件 × 3 回）と `D-P3-H-7 Q3` への数値追補**（2026-05-21）— timeout 60s、5 MiB、$0.66/月 確定。詳細: [docs/phase-3-h-3-scan-pdf-poc-measurement.md](phase-3-h-3-scan-pdf-poc-measurement.md)
 
 **M6 マイルストーン別 DoD:**
 
 | Milestone | DoD |
 |---|---|
-| M6-1 | `src/lib/extractors/scanPdfDocumentExtractor.ts` 新設、Q3 PoC 実測値で timeout / size 上限を `D-P3-H-7` に追補、`pdf-parse` fallback を持たない（`D-P3-H-6 Q2`）、`converterId = gemini-vertex-ocr`（仮、実装時確定） |
-| M6-2 | `pdf-conversion-subtype-3` flag 新設（dev tenant allow-list + `expiresAt`）、`/api/documents` の「flag ちょうど 1 つ」ルールに subtype 3 追加（1+3 / 2+3 / 1+2+3 同時 ON は 403） |
-| M6-3 | `document.convert` に Vertex 成功時 `inferenceDestination` 必須化を subtype 3 にも適用、`unmaskablePiiFindings.count` を AuditEvent に必須記録（`D-P3-H-7 Q2`）、subtype 3 用 audit test ケース追加 |
-| M6-4 | scan-pdf 専用 health / heuristic 閾値。`unmaskablePiiFindings` は warn 扱いだが閾値超過時の挙動を別途定義、PoC 暫定表をコピーしない |
+| M6-1 | `src/lib/extractors/scanPdfDocumentExtractor.ts` 新設。timeout **60s** / 入力 **5 MiB**（`D-P3-H-7 Q3` 確定）。`pdf-parse` fallback なし（`D-P3-H-6 Q2`）。Gemini OCR timeout / quota / schema 失敗は **pre-flight fail-closed（HTTP 400）** — `document` / `chunk` / `document.convert` AuditEvent は作らない（`D-P3-H-7` 2026-05-21 追補 Q3）。`converterId = gemini-vertex-ocr`（実装時確定） |
+| M6-2 | `pdf-conversion-subtype-3` flag 新設（**`m-grow-ai.com` のみ** allow-list + `expiresAt`）。demo tenant smoke は M6 完了後（`D-P3-H-7` 2026-05-21 追補 Q4）。`/api/documents` の「flag ちょうど 1 つ」ルールに subtype 3 追加（1+3 / 2+3 / 1+2+3 同時 ON は 403） |
+| M6-3 | `document.convert` に Vertex 成功時 `inferenceDestination` 必須化を subtype 3 にも適用。`AuditEventConversion.unmaskablePiiFindings.count` を必須記録（`D-P3-H-7 Q2` 追補 2026-05-21 — scan-pdf converter OCR 出力由来、`document.convert` 専用）。subtype 3 用 audit test ケース追加 |
+| M6-4 | scan-pdf 専用 health / heuristic 閾値。`unmaskablePiiFindings` は warn 扱い（Q2）。PoC 暫定表をコピーしない。OCR fail-closed 証跡は **extractor integration test + ≤5 MiB 専用 fixture**（degraded 6 MB は 413 専用、§9 末尾参照） |
 | M6-5 | `sample-data/document-conversion/scan-pdf/*.expected.json` golden fixture（recall ベース、氏名 / 住所 / 電話 / マイナンバー風値中心） |
 | M6-6 | `.github/workflows/conversion-eval.yml` に subtype 3 を health 必須 gate として追加、ruleset main required checks 更新（`D-P3-H-5b` 踏襲） |
-| M6-7 | live smoke 証跡を `docs/phase-3-h-3-scan-pdf-live-smoke.md`（命名 subtype 2 踏襲）に残す |
+| M6-7 | live smoke 証跡を `docs/phase-3-h-3-scan-pdf-live-smoke.md` に残す。**tenant scope = `m-grow-ai.com` のみ**（`D-P3-H-7` 2026-05-21 追補 Q4）。`unmaskablePiiFindings.count > 0` 観測は **新規 deterministic 合成 fixture** で達成（既存 employment / invoice upload だけに依存しない） |
 
-**M6 完了の判定基準:**
+**M6 完了の判定基準（v2、2026-05-21 追補）:**
 
 - [ ] CI で subtype 3 の health gate が merge 必須として稼働している
-- [ ] dev tenant 上で `synthetic-employment-form-scan.pdf` / `synthetic-invoice-with-pii-scan.pdf` を upload して `unmaskablePiiFindings.count > 0` の AuditEvent が Firestore に記録される
-- [ ] Gemini OCR timeout / quota / schema 失敗時に fail-closed（chunk 化されず、`evalStatus: 'error'`）
-- [ ] `degraded-scan-fail-closed.pdf` で fail-closed 動作が観測される
+- [ ] **`m-grow-ai.com` tenant** 上で **新規 deterministic 合成 fixture** を upload し、`AuditEventConversion.unmaskablePiiFindings.count > 0` の `document.convert` AuditEvent が Firestore に記録される（employment / invoice 既存 fixture のみに依存しない）
+- [ ] Gemini OCR timeout / quota / schema 失敗時は **pre-flight fail-closed（HTTP 400）** — chunk 化されず、`document` / `chunk` / `document.convert` AuditEvent は作らない（`evalStatus: 'error'` は使わない）
+- [ ] `degraded-scan-fail-closed.pdf`（6 MB）で **5 MiB 超による 413 size-limit 拒否** が観測される（OCR fail-closed 証跡用ではない）
 - [ ] live smoke 証跡 docs に 1 件以上の Vertex `inferenceDestination` 付き AuditEvent ID が記録されている
 
 **M6 完了後の公開拡大判断（`D-P3-H-7 Q4`）:**
@@ -378,9 +379,11 @@ scan-pdf の公開範囲拡大は M6 完了で自動的には実施しない。*
 | 2 | `mhlw-labor-conditions-notice-blank-scan.pdf` | OCR coverage（表組み、PII フリー） | 既存 [mhlw-labor-conditions-notice-general.pdf](../sample-data/document-conversion/official-doc-pdf/mhlw-labor-conditions-notice-general.pdf) 由来の白紙様式 → 紙化 / 印刷 → scan | なし | 公共データ利用規約 1.0、出典明記 |
 | 3 | `nta-withholding-form-blank-scan.pdf` | locator quality（複雑な表） | 国税庁公開様式（白紙） → scan | なし | 国税庁利用規約、出典明記 |
 | 4 | `synthetic-invoice-with-pii-scan.pdf` | 士業ドメイン、合成 PII、フォーム欄 | local synthetic（公開請求書テンプレ + 合成会社名 / 口座 / 担当者氏名） | 合成 PII | Repo fixture |
-| 5 | `degraded-scan-fail-closed.pdf`（任意） | fail-closed 発火確認 | #2 を ImageMagick で 5度傾け + ノイズ追加 | なし | 公共データ利用規約 1.0、出典明記 |
+| 5 | `degraded-scan-fail-closed.pdf`（任意） | **5 MiB 超 → 413 size-limit 証跡**（OCR fail-closed 用ではない） | #2 を ImageMagick で 5度傾け + ノイズ → Ghostscript 120dpi 圧縮（6 MB） | なし | 公共データ利用規約 1.0、出典明記 |
 
 各 fixture を追加するごとに [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) の inventory 表に行を追加する。
+
+**OCR fail-closed 証跡（M6 実装）:** Gemini OCR timeout / quota / schema 失敗の fail-closed は **≤5 MiB の専用 fixture + `scanPdfDocumentExtractor` integration test** で取る。`degraded-scan-fail-closed.pdf` は本線 upload の **413 size-limit 専用**（6 MB、PoC runner 観測は継続可）。
 
 ### 9.2 自社資料の扱い（commit 不可）
 
