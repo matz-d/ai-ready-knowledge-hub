@@ -330,7 +330,7 @@ PR #3（`38d15ff`）で M1〜M5 + live smoke 完了:
 - [x] live smoke 証跡: [docs/phase-3-h-3-slide-pdf-live-smoke.md](phase-3-h-3-slide-pdf-live-smoke.md)
 - [x] feature flag 同時 ON（subtype-1 + subtype-2）の fail-closed 拒否（`957f5a3`）
 
-### 8.3 subtype 3（scan-pdf）M6 実装 DoD（`D-P3-H-7` 確定 2026-05-21）
+### 8.3 subtype 3（scan-pdf）M6 実装 DoD（完了 2026-05-21）
 
 `D-P3-H-7` 4 項目（Q1〜Q4）確定を前提に、M6-1〜M6-7 を以下の DoD で進める。
 
@@ -355,11 +355,11 @@ PR #3（`38d15ff`）で M1〜M5 + live smoke 完了:
 
 **M6 完了の判定基準（v2、2026-05-21 追補）:**
 
-- [ ] CI で subtype 3 の health gate が merge 必須として稼働している
-- [ ] **`m-grow-ai.com` tenant** 上で **mainline extractor 反復確認済みの新規 deterministic 合成 fixture** を upload し、`AuditEventConversion.unmaskablePiiFindings.count > 0` の `document.convert` AuditEvent が Firestore に記録される（employment / invoice 既存 fixture のみに依存しない。PoC runner は補助 artifact であり DoD gate ではない）
-- [ ] Gemini OCR timeout / quota / schema 失敗時は **pre-flight fail-closed（HTTP 400）** — chunk 化されず、`document` / `chunk` / `document.convert` AuditEvent は作らない（`evalStatus: 'error'` は使わない）
-- [ ] `degraded-scan-fail-closed.pdf`（6 MB）で **5 MiB 超による 413 size-limit 拒否** が観測される（OCR fail-closed 証跡用ではない）
-- [ ] live smoke 証跡 docs に 1 件以上の Vertex `inferenceDestination` 付き AuditEvent ID が記録されている
+- [x] CI で subtype 3 の health gate が merge 必須として稼働している
+- [x] **`m-grow-ai.com` tenant** 上で **mainline extractor 反復確認済みの新規 deterministic 合成 fixture** を upload し、`AuditEventConversion.unmaskablePiiFindings.count > 0` の `document.convert` AuditEvent が Firestore に記録される（employment / invoice 既存 fixture のみに依存しない。PoC runner は補助 artifact であり DoD gate ではない）
+- [x] Gemini OCR timeout / quota / schema 失敗時は **pre-flight fail-closed（HTTP 400）** — chunk 化されず、`document` / `chunk` / `document.convert` AuditEvent は作らない（`evalStatus: 'error'` は使わない）
+- [x] `degraded-scan-fail-closed.pdf`（6 MB）で **5 MiB 超による 413 size-limit 拒否** が観測される（OCR fail-closed 証跡用ではない）
+- [x] live smoke 証跡 docs に 1 件以上の Vertex `inferenceDestination` 付き AuditEvent ID が記録されている
 
 **M6 完了後の公開拡大判断（`D-P3-H-7 Q4`）:**
 
