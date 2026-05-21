@@ -66,6 +66,18 @@ describe('FeatureFlagSchema', () => {
     expect(flag.expiresAt).toBe('2026-06-30T23:59:59.000Z');
   });
 
+  it('parses pdf-conversion-subtype-3 with dev allow-list and expiresAt', () => {
+    const flag = FeatureFlagSchema.parse({
+      flagId: 'pdf-conversion-subtype-3',
+      enabledTenants: ['m-grow-ai.com'],
+      defaultEnabled: false,
+      expiresAt: '2026-07-31T23:59:59.000Z',
+    });
+    expect(flag.flagId).toBe('pdf-conversion-subtype-3');
+    expect(flag.enabledTenants).toEqual(['m-grow-ai.com']);
+    expect(flag.expiresAt).toBe('2026-07-31T23:59:59.000Z');
+  });
+
   it('rejects a flag with invalid expiresAt format', () => {
     expect(() =>
       FeatureFlagSchema.parse({
@@ -227,6 +239,33 @@ describe('getFeatureFlag', () => {
     });
   });
 
+  it('reads feature_flags/pdf-conversion-subtype-3 and is gated by dev allow-list + expiresAt', async () => {
+    const { db, collection, doc } = fakeFirestoreWithFlag({
+      flagId: 'pdf-conversion-subtype-3',
+      enabledTenants: ['m-grow-ai.com'],
+      defaultEnabled: false,
+      expiresAt: '2026-07-31T23:59:59.000Z',
+    });
+
+    const flag = await getFeatureFlag(db, 'pdf-conversion-subtype-3');
+
+    expect(collection).toHaveBeenCalledWith(FEATURE_FLAGS_COLLECTION);
+    expect(doc).toHaveBeenCalledWith('pdf-conversion-subtype-3');
+    expect(flag).toEqual({
+      flagId: 'pdf-conversion-subtype-3',
+      enabledTenants: ['m-grow-ai.com'],
+      defaultEnabled: false,
+      expiresAt: '2026-07-31T23:59:59.000Z',
+    });
+
+    const beforeExpiry = new Date('2026-06-01T00:00:00.000Z');
+    const afterExpiry = new Date('2026-08-01T00:00:00.000Z');
+
+    expect(isFeatureEnabled(flag, 'm-grow-ai.com', beforeExpiry)).toBe(true);
+    expect(isFeatureEnabled(flag, 'other-tenant.com', beforeExpiry)).toBe(false);
+    expect(isFeatureEnabled(flag, 'm-grow-ai.com', afterExpiry)).toBe(false);
+  });
+
   it('returns null for an invalid flag document and fails closed', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { db } = fakeFirestoreWithFlag({
@@ -252,10 +291,11 @@ describe('getFeatureFlag', () => {
 // ── Constants tests ────────────────────────────────────────────────────────
 
 describe('FEATURE_FLAG_IDS', () => {
-  it('includes pdf-conversion-subtype-1 and pdf-conversion-subtype-2', () => {
+  it('includes pdf-conversion-subtype-1, subtype-2, and subtype-3', () => {
     const ids: readonly FeatureFlagId[] = FEATURE_FLAG_IDS;
     expect(ids).toContain('pdf-conversion-subtype-1');
     expect(ids).toContain('pdf-conversion-subtype-2');
+    expect(ids).toContain('pdf-conversion-subtype-3');
   });
 
   it('each ID is a non-empty string', () => {

@@ -105,11 +105,13 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | ~~Phase 3-D~~ | ~~Cloud IAP + CI/CD（GitHub Actions → Cloud Run）~~ | **完了** (2026-05-14) |
 | ~~Phase 3-E~~ | ~~Processing Boundary + Cloud DLP Trust Modes~~ | **完了** (2026-05-18) |
 | ~~Phase 3-H / H-2~~ | ~~Document Conversion PoC + subtype 1 薄い本線統合 + Eval 育成ループ~~ | **完了** (2026-05-20) |
-| **Phase 3-H-3** | slide-pdf / scan-pdf 本線統合 + `inferenceDestination` | **次に着手** |
-| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | H-3 後 |
+| ~~Phase 3-H-3 subtype 2~~ | ~~slide-pdf 本線統合 + `inferenceDestination` + live smoke~~ | **完了** (2026-05-20, PR #3) |
+| **Phase 3-H-3 subtype 3 (M6)** | scan-pdf 本線統合 + OCR fail-closed + `unmaskablePiiFindings` warn | **次に着手**（`D-P3-H-7` 確定 2026-05-21） |
+| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | M6 後 |
+| Masker 本線統合（PDF 経路） | `requires_masking` PDF の chunk 化と公開拡大要件 | M6 後（`D-P3-H-7 Q4`） |
 | Phase 3-G | `cloud-sanitized-ingress` prototype | 高セキュリティ顧客向け後続 |
 
-**次のアクション**: Phase 3-H-3 に着手する。前提は [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §13 Completion Snapshot と [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) 着手ゲート。
+**次のアクション**: scan-pdf M6 に着手する。着手前ゲート（`D-P3-H-7` 着手ゲート 3 / 4）として (a) fixture #2〜#5 の取得と inventory 追記、(b) PoC 実測（fixture 全件 × 3 回）と `D-P3-H-7 Q3` への数値追補 を完了する。詳細は [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8.3。
 
 ---
 
@@ -156,23 +158,30 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 
 ### Phase 3-H-3（slide-pdf / scan-pdf 本線統合）
 
-**方針確定（2026-05-20）:** [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) と [docs/decisions.md](decisions.md) `D-P3-H-6`（確定）を正とする。実装着手前提として Q2 / Q5 は確定済み。
+**subtype 2（slide-pdf）完了（2026-05-20）:** PR #3（`38d15ff`）で M1〜M5 + live smoke 完了。証跡は [docs/phase-3-h-3-slide-pdf-live-smoke.md](phase-3-h-3-slide-pdf-live-smoke.md)。
+
+**subtype 3（scan-pdf）方針確定（2026-05-21）:** [docs/decisions.md](decisions.md) `D-P3-H-7` で M6 実装方針の 4 項目（fixture / PII 閾値 / quota / 公開範囲）を確定。実装入口は [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8.3（M6 DoD）+ §9（fixture policy）。
 
 **確定済み（H-3 では再議論しない）:**
 - **slide-pdf 本線の `pdf-parse` fallback は持たない（fail-closed）** — Gemini 呼出失敗時は subtype 1 同様に chunk 化を中断する。PoC runner の fallback / `SLIDE_PDF_SKIP_GEMINI` は PoC 専用として温存（`D-P3-H-6 Q2` 確定、2026-05-20）。
 - **Masker 本線統合（PDF 経路）は H-3 スコープ外** — `requires_masking` PDF は `maskingPending: true` で停止し、本格統合は別フェーズで起票（`D-P3-H-6 Q5` 確定、2026-05-20）。
+- **scan-pdf fixture 調達ミックス** = 公的文書 + 合成 PII（3〜5 本）。自社資料は commit 不可、ローカル検証のみ（`D-P3-H-7 Q1` 確定、2026-05-21）。
+- **scan-pdf `unmaskablePiiFindings` 閾値** = `warn + count` 必須記録。fail-closed への切替は Masker 統合後の別 decision で再判断（`D-P3-H-7 Q2` 確定、2026-05-21）。
+- **scan-pdf 公開範囲拡大条件** = subtype 1 M5 踏襲 + **Masker 本線統合完了を追加要件**。dev tenant 限定のまま H-3 を閉じる（`D-P3-H-7 Q4` 確定、2026-05-21）。
 
-**残未決:**
-- 残未決: **scan-pdf** の quota 超過・timeout・コスト上限と fail-closed の具体値。scan-pdf は subtype 2 と同時に実装せず、subtype 2 M1〜M5 完了後に別フェーズで扱う（[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §7）。
-- 残未決: **scan-pdf** の `unmaskablePiiFindings` 閾値。OCR で抽出できない PII は Masker に渡せないため、slide-pdf より強い safety signal として扱う。
-- 残未決: subtype 2 / 3 の **heuristic 閾値**（[docs/phase-3-h-slide-pdf-poc.md](phase-3-h-slide-pdf-poc.md) 暫定表は PoC 候補のみ）
-- 残未決: `sample-data/document-conversion/{slide-pdf,scan-pdf}/*.expected.json` の golden 粒度と月次レビュー手順の subtype 拡張
-- 残未決: `pdf-conversion-subtype-2` / `pdf-conversion-subtype-3` の **公開範囲拡大条件**（subtype 1 M5 判断の踏襲か再定義か）
+**残未決（M6 着手前に解消する）:**
+- 残未決: **scan-pdf quota / timeout / コスト上限の具体値**。`D-P3-H-7 Q3` で「PoC 実測後に確定」を確定。Q1 fixture 全件 × 3 回の実測後、`D-P3-H-7 Q3` の追補として `decisions.md` に数値追記する（M6-1 着手前ゲート）。
+- 残未決: **scan-pdf fixture #2〜#5 の取得と inventory 追記**（[sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md)）。M6-1 着手前ゲート。
 
-**M1 運用（確定・再議論しない）:**
-- 同一 tenant で `pdf-conversion-subtype-1` と `pdf-conversion-subtype-2` を **同時 ON にしない**（`/api/documents` は 403）。本線 upload 上限は **5 MiB**（`MAX_UPLOAD_BYTES`）。PoC の 30 MB は runner 専用。
-- 残未決: `document.convert` の **`inferenceDestination`** に載せる model / region の tenant override 要否（固定 env のみで足りるか）
-- 残未決: PoC の `ocrUsage` / `ocrCost` を `ConversionEvalResult` 本線 schema に昇格するか
+**H-3 内では着手しないが M6 後に必要:**
+- subtype 3 の **heuristic 閾値**（M6-4 で確定。PoC 暫定表をコピーで済まさない、`D-P3-H-7` Q1）
+- `sample-data/document-conversion/scan-pdf/*.expected.json` の golden 粒度と月次レビュー手順の subtype 拡張（M6-5）
+- `document.convert` の **`inferenceDestination`** に載せる model / region の tenant override 要否（固定 env のみで足りるか）
+- PoC の `ocrUsage` / `ocrCost` を `ConversionEvalResult` 本線 schema に昇格するか
+- `unmaskablePiiFindings` 閾値の fail-closed への切替判断（Masker 統合後、別 decision で起票）
+
+**M1 / M6 共通運用（確定・再議論しない）:**
+- 同一 tenant で複数の `pdf-conversion-subtype-*` flag を **同時 ON にしない**（`/api/documents` は 403）。本線 upload 上限は **5 MiB**（`MAX_UPLOAD_BYTES`）。PoC の 30 MB は runner 専用。subtype 3 追加後は 1+3 / 2+3 / 1+2+3 同時 ON も同様に拒否する（M6-2）。
 
 ### Document Conversion Eval（H-3 以降の残未決）
 

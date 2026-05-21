@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "fileName": "nta-withholding-form-blank-scan.pdf",
+    "mediaType": "application/pdf",
+    "sourceKind": "upload",
+    "sourceSubtype": "scan-pdf"
+  },
+  "pages": [
+    {
+      "pageNumber": 1,
+      "blocks": [
+        {
+          "blockId": "p1-ocr1",
+          "kind": "heading",
+          "text": "給与所得者の扶養控除等（異動）申告書",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        },
+        {
+          "blockId": "p1-ocr2",
+          "kind": "paragraph",
+          "text": "令和　　年分　　　　　給与の支払者の名称",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        },
+        {
+          "blockId": "p1-ocr3",
+          "kind": "paragraph",
+          "text": "あなたの氏名　　　　　　　　　　　　住所又は居所",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        },
+        {
+          "blockId": "p1-ocr4",
+          "kind": "paragraph",
+          "text": "世帯主の氏名　　　　　　　あなたとの続柄",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        },
+        {
+          "blockId": "p1-ocr5",
+          "kind": "paragraph",
+          "text": "配偶者の有無　　有・無　　配偶者の氏名",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        },
+        {
+          "blockId": "p1-ocr6",
+          "kind": "paragraph",
+          "text": "控除対象扶養親族（16歳以上）の氏名・続柄・生年月日",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        },
+        {
+          "blockId": "p1-ocr7",
+          "kind": "paragraph",
+          "text": "障害者、寡婦、ひとり親又は勤労学生　の場合には○をつけてください",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        }
+      ]
+    }
+  ]
+}

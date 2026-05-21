@@ -868,6 +868,149 @@ describe('orchestrateUploadProcessing', () => {
       expect(recordAuditEventMock).toHaveBeenCalledTimes(1);
     });
 
+    it('records document.convert with gemini-vertex-ocr + inferenceDestination + unmaskablePiiFindings count for scan-pdf', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-audit-scan');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+      const scanDocumentIr: DocumentIr = {
+        ...minimalDocumentIr,
+        source: {
+          ...minimalDocumentIr.source,
+          sourceSubtype: 'scan-pdf',
+        },
+      };
+
+      await orchestrateUploadProcessing({
+        ...pdfBaseInput,
+        documentIr: scanDocumentIr,
+        sourceSubtype: 'scan-pdf',
+        auditContext: {
+          tenantId: 'customer.example',
+          actor: {
+            userId: 'alice@customer.example',
+            ipAddress: '203.0.113.10',
+            userAgent: 'vitest',
+          },
+        },
+        conversion: {
+          converterId: 'gemini-vertex-ocr',
+          inferenceDestination: {
+            vendor: 'vertex',
+            region: 'us-central1',
+            model: 'gemini-2.5-pro',
+          },
+          unmaskablePiiFindingsCount: 0,
+        },
+      });
+
+      expect(recordAuditEventMock).toHaveBeenCalledTimes(1);
+      const payload = recordAuditEventMock.mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      expect(payload.conversion).toEqual(
+        expect.objectContaining({
+          converterId: 'gemini-vertex-ocr',
+          sourceSubtype: 'scan-pdf',
+          unmaskablePiiFindings: { count: 0 },
+        })
+      );
+      expect(payload.inferenceDestination).toEqual({
+        vendor: 'vertex',
+        region: 'us-central1',
+        model: 'gemini-2.5-pro',
+      });
+    });
+
+    it('records unmaskablePiiFindings count 3 without omitting zero-like values', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-audit-scan-pii');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+      const scanDocumentIr: DocumentIr = {
+        ...minimalDocumentIr,
+        source: {
+          ...minimalDocumentIr.source,
+          sourceSubtype: 'scan-pdf',
+        },
+      };
+
+      await orchestrateUploadProcessing({
+        ...pdfBaseInput,
+        documentIr: scanDocumentIr,
+        sourceSubtype: 'scan-pdf',
+        auditContext: {
+          tenantId: 'customer.example',
+          actor: {
+            userId: 'alice@customer.example',
+            ipAddress: '203.0.113.10',
+            userAgent: 'vitest',
+          },
+        },
+        conversion: {
+          converterId: 'gemini-vertex-ocr',
+          inferenceDestination: {
+            vendor: 'vertex',
+            region: 'us-central1',
+            model: 'gemini-2.5-pro',
+          },
+          unmaskablePiiFindingsCount: 3,
+        },
+      });
+
+      const payload = recordAuditEventMock.mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      expect(
+        (payload.conversion as { unmaskablePiiFindings: { count: number } })
+          .unmaskablePiiFindings
+      ).toEqual({ count: 3 });
+    });
+
+    it('fails the unmaskablePiiFindings invariant before any persistence when count is missing on scan-pdf Vertex path', async () => {
+      const { ConversionUnmaskablePiiFindingsInvariantError } =
+        await vi.importActual<typeof import('../audit/auditEvent')>(
+          '../audit/auditEvent'
+        );
+      randomUUIDMock.mockReturnValue('doc-pdf-audit-scan-invariant');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+      const scanDocumentIr: DocumentIr = {
+        ...minimalDocumentIr,
+        source: {
+          ...minimalDocumentIr.source,
+          sourceSubtype: 'scan-pdf',
+        },
+      };
+
+      await expect(
+        orchestrateUploadProcessing({
+          ...pdfBaseInput,
+          documentIr: scanDocumentIr,
+          sourceSubtype: 'scan-pdf',
+          auditContext: {
+            tenantId: 'customer.example',
+            actor: {
+              userId: 'alice@customer.example',
+              ipAddress: '203.0.113.10',
+              userAgent: 'vitest',
+            },
+          },
+          conversion: {
+            converterId: 'gemini-vertex-ocr',
+            inferenceDestination: {
+              vendor: 'vertex',
+              region: 'us-central1',
+              model: 'gemini-2.5-pro',
+            },
+          },
+        })
+      ).rejects.toBeInstanceOf(ConversionUnmaskablePiiFindingsInvariantError);
+
+      expect(curatorFlowMock).not.toHaveBeenCalled();
+      expect(recordAuditEventMock).not.toHaveBeenCalled();
+    });
+
     it('records document.convert without inferenceDestination for slide-pdf pdf-parse-fallback', async () => {
       randomUUIDMock.mockReturnValue('doc-pdf-audit-slide-fb');
       curatorFlowMock.mockResolvedValue(curatorDirectResult);

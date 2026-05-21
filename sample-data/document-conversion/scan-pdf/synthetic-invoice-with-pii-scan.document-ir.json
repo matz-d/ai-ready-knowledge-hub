@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "fileName": "synthetic-invoice-with-pii-scan.pdf",
+    "mediaType": "application/pdf",
+    "sourceKind": "upload",
+    "sourceSubtype": "scan-pdf"
+  },
+  "pages": [
+    {
+      "pageNumber": 1,
+      "blocks": [
+        {
+          "blockId": "p1-ocr1",
+          "kind": "heading",
+          "text": "請求書",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        },
+        {
+          "blockId": "p1-ocr2",
+          "kind": "paragraph",
+          "text": "請求番号: INV-2025-0042　　発行日: 2025年3月31日",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        },
+        {
+          "blockId": "p1-ocr3",
+          "kind": "paragraph",
+          "text": "請求先: 株式会社サンプル商事　〒100-0001 東京都千代田区丸の内1-1-1",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        },
+        {
+          "blockId": "p1-ocr4",
+          "kind": "paragraph",
+          "text": "担当者: 田中　太郎　様",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        },
+        {
+          "blockId": "p1-ocr5",
+          "kind": "table",
+          "text": "品目\t数量\t単価\t金額\nシステム保守費用\t1\t150,000円\t150,000円\nクラウド利用料\t1\t30,000円\t30,000円",
+          "locator": { "pageNumber": 1, "tableIndex": 1, "rowIndex": 0 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr", "columnCount": 4 }
+        },
+        {
+          "blockId": "p1-ocr6",
+          "kind": "paragraph",
+          "text": "合計金額（税込）: 198,000円",
+          "locator": { "pageNumber": 1 },
+          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+        }
+      ]
+    }
+  ]
+}

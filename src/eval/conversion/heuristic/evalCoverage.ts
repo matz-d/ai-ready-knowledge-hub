@@ -23,7 +23,7 @@ import {
   type ConversionEvalStage,
 } from '../conversionEvalStage';
 import type { AxisRollupStatus } from '../evalSafetyReadiness';
-import type { DocumentIrPage } from '../documentIr';
+import type { DocumentIrPage, DocumentSourceSubtype } from '../documentIr';
 import type { HeuristicEvalChunk, HeuristicEvalInput } from './types';
 
 /**
@@ -49,12 +49,21 @@ function pageHasNonEmptyBlock(page: DocumentIrPage): boolean {
   return page.blocks.some((block) => block.text.trim().length > 0);
 }
 
+export type EvalCoverageOptions = {
+  /** Defaults to `documentIr.source.sourceSubtype` when omitted. */
+  sourceSubtype?: DocumentSourceSubtype;
+};
+
 export function evalCoverage<TChunk extends HeuristicEvalChunk>(
-  input: HeuristicEvalInput<TChunk>
+  input: HeuristicEvalInput<TChunk>,
+  options?: EvalCoverageOptions
 ): Pick<ConversionEvalResult, 'coverage'> {
   const { documentIr } = input;
   const pages = documentIr.pages;
   const totalPages = pages.length;
+  const sourceSubtype =
+    options?.sourceSubtype ?? documentIr.source.sourceSubtype;
+  const isScanPdf = sourceSubtype === 'scan-pdf';
 
   const pagesWithBlocks = pages.filter(pageHasNonEmptyBlock).length;
   const pageCoverage = totalPages > 0 ? pagesWithBlocks / totalPages : 0;
@@ -67,7 +76,16 @@ export function evalCoverage<TChunk extends HeuristicEvalChunk>(
 
   const textDensityWarnings: string[] = [];
   for (const page of pages) {
-    if (page.blocks.length === 0) continue;
+    if (page.blocks.length === 0) {
+      // scan-pdf: a page with zero OCR blocks means the Gemini OCR produced nothing
+      // for that page; surface it explicitly as an observation channel (D-P3-H-7 §4B)
+      if (isScanPdf) {
+        textDensityWarnings.push(
+          `page ${page.pageNumber}: zero OCR blocks (scan-pdf pageCoverage miss)`
+        );
+      }
+      continue;
+    }
     const length = pageTextLength(page);
     if (length === 0) {
       textDensityWarnings.push(

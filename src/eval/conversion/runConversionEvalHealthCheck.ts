@@ -94,5 +94,5 @@ export function runConversionEvalHealthCheck<
     },
   };
 
-  return attachOverallStatus(result, HEALTH_CHECK_STAGE);
+  return attachOverallStatus(result, HEALTH_CHECK_STAGE, input.sourceSubtype);
 }

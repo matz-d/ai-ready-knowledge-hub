@@ -29,6 +29,7 @@ export async function runConversionEvalHeuristic<
 >(input: ConversionEvalHeuristicInput<TChunk>): Promise<ConversionEvalResult> {
   const base = createEmptyConversionEvalResult();
   const shared = { documentIr: input.documentIr, chunks: input.chunks };
+  const sourceSubtype = input.documentIr.source.sourceSubtype;
   const result: ConversionEvalResult = {
     ...base,
     schemaValidity: {
@@ -45,5 +46,5 @@ export async function runConversionEvalHeuristic<
   };
 
   assertConversionEvalResultStageShape(result, 'heuristic');
-  return attachOverallStatus(result, 'heuristic');
+  return attachOverallStatus(result, 'heuristic', sourceSubtype);
 }

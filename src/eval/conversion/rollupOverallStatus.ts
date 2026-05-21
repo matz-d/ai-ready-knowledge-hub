@@ -1,5 +1,6 @@
 import type { ConversionEvalResult } from './conversionEvalResult';
 import type { ConversionEvalStage } from './conversionEvalStage';
+import type { DocumentSourceSubtype } from './documentIr';
 import {
   evalCoverageAxisStatus,
   evalLocatorQualityAxisStatus,
@@ -54,9 +55,10 @@ export function evalContextPackageReadiness(
 /** Non-blocker axes that downgrade overall to warn when they fail. */
 export function collectNonBlockerFails(
   result: ConversionEvalResult,
-  stage: ConversionEvalStage
+  stage: ConversionEvalStage,
+  sourceSubtype?: DocumentSourceSubtype
 ): string[] {
-  const axes = deriveAxisStatuses(result, stage);
+  const axes = deriveAxisStatuses(result, stage, sourceSubtype);
   const fails: string[] = [];
 
   if (axes.contextPackageReadiness === 'fail') {
@@ -74,11 +76,12 @@ export function collectNonBlockerFails(
 
 export function deriveAxisStatuses(
   result: ConversionEvalResult,
-  stage: ConversionEvalStage
+  stage: ConversionEvalStage,
+  sourceSubtype?: DocumentSourceSubtype
 ): ConversionEvalAxisStatuses {
   return {
     schemaValidity: evalSchemaValidity(result),
-    safetyReadiness: evalSafetyReadiness(result, stage),
+    safetyReadiness: evalSafetyReadiness(result, stage, sourceSubtype),
     coverage: evalCoverageAxisStatus(result, stage),
     locatorQuality: evalLocatorQualityAxisStatus(result, stage),
     semanticRetention: 'pass',
@@ -90,9 +93,10 @@ export function deriveAxisStatuses(
  * Subset of {@link deriveAxisStatuses} for heuristic-stage CI reports and PR comments.
  */
 export function toHeuristicCiAxisStatuses(
-  result: ConversionEvalResult
+  result: ConversionEvalResult,
+  sourceSubtype?: DocumentSourceSubtype
 ): HeuristicCiAxisStatuses {
-  const axes = deriveAxisStatuses(result, 'heuristic');
+  const axes = deriveAxisStatuses(result, 'heuristic', sourceSubtype);
   return {
     coverage: axes.coverage,
     locator_quality: axes.locatorQuality,
@@ -105,12 +109,13 @@ export function toHeuristicCiAxisStatuses(
  */
 export function rollupOverallStatus(
   result: ConversionEvalResult,
-  stage: ConversionEvalStage
+  stage: ConversionEvalStage,
+  sourceSubtype?: DocumentSourceSubtype
 ): Pick<ConversionEvalResult['overall'], 'status' | 'reasons'> {
-  const axes = deriveAxisStatuses(result, stage);
+  const axes = deriveAxisStatuses(result, stage, sourceSubtype);
   const schema = axes.schemaValidity;
   const safety = axes.safetyReadiness;
-  const nonBlockerFails = collectNonBlockerFails(result, stage);
+  const nonBlockerFails = collectNonBlockerFails(result, stage, sourceSubtype);
 
   const reasons: string[] = [];
 
@@ -135,10 +140,11 @@ export function rollupOverallStatus(
 
 export function attachOverallStatus(
   result: ConversionEvalResult,
-  stage: ConversionEvalStage
+  stage: ConversionEvalStage,
+  sourceSubtype?: DocumentSourceSubtype
 ): ConversionEvalResult {
   return {
     ...result,
-    overall: rollupOverallStatus(result, stage),
+    overall: rollupOverallStatus(result, stage, sourceSubtype),
   };
 }
