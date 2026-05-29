@@ -3,6 +3,7 @@ import type { DocumentReference, FieldValue as FieldValueType } from '@google-cl
 import type { CuratorOutputResult, AiUsePolicy, Sensitivity } from '../agents/curator/schema';
 import { curatorFlow } from '../agents/curator/flow';
 import { modelId as curatorModelId } from '../agents/_shared/genkitClient';
+import { maskKnowledgeChunk } from '../agents/masker/maskKnowledgeChunk';
 import { maskerPipelineFlow } from '../agents/masker/pipelineFlow';
 import type { PipelineOutput } from '../agents/masker/pipelineSchema';
 import { applyMaskerUpgrade } from '../agents/masker/upgrade';
@@ -201,7 +202,10 @@ export type OrchestrateResult =
       storagePath: string;
       curator: CuratorOutputResult;
       curatorCompletedAt: Date;
-      /** True when the PDF was classified requires_masking and is parked (PDF M1). */
+      /**
+       * Legacy park flag (PDF M1). New uploads run Masker on the PDF path and
+       * return `ai_safe` / `restricted` instead of parking.
+       */
       maskingPending?: boolean;
     }
   | {
@@ -356,6 +360,7 @@ export async function orchestrateUploadProcessing(
       content: input.content,
       contentSha256,
       storagePath,
+      aiSafeStoragePath,
       documentIr: input.documentIr,
       auditContext: input.auditContext,
       conversion: input.conversion ?? DEFAULT_PDF_CONVERSION_AUDIT,
@@ -883,8 +888,8 @@ export async function safeDeleteMaskedObject(
 
 /**
  * PDF curator phase — mirrors `runCuratorPhase` for text documents but maps
- * `requires_masking` → `status='curated' + maskingPending:true` instead of
- * `status='masking'`.  The Masker is intentionally not wired to PDFs in M1.
+ * `requires_masking` → stay in `curating` until DocumentIR conversion completes,
+ * then `orchestratePdfPath` runs Masker (same as text uploads).
  */
 async function runPdfCuratorPhase(args: {
   docRef: DocumentReference;
@@ -899,8 +904,7 @@ async function runPdfCuratorPhase(args: {
     });
     const completedAt = new Date();
 
-    // PDF M1: requires_masking parks at curated + maskingPending after DocumentIR
-    // conversion succeeds (see parkPdfRequiresMaskingDocument in orchestratePdfPath).
+    // requires_masking: stay in curating until DocumentIR + Masker complete in orchestratePdfPath.
     const deferRequiresMaskingPark = result.aiUsePolicy === 'requires_masking';
     const nextStatus = deferRequiresMaskingPark
       ? 'curating'
@@ -974,7 +978,7 @@ async function runPdfCuratorPhase(args: {
  *   3. Write DocumentIR to GCS (for both direct and requires_masking).
  *   4. Run health-stage conversion eval and persist to `conversion_eval`.
  *   5. direct → chunk via documentIrToKnowledgeChunks.
- *   6. requires_masking → park at curated + maskingPending:true (no Masker in M1).
+ *   6. requires_masking → Masker pipeline + per-chunk mask + DocumentIR chunks.
  */
 async function orchestratePdfPath(args: {
   docRef: DocumentReference;
@@ -983,6 +987,7 @@ async function orchestratePdfPath(args: {
   content: string;
   contentSha256: string;
   storagePath: string;
+  aiSafeStoragePath: string;
   documentIr: DocumentIr;
   auditContext?: OrchestrateAuditContext;
   conversion: PdfConversionAudit;
@@ -1113,31 +1118,79 @@ async function orchestratePdfPath(args: {
       conversion: args.conversion,
     });
 
-    await parkPdfRequiresMaskingDocument(args.docRef);
+    let maskerOutcome: MaskerPhaseSuccess;
+    try {
+      maskerOutcome = await runMaskerPhase({
+        docRef: args.docRef,
+        docId: args.docId,
+        fileName: args.displayName,
+        content: args.content,
+        contentSha256: args.contentSha256,
+        sourceKind: 'upload',
+        externalSource: null,
+        aiSafeStoragePath: args.aiSafeStoragePath,
+        curatorContext: {
+          sensitivity: curatorOutput.result.sensitivity,
+          aiUsePolicy: curatorOutput.result.aiUsePolicy,
+          businessDomain: curatorOutput.result.businessDomain,
+        },
+        curatorEffectiveSnapshot: {
+          sensitivity: curatorOutput.result.sensitivity,
+          aiUsePolicy: curatorOutput.result.aiUsePolicy,
+          sensitivitySource: 'curator',
+        },
+      });
+    } catch (e) {
+      throw new MaskerPhaseError(args.docId, e);
+    }
+
+    if (maskerOutcome.kind === 'ai_safe') {
+      const chunks = documentIrToKnowledgeChunks({
+        documentIr: args.documentIr,
+        docId: args.docId,
+        extractorInput: args.content,
+        documentSensitivity: curatorOutput.result.sensitivity,
+        documentAiUsePolicy: 'requires_masking',
+        title: args.displayName,
+        sensitivitySource: 'inherited',
+      });
+      const maskedChunks = await Promise.all(
+        chunks.map((chunk) => maskKnowledgeChunk(chunk))
+      );
+      const db = getFirestoreClient();
+      const adapter = createChunkFirestoreAdapter(db);
+      await adapter.replaceChunksForDocument(args.docId, maskedChunks, {
+        extractorInput: args.content,
+      });
+
+      return {
+        kind: 'ai_safe',
+        docId: args.docId,
+        storagePath: args.storagePath,
+        aiSafeStoragePath: args.aiSafeStoragePath,
+        curator: curatorOutput.result,
+        curatorCompletedAt: curatorOutput.completedAt,
+        masker: maskerOutcome.summary,
+      };
+    }
 
     return {
-      kind: 'curated',
+      kind: 'restricted',
       docId: args.docId,
       storagePath: args.storagePath,
       curator: curatorOutput.result,
       curatorCompletedAt: curatorOutput.completedAt,
-      maskingPending: true,
+      masker: maskerOutcome.summary,
+      sensitivityReason: maskerOutcome.sensitivityReason,
+      originalCuratorSensitivity: curatorOutput.result.sensitivity,
     };
   } catch (e) {
+    // Masker failures already recorded maskerError inside runMaskerPhase
+    // (mirrors the text path); don't re-record them as a conversion failure.
+    if (e instanceof MaskerPhaseError) throw e;
     await recordConversionFailure(args.docRef, e);
     throw e;
   }
-}
-
-/** PDF M1 terminal park: conversion succeeded; Masker not wired yet. */
-async function parkPdfRequiresMaskingDocument(
-  docRef: DocumentReference
-): Promise<void> {
-  await docRef.update({
-    status: 'curated',
-    maskingPending: true,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
 }
 
 async function persistPdfHealthStageEval(args: {
