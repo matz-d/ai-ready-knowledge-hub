@@ -1579,7 +1579,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 2. `ai_safe` 時は **`documentIrToKnowledgeChunks`（`documentAiUsePolicy: requires_masking`）→ `maskKnowledgeChunk`  per chunk → `replaceChunksForDocument`**。文書全体の masked GCS オブジェクト（pipeline）と chunk 単位マスク（`chunkRegenerator` と同型）を併用する。
 3. `restricted` 時は chunk 化しない（text 経路と同型）。
 4. DocumentIR GCS 保存・`document.convert` AuditEvent・health eval の順序は H-3 の `requires_masking` 分岐を維持し、Masker は eval / audit の後に実行する。
-5. **Masker 失敗時のエラー記録は text 経路と同型に `maskerError` のみ**とする。`orchestratePdfPath` の外側 catch は `MaskerPhaseError` を `recordConversionFailure` でラップせず rethrow する（`runMaskerPhase` 内の `recordPhaseFailure('masker')` が `maskerError` を記録済み）。変換失敗（DocumentIR/chunk 等）は従来どおり `conversionError`。
+5. **Masker 失敗時のエラー記録は text 経路と同型に `maskerError` のみ**とする。`orchestratePdfPath` の外側 catch は `MaskerPhaseError` を `recordConversionFailure` でラップせず rethrow する（`runMaskerPhase` 内の `recordPhaseFailure('masker')` が `maskerError` を記録済み）。`ai_safe` コミット後の per-chunk マスキング（`maskKnowledgeChunk`）失敗も Masker 操作として `recordPhaseFailure('masker')` → `MaskerPhaseError` で `maskerError` 扱いとする。変換ステップ（`documentIrToKnowledgeChunks` / `replaceChunksForDocument`）の失敗は direct 経路と同様 `conversionError`。
 
 **影響:** `src/lib/uploadOrchestrator.ts`（`orchestratePdfPath`）、`uploadOrchestrator` 単体テスト（`ai_safe` / `restricted` / Masker 失敗の 3 経路を追加）。scan-pdf 公開拡大（`D-P3-H-7 Q4`）の前提の一部を満たすが、live smoke・閾値再評価は別 decision。
 

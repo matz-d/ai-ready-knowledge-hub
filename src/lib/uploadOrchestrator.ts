@@ -1154,9 +1154,19 @@ async function orchestratePdfPath(args: {
         title: args.displayName,
         sensitivitySource: 'inherited',
       });
-      const maskedChunks = await Promise.all(
-        chunks.map((chunk) => maskKnowledgeChunk(chunk))
-      );
+      // Per-chunk masking is a Masker operation: classify failures as
+      // maskerError (not conversionError) to match the document-level Masker
+      // failure path. The outer catch then rethrows MaskerPhaseError without
+      // re-recording it as a conversion failure.
+      let maskedChunks: typeof chunks;
+      try {
+        maskedChunks = await Promise.all(
+          chunks.map((chunk) => maskKnowledgeChunk(chunk))
+        );
+      } catch (e) {
+        await recordPhaseFailure(args.docRef, 'masker', e);
+        throw new MaskerPhaseError(args.docId, e);
+      }
       const db = getFirestoreClient();
       const adapter = createChunkFirestoreAdapter(db);
       await adapter.replaceChunksForDocument(args.docId, maskedChunks, {

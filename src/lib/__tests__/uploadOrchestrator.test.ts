@@ -698,6 +698,40 @@ describe('orchestrateUploadProcessing', () => {
       expect(conversionFailureCall).toBeUndefined();
     });
 
+    it('marks failed with maskerError when per-chunk masking fails on PDF path', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-chunk-mask-fail');
+      curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+      maskerPipelineFlowMock.mockResolvedValue(aiSafePipelineResult);
+      maskKnowledgeChunkMock.mockRejectedValue(new Error('chunk mask boom'));
+
+      await expect(orchestrateUploadProcessing(pdfBaseInput)).rejects.toBeInstanceOf(
+        MaskerPhaseError
+      );
+
+      // Document was committed ai_safe by runMaskerPhase, but chunk persistence
+      // never ran and the failure is classified as a Masker failure.
+      expect(replaceChunksForDocumentMock).not.toHaveBeenCalled();
+      const failedCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).status === 'failed'
+      );
+      expect(failedCall).toBeTruthy();
+      expect((failedCall?.[0] as Record<string, unknown>).maskerError).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('マスク処理に失敗しました。'),
+        })
+      );
+      const conversionFailureCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).conversionError !== undefined
+      );
+      expect(conversionFailureCall).toBeUndefined();
+    });
+
     it('continues PDF flow when health eval persistence fails', async () => {
       const consoleWarnSpy = vi
         .spyOn(console, 'warn')
