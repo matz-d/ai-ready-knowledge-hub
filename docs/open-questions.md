@@ -108,7 +108,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | ~~Phase 3-H-3 subtype 2~~ | ~~slide-pdf 本線統合 + `inferenceDestination` + live smoke~~ | **完了** (2026-05-20, PR #3) |
 | ~~Phase 3-H-3 subtype 3 (M6)~~ | ~~scan-pdf 本線統合 + OCR fail-closed + `unmaskablePiiFindings` warn~~ | **完了** (2026-05-21, live smoke DoD YES) |
 | Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | 提出・デモ向け |
-| Masker 本線統合（PDF 経路） | `requires_masking` PDF の chunk 化と Context Package 接続 | 製品ロジック（`D-P3-H-7 Q4` の公開拡大前提） |
+| ~~Masker 本線統合（PDF 経路）~~ | ~~`requires_masking` PDF の chunk 化と Context Package 接続~~ | **完了**（2026-05-29、`D-P3-M-PDF-1` / `feat/masker-pdf-mainline`） |
 | **Ingest: standalone images** | `image/jpeg` / `image/png` 等を upload ソースとして追加（scan-pdf とは別。写真・図面・スクショ単体） | 情報源拡張（下記 §Ingest 起票） |
 | **Ingest: Drive folder bulk** | SA 共有フォルダ配下のファイル列挙 → バッチ import（URL 1 本ずつからの脱却） | 情報源拡張（下記 §Ingest 起票） |
 | **Ingest: local directory batch** | ローカルディレクトリ walk または複数ファイル一括投入（CLI / UI） | 情報源拡張（下記 §Ingest 起票） |
@@ -116,7 +116,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | Phase 3-H `office-native` | `.pptx` / `.docx` 原本の conversion subtype 4 | Phase 3-H 優先 4・時間があれば |
 | Phase 3-G | `cloud-sanitized-ingress` prototype | 高セキュリティ顧客向け後続 |
 
-**次のアクション**: Masker PDF 本線または Phase 3-F のどちらを先にするか product 判断。scan-pdf 公開拡大は Masker 統合 + `unmaskablePiiFindings` 再評価の別 decision（`D-P3-H-7 Q4`）。**情報源の幅**を伸ばす候補（画像単体・Drive/ローカル一括・Drive 同期）は下記 §Ingest 拡張に起票済み — 着手前に decision エントリを足す。
+**次のアクション**: Phase 3-F（デモ polish）と **Masker PDF 本線の dev tenant live smoke 証跡**（`D-P3-M-PDF-1` 残タスク）の優先を product 判断。scan-pdf 公開拡大は Masker 本線完了を前提に `unmaskablePiiFindings` 再評価の別 decision（`D-P3-H-7 Q4`）。**情報源の幅**を伸ばす候補（画像単体・Drive/ローカル一括・Drive 同期）は下記 §Ingest 拡張に起票済み — 着手前に decision エントリを足す。
 
 ### Ingest 拡張（起票 2026-05-21）
 
@@ -135,7 +135,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 - **目的**: スキャン PDF 以外に、写真・白板撮影・FAX 画像・スクショなど **画像ファイル単体** を Inventory に載せる。
 - **スコープ案**: 新 subtype（例: `image-scan`）または scan-pdf extractor の media 拡張。`DocumentIR` + Conversion Eval + Masker 方針を subtype 3 と揃える。
 - **着手前に決める**: 対応 MIME（`image/jpeg`, `image/png`, `image/webp` 等）、サイズ上限、Vertex/Gemini OCR か Cloud Vision か、`requires_masking` 既定、feature flag tenant。
-- **依存**: Masker 本線統合（PII あり画像）と eval fixture（合成画像 PII）。
+- **依存**: Masker PDF 本線は完了（`D-P3-M-PDF-1`）。画像 subtype では PII あり fixture と eval を別途用意。
 - **スコープ外（継続）**: 動画・音声（[docs/scope.md](scope.md)）。
 
 **候補 2 — Ingest: Drive folder bulk**
@@ -163,7 +163,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 
 **推奨着手順（仮・product 未確定）**
 
-1. Masker PDF 本線（既存 PDF が Context Package まで届かない穴を塞ぐ）
+1. ~~Masker PDF 本線~~ → **完了**（`D-P3-M-PDF-1`）。残: dev tenant live smoke 証跡
 2. Ingest: local directory batch **または** Drive folder bulk（デモ・実務で効く一括のどちらか先）
 3. Ingest: standalone images
 4. Workspace: Drive sync（2/3 が安定してから）
@@ -202,7 +202,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 | subtype 1 本線統合の有無・方式 | feature flag + Curator まで + `direct` のみ chunk 化 | `D-P3-H-3` / `D-P3-H-4` |
 | feature flag 粒度 | Firestore `feature_flags`、allow-list + `expiresAt` | `D-P3-H-4 Q1` |
 | DocumentIR / eval 保存先 | GCS `raw/{docId}/document-ir/v1.json`、Firestore `conversion_eval` | `D-P3-H-4 Q2–Q3` |
-| `requires_masking` PDF | `curated` + `maskingPending: true`、chunk なし | `D-P3-H-4 Q5`、IAP 実機確認 |
+| `requires_masking` PDF（H-3 時点） | `curated` + `maskingPending: true`、chunk なし | `D-P3-H-4 Q5`、IAP 実機確認。**新規 upload は `D-P3-M-PDF-1` で Masker 本線** |
 | ConversionEval 型・runner・CI 三段 | `src/eval/conversion/*`、health 必須 / heuristic warn / golden 手動 | `D-P3-E Q8`、`D-P3-H-5b` |
 | subtype 1 heuristic 閾値（初期） | M2-D 分布 + DLP 実測 2 件 | `D-P3-H-5` |
 | golden の意味 | 重要フィールド recall（完全一致ではない） | §7.2、M4 実装 |
@@ -222,7 +222,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 
 **確定済み（H-3 では再議論しない）:**
 - **slide-pdf 本線の `pdf-parse` fallback は持たない（fail-closed）** — Gemini 呼出失敗時は subtype 1 同様に chunk 化を中断する。PoC runner の fallback / `SLIDE_PDF_SKIP_GEMINI` は PoC 専用として温存（`D-P3-H-6 Q2` 確定、2026-05-20）。
-- **Masker 本線統合（PDF 経路）は H-3 スコープ外** — `requires_masking` PDF は `maskingPending: true` で停止し、本格統合は別フェーズで起票（`D-P3-H-6 Q5` 確定、2026-05-20）。
+- **Masker 本線統合（PDF 経路）** — H-3 時点では `maskingPending: true` で停止（`D-P3-H-6 Q5`）。**2026-05-29 に `D-P3-M-PDF-1` で本線接続完了**（新規 upload は `ai_safe` / `restricted` 終端 + masked chunks）。
 - **scan-pdf fixture 調達ミックス** = 公的文書 + 合成 PII（3〜5 本）。自社資料は commit 不可、ローカル検証のみ（`D-P3-H-7 Q1` 確定、2026-05-21）。
 - **scan-pdf `unmaskablePiiFindings` 閾値** = `warn + count` 必須記録。fail-closed への切替は Masker 統合後の別 decision で再判断（`D-P3-H-7 Q2` 確定、2026-05-21）。
 - **scan-pdf 公開範囲拡大条件** = subtype 1 M5 踏襲 + **Masker 本線統合完了を追加要件**。dev tenant 限定のまま H-3 を閉じる（`D-P3-H-7 Q4` 確定、2026-05-21）。
@@ -247,7 +247,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 - **案 C（成熟度別 blocker 軸）への移行条件** — 案 B 試走後の再評価（現状維持）。
 - **feature flag 公開範囲拡大条件** — subtype 1 は dev tenant 限定のまま。subtype 2/3 は別 flag で再判断。
 - **`inferenceDestination`** — subtype 2/3 の Vertex 呼出時に `document.convert` へ必須（[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §4.2）。
-- **Masker 本線統合（PDF 経路）** — `requires_masking` PDF の chunk 化と `safety_readiness` 本格評価（`D-P3-H-6 Q5` 推奨は後送り）。
+- ~~**Masker 本線統合（PDF 経路）**~~ — **完了**（`D-P3-M-PDF-1`）。残: `safety_readiness` 本格評価（PII-bearing PDF の eval / 閾値は live smoke 後に再検討）。
 
 ### 提供形態
 

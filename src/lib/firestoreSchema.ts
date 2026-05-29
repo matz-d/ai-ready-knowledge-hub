@@ -311,14 +311,16 @@ export function validateFirestoreDocumentInvariants(
 
   if (doc.status === 'curated') {
     const directOk = doc.curator?.aiUsePolicy === 'direct';
-    // PDF M1: requires_masking PDFs are parked at curated with maskingPending:true
+    // Legacy (D-P3-H-4 Q5 / pre D-P3-M-PDF-1): requires_masking PDFs parked with
+    // maskingPending:true. New PDF uploads run Masker mainline and terminate
+    // ai_safe/restricted instead — see docs/decisions.md D-P3-M-PDF-1.
     const maskingPendingOk =
       doc.curator?.aiUsePolicy === 'requires_masking' && doc.maskingPending === true;
     if (!directOk && !maskingPendingOk) {
       violations.push({
         path: 'status',
         message:
-          'status curated requires aiUsePolicy=direct, or requires_masking with maskingPending:true (PDF M1).',
+          'status curated requires aiUsePolicy=direct, or legacy requires_masking with maskingPending:true.',
       });
     }
   }

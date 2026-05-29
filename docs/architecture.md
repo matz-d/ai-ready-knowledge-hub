@@ -82,7 +82,7 @@ Firestore 一覧・詳細 UI、GitHub Actions eval の強化などである。
 - `scripts/runMaskerPipeline.ts` … CLI smoke (`npm run masker:pipeline -- <path>`)
 
 Upload 経路では `uploadOrchestrator` が `requires_masking` のときのみ `maskerPipelineFlow`
-を呼ぶ（上記 [G]）。
+を呼ぶ（上記 [G]）。**PDF**（`documentIr` あり）は text と同じ Masker 終端だが、DocumentIR 保存・conversion eval・audit の後に Masker を実行し、`ai_safe` 時は `documentIrToKnowledgeChunks` → 逐次 `maskKnowledgeChunk` → `replaceChunksForDocument` まで行う（`D-P3-M-PDF-1`）。
 
 ### Task3: Restricted 昇格と Context Package 除外（純関数）
 
@@ -313,6 +313,29 @@ User → /upload → POST /api/documents
 
 将来: Cloud DLP + Vertex の本格マスキングは同じ orchestrator フェーズ [G] に差し替え可能。
 ```
+
+### Case 1b: PDF アップロード（`documentIr` あり、`D-P3-M-PDF-1`）
+
+text 経路（Case 1）の [A]–[D] は同じ。以降 `orchestratePdfPath` に分岐する。
+
+```
+[E] runPdfCuratorPhase
+    direct / blocked → 既存どおり curated / blocked 終端（direct は chunk 化）
+    requires_masking → status=curating のまま（maskingPending は立てない）
+[F] writeDocumentIrSnapshot (GCS)
+[G] persistPdfHealthStageEval + document.convert audit
+[H] requires_masking のみ runMaskerPhase（text 経路と同型）
+    ai_safe_ready → masked GCS + Firestore ai_safe
+        → documentIrToKnowledgeChunks(requires_masking)
+        → maskKnowledgeChunk をチャンクごと逐次（chunkRegenerator 同型）
+        → replaceChunksForDocument
+    restricted_promoted → chunk 化なし
+失敗:
+    maskerPipeline / per-chunk mask → maskerError（MaskerPhaseError、conversionError と二重記録しない）
+    post-ai_safe の chunk 保存 → conversionError + masked GCS 削除 + aiSafeStoragePath=null
+```
+
+H-3 以前の `curated + maskingPending: true` park は新規 upload では使わない（レガシー行のみ inventory で許容）。
 
 ### Case 2: Purpose Query 実行時
 

@@ -23,6 +23,7 @@ const {
   collectionMock,
   getFirestoreClientMock,
   serverTimestampMock,
+  maskKnowledgeChunkMock,
 } = vi.hoisted(() => ({
   randomUUIDMock: vi.fn(),
   curatorFlowMock: vi.fn(),
@@ -46,6 +47,7 @@ const {
   collectionMock: vi.fn(),
   getFirestoreClientMock: vi.fn(),
   serverTimestampMock: vi.fn(),
+  maskKnowledgeChunkMock: vi.fn(),
 }));
 
 vi.mock('node:crypto', async (importOriginal) => {
@@ -62,6 +64,10 @@ vi.mock('../../agents/curator/flow', () => ({
 
 vi.mock('../../agents/masker/pipelineFlow', () => ({
   maskerPipelineFlow: maskerPipelineFlowMock,
+}));
+
+vi.mock('../../agents/masker/maskKnowledgeChunk', () => ({
+  maskKnowledgeChunk: maskKnowledgeChunkMock,
 }));
 
 vi.mock('../../agents/_shared/genkitClient', () => ({
@@ -307,6 +313,12 @@ beforeEach(() => {
     },
   ]);
   replaceChunksForDocumentMock.mockResolvedValue(undefined);
+  maskKnowledgeChunkMock.mockImplementation(async (chunk: { id: string }) => ({
+    ...chunk,
+    maskedText: '[REDACTED]',
+    maskedSpansCount: 1,
+    ruleHits: {},
+  }));
 });
 
 describe('orchestrateUploadProcessing', () => {
@@ -595,28 +607,35 @@ describe('orchestrateUploadProcessing', () => {
       expect(maskerPipelineFlowMock).not.toHaveBeenCalled();
     });
 
-    it('writes DocumentIR but not chunks for requires_masking PDFs', async () => {
+    it('runs Masker and writes masked chunks for requires_masking PDFs', async () => {
       randomUUIDMock.mockReturnValue('doc-pdf-mask');
       curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+      maskerPipelineFlowMock.mockResolvedValue(aiSafePipelineResult);
 
       const result = await orchestrateUploadProcessing(pdfBaseInput);
 
       expect(result).toEqual(
         expect.objectContaining({
-          kind: 'curated',
+          kind: 'ai_safe',
           docId: 'doc-pdf-mask',
-          maskingPending: true,
+          aiSafeStoragePath: 'masked/doc-pdf-mask/sample.pdf',
         })
       );
       expect(writeDocumentIrSnapshotMock).toHaveBeenCalled();
-      expect(documentIrToKnowledgeChunksMock).toHaveBeenCalledTimes(1);
-      expect(replaceChunksForDocumentMock).not.toHaveBeenCalled();
-      expect(appendConversionEvalMock).toHaveBeenCalledTimes(1);
-      expect(updateMock).toHaveBeenCalledWith(
+      expect(maskerPipelineFlowMock).toHaveBeenCalled();
+      expect(documentIrToKnowledgeChunksMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          latestConversionEvalId: 'doc-pdf-mask:v1',
+          docId: 'doc-pdf-mask',
+          documentAiUsePolicy: 'requires_masking',
         })
       );
+      expect(maskKnowledgeChunkMock).toHaveBeenCalled();
+      expect(replaceChunksForDocumentMock).toHaveBeenCalledWith(
+        'doc-pdf-mask',
+        expect.any(Array),
+        expect.objectContaining({ extractorInput: 'PDF body text' })
+      );
+      expect(appendConversionEvalMock).toHaveBeenCalledTimes(1);
       const curatedParkCall = updateMock.mock.calls.find(
         ([payload]) =>
           payload &&
@@ -624,16 +643,184 @@ describe('orchestrateUploadProcessing', () => {
           (payload as Record<string, unknown>).status === 'curated' &&
           (payload as Record<string, unknown>).maskingPending === true
       );
-      expect(curatedParkCall).toBeTruthy();
-      const parkCallIndex = updateMock.mock.calls.indexOf(curatedParkCall!);
-      const evalIdUpdateIndex = updateMock.mock.calls.findIndex(
+      expect(curatedParkCall).toBeUndefined();
+    });
+
+    it('returns restricted and writes no chunks when masker promotes restriction on PDF path', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-restricted');
+      curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+      maskerPipelineFlowMock.mockResolvedValue(restrictedPipelineResult);
+
+      const result = await orchestrateUploadProcessing(pdfBaseInput);
+
+      expect(result.kind).toBe('restricted');
+      expect(maskerPipelineFlowMock).toHaveBeenCalled();
+      expect(maskKnowledgeChunkMock).not.toHaveBeenCalled();
+      expect(replaceChunksForDocumentMock).not.toHaveBeenCalled();
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'restricted',
+          aiSafeStoragePath: null,
+          sensitivitySource: 'masker',
+        })
+      );
+    });
+
+    it('marks failed with maskerError (not conversionError) when masker fails on PDF path', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-masker-fail');
+      curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+      maskerPipelineFlowMock.mockRejectedValue(new Error('masker pipeline boom'));
+
+      await expect(orchestrateUploadProcessing(pdfBaseInput)).rejects.toBeInstanceOf(
+        MaskerPhaseError
+      );
+
+      expect(replaceChunksForDocumentMock).not.toHaveBeenCalled();
+      const failedCall = updateMock.mock.calls.find(
         ([payload]) =>
           payload &&
           typeof payload === 'object' &&
-          (payload as Record<string, unknown>).latestConversionEvalId ===
-            'doc-pdf-mask:v1'
+          (payload as Record<string, unknown>).status === 'failed'
       );
-      expect(parkCallIndex).toBeGreaterThan(evalIdUpdateIndex);
+      expect(failedCall).toBeTruthy();
+      expect((failedCall?.[0] as Record<string, unknown>).maskerError).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('マスク処理に失敗しました。'),
+        })
+      );
+      // Masker failures must not be double-recorded as conversion failures.
+      const conversionFailureCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).conversionError !== undefined
+      );
+      expect(conversionFailureCall).toBeUndefined();
+    });
+
+    it('marks failed with maskerError when per-chunk masking fails on PDF path', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-chunk-mask-fail');
+      curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+      maskerPipelineFlowMock.mockResolvedValue(aiSafePipelineResult);
+      maskKnowledgeChunkMock.mockRejectedValue(new Error('chunk mask boom'));
+
+      await expect(orchestrateUploadProcessing(pdfBaseInput)).rejects.toBeInstanceOf(
+        MaskerPhaseError
+      );
+
+      // Document was committed ai_safe by runMaskerPhase, but chunk persistence
+      // never ran and the failure is classified as a Masker failure.
+      expect(replaceChunksForDocumentMock).not.toHaveBeenCalled();
+      const failedCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).status === 'failed'
+      );
+      expect(failedCall).toBeTruthy();
+      expect((failedCall?.[0] as Record<string, unknown>).maskerError).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('マスク処理に失敗しました。'),
+        })
+      );
+      // ai_safe commit is rolled back so the failed doc keeps the
+      // aiSafeStoragePath invariant: masked object deleted + path nulled.
+      expect(deleteMaskedObjectMock).toHaveBeenCalledWith(
+        'masked/doc-pdf-chunk-mask-fail/sample.pdf'
+      );
+      expect((failedCall?.[0] as Record<string, unknown>).aiSafeStoragePath).toBeNull();
+      const conversionFailureCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).conversionError !== undefined
+      );
+      expect(conversionFailureCall).toBeUndefined();
+    });
+
+    it('rolls back ai_safe and marks failed when chunk replacement fails on PDF path', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-chunk-replace-fail');
+      curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+      maskerPipelineFlowMock.mockResolvedValue(aiSafePipelineResult);
+      replaceChunksForDocumentMock.mockRejectedValue(
+        new Error('chunk replace boom')
+      );
+
+      await expect(orchestrateUploadProcessing(pdfBaseInput)).rejects.toThrow(
+        'chunk replace boom'
+      );
+
+      // Chunk persistence is a conversion step → conversionError, but the
+      // earlier ai_safe commit must still be rolled back to hold the invariant.
+      expect(deleteMaskedObjectMock).toHaveBeenCalledWith(
+        'masked/doc-pdf-chunk-replace-fail/sample.pdf'
+      );
+      const failedCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).status === 'failed'
+      );
+      expect(failedCall).toBeTruthy();
+      expect((failedCall?.[0] as Record<string, unknown>).conversionError).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('chunk replace boom'),
+        })
+      );
+      expect((failedCall?.[0] as Record<string, unknown>).aiSafeStoragePath).toBeNull();
+    });
+
+    it('rolls back ai_safe and marks failed when PDF chunk synthesis fails after masking', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-chunk-synthesis-fail');
+      curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+      maskerPipelineFlowMock.mockResolvedValue(aiSafePipelineResult);
+      documentIrToKnowledgeChunksMock.mockImplementation((args: unknown) => {
+        if (
+          args &&
+          typeof args === 'object' &&
+          (args as { documentAiUsePolicy?: unknown }).documentAiUsePolicy ===
+            'requires_masking'
+        ) {
+          throw new Error('chunk synthesis boom');
+        }
+        return [
+          {
+            id: 'doc-pdf-chunk-synthesis-fail:p1-b0',
+            docId: 'doc-pdf-chunk-synthesis-fail',
+            sourceType: 'pdf',
+            structureType: 'paragraph',
+            locator: { kind: 'pdf', pageNumber: 1, blockId: 'p1-b0' },
+            text: 'PDF body text',
+            sensitivity: 'Confidential',
+            aiUsePolicy: 'direct',
+            sensitivitySource: 'inherited',
+            extractionProvider: 'pdf-parse',
+          },
+        ];
+      });
+
+      await expect(orchestrateUploadProcessing(pdfBaseInput)).rejects.toThrow(
+        'chunk synthesis boom'
+      );
+
+      expect(maskKnowledgeChunkMock).not.toHaveBeenCalled();
+      expect(replaceChunksForDocumentMock).not.toHaveBeenCalled();
+      expect(deleteMaskedObjectMock).toHaveBeenCalledWith(
+        'masked/doc-pdf-chunk-synthesis-fail/sample.pdf'
+      );
+      const failedCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).status === 'failed'
+      );
+      expect(failedCall).toBeTruthy();
+      expect((failedCall?.[0] as Record<string, unknown>).conversionError).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('chunk synthesis boom'),
+        })
+      );
+      expect((failedCall?.[0] as Record<string, unknown>).aiSafeStoragePath).toBeNull();
     });
 
     it('continues PDF flow when health eval persistence fails', async () => {
