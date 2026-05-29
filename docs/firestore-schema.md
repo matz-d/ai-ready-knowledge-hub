@@ -280,6 +280,20 @@ gs://{KNOWLEDGE_HUB_BUCKET}/
 
 ---
 
+## Optional: `maskingPending`（レガシー PDF park）
+
+`documents/{docId}.maskingPending` は optional。Phase 3-H-2 M1（`D-P3-H-4 Q5`）では `requires_masking` PDF を `status='curated'` + `maskingPending: true` で Masker 待ちにした。
+
+**2026-05-29 以降の新規 PDF upload**（`D-P3-M-PDF-1`）では:
+
+- Curator が `requires_masking` のとき `status='curating'` のまま DocumentIR / eval / audit を実行
+- 本線 Masker 後に `ai_safe` または `restricted` へ遷移（`maskingPending` は `null`）
+- `ai_safe` では masked GCS + per-chunk `maskedText` を Firestore chunks に保存
+
+既存の `maskingPending: true` 行は inventory / invariant で引き続き有効。再処理は chunkRegenerator 等の別経路。
+
+---
+
 ## 想定 Firestore index（Step 4 で必要）
 
 ```
@@ -297,12 +311,12 @@ businessDomain ASC, documentType ASC                   # ヒートマップ
 
 実装側でアサート可能な制約:
 
-1. `aiSafeStoragePath !== null` ⇔ `status === 'ai_safe'` かつ `masker?.decision === 'ai_safe_ready'`
+1. `aiSafeStoragePath !== null` ⇔ `status === 'ai_safe'` かつ `masker?.decision === 'ai_safe_ready'`。`status === 'failed'` では **null**（post-`ai_safe` 失敗時は masked GCS 削除後に `failed` 更新 — `D-P3-M-PDF-1` §6）
 2. `sensitivitySource === 'masker'` ⇒ `originalCuratorSensitivity !== null` かつ `sensitivity === 'Restricted'` かつ `aiUsePolicy === 'blocked'` かつ `status === 'restricted'`
 3. `originalCuratorSensitivity !== null` ⇒ `sensitivitySource === 'masker'`
 4. `masker !== null` ⇒ `curator !== null` かつ `curator.aiUsePolicy === 'requires_masking'`
 5. `masker.sourceContentHash === contentSha256`（同一原本由来であることの証跡）
-6. `status === 'curated'` ⇒ `curator.aiUsePolicy === 'direct'`
+6. `status === 'curated'` ⇒ `curator.aiUsePolicy === 'direct'`、**または** レガシー PDF park（`requires_masking` かつ `maskingPending === true`、H-3 / `D-P3-H-4 Q5`）。新規 PDF upload は `D-P3-M-PDF-1` により `ai_safe` / `restricted` 終端となり、この park 行は作らない。
 7. `status === 'blocked'` ⇒ `curator.aiUsePolicy === 'blocked'`
 8. `status === 'restricted'` ⇒ `masker.decision === 'restricted_promoted'` かつ `sensitivitySource === 'masker'`
 

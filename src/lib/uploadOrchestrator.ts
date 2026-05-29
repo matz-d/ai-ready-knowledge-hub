@@ -982,7 +982,8 @@ async function runPdfCuratorPhase(args: {
  *   3. Write DocumentIR to GCS (for both direct and requires_masking).
  *   4. Run health-stage conversion eval and persist to `conversion_eval`.
  *   5. direct → chunk via documentIrToKnowledgeChunks.
- *   6. requires_masking → Masker pipeline + per-chunk mask + DocumentIR chunks.
+ *   6. requires_masking → Masker pipeline + sequential per-chunk mask + DocumentIR chunks.
+ *      (see docs/decisions.md D-P3-M-PDF-1)
  */
 async function orchestratePdfPath(args: {
   docRef: DocumentReference;

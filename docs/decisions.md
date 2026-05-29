@@ -1206,6 +1206,8 @@ type FeatureFlag = {
 
 **決定**: 新 status は導入しない。`documents/{docId}.status = 'curated'` のまま、`maskingPending: true` フラグを optional field として立てる。
 
+> **後続（2026-05-29）:** 新規 PDF upload は `D-P3-M-PDF-1` により本線 Masker へ接続し、`curated + maskingPending` には park しない。下表の M1 挙動は **H-3 完了時点のレガシー**（既存 Firestore 行・当時の IAP 証跡）として残す。inventory / invariant は `maskingPending: true` の curated 行を引き続き許容する。
+
 **代替案として検討したもの:**
 - (a) status は `'curated'` のまま放置（フラグなし）
 - (b) 新 status `'pending_masking'` 導入
@@ -1396,6 +1398,8 @@ type FeatureFlag = {
 
 **確定（2026-05-20）**: **Phase 3-H-3 のスコープ外（別フェーズ送り）**。`requires_masking` PDF は subtype 1 と同じく `maskingPending: true` で停止し、Masker 本線統合は Phase 3-H-3 完了後の別フェーズで扱う。
 
+**後続（2026-05-29）:** 別フェーズとして **`D-P3-M-PDF-1` で実装完了**。新規 PDF upload は Masker 本線 + masked chunks まで処理（H-3 時点の park 方針は新規行には適用しない）。
+
 **理由:**
 - `requires_masking` PDF は chunk 化せず `maskingPending: true` で止める方針は `D-P3-H-4 Q5` で確定済み。
 - Vertex（subtype 2/3）+ Masker + DLP を同時に本線へ載せると、subtype 1 の health eval も含めた三重障害の切り分けが指数的に難しくなる。
@@ -1518,7 +1522,7 @@ Phase 3-H-3 の **実装**に入る前に次を満たす:
 1. M6-4 heuristic 閾値が PR warning として CI で稼働している（subtype 1 / 2 同型）
 2. M6-5 golden recall fixture の expected が 30 日以上 stable（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §7.4 と同型）
 3. Q3 で確定したコスト上限が dev tenant 観測で 90 日 reach されていない（または上限見直しが完了している）
-4. **Masker 本線統合（PDF 経路）が完了し、`requires_masking` scan-pdf が `maskingPending: true` ではなく chunk 化されている**
+4. **Masker 本線統合（PDF 経路）が完了し、`requires_masking` scan-pdf が `maskingPending: true` ではなく chunk 化されている** — **Masker 本線は `D-P3-M-PDF-1` で完了（2026-05-29）**。残: dev tenant live smoke 証跡・PII 入り scan-pdf の本線 eval
 5. `unmaskablePiiFindings` の閾値が Masker 統合後の実観測を踏まえて再評価され、`fail-closed` への切替判断が別 decision として確定している
 
 **理由:**
@@ -1568,21 +1572,27 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 ## D-P3-M-PDF-1: Masker 本線統合（PDF `requires_masking` 経路）
 
-**日付**: 2026-05-28（実装完了 2026-05-29）  
+**日付**: 2026-05-28（実装完了 2026-05-29、レビュー反映 2026-05-29）  
 **状態**: 採用（実装完了・検証済み、`feat/masker-pdf-mainline`。typecheck / `uploadOrchestrator` test / `pnpm build` パス）
 
 **背景:** Phase 3-H-3 完了時点では `requires_masking` PDF は `maskingPending: true` で park し chunk 化しない（`D-P3-H-6 Q5`）。Context Package まで届かないため、H-3 後の別フェーズとして本線 Masker を接続する。
 
 **決定:**
 
-1. PDF `requires_masking` は text 経路と同型で **`maskerPipelineFlow` → `ai_safe` / `restricted` 終端** とする。`curated + maskingPending` への park は新規 upload では行わない。
-2. `ai_safe` 時は **`documentIrToKnowledgeChunks`（`documentAiUsePolicy: requires_masking`）→ `maskKnowledgeChunk`  per chunk → `replaceChunksForDocument`**。文書全体の masked GCS オブジェクト（pipeline）と chunk 単位マスク（`chunkRegenerator` と同型）を併用する。
+1. PDF `requires_masking` は text 経路と同型で **`maskerPipelineFlow` → `ai_safe` / `restricted` 終端** とする。`curated + maskingPending` への park は新規 upload では行わない。Curator 直後は text と異なり **`status='curating'` のまま** DocumentIR 保存・health eval・audit を済ませ、Masker 成功後に `ai_safe` / `restricted` へ遷移する（`maskingPending` は `null` で書く）。
+2. `ai_safe` 時は **`documentIrToKnowledgeChunks`（`documentAiUsePolicy: requires_masking`）→ `maskKnowledgeChunk`（チャンクごと逐次、`chunkRegenerator` と同型）→ `replaceChunksForDocument`**。文書全体の masked GCS オブジェクト（pipeline）と chunk 単位マスクを併用する。並列 `Promise.all` は使わない（DLP / Masker のレート・メモリを抑える）。
 3. `restricted` 時は chunk 化しない（text 経路と同型）。
-4. DocumentIR GCS 保存・`document.convert` AuditEvent・health eval の順序は H-3 の `requires_masking` 分岐を維持し、Masker は eval / audit の後に実行する。
-5. **Masker 失敗時のエラー記録は text 経路と同型に `maskerError` のみ**とする。`orchestratePdfPath` の外側 catch は `MaskerPhaseError` を `recordConversionFailure` でラップせず rethrow する（`runMaskerPhase` 内の `recordPhaseFailure('masker')` が `maskerError` を記録済み）。`ai_safe` コミット後の per-chunk マスキング（`maskKnowledgeChunk`）失敗も Masker 操作として `recordPhaseFailure('masker')` → `MaskerPhaseError` で `maskerError` 扱いとする。変換ステップ（`documentIrToKnowledgeChunks` / `replaceChunksForDocument`）の失敗は direct 経路と同様 `conversionError`。
-6. **`ai_safe` コミット後の失敗は ai_safe アーティファクトをロールバックする**。`runMaskerPhase` が `status='ai_safe'` + `aiSafeStoragePath` を書いた後に per-chunk マスキングや chunk persistence が失敗した場合、`failed` 化と同時に masked GCS object を best-effort 削除し、Firestore に `aiSafeStoragePath: null` を併記する。これは `aiSafeStoragePath` は `status=ai_safe` かつ `masker.decision=ai_safe_ready` のときだけ、という Firestore invariant（`validateFirestoreDocumentInvariants`）を `failed` 終端でも保つため。
+4. DocumentIR GCS 保存・`document.convert` AuditEvent・health eval の順序は H-3 の `requires_masking` 分岐を維持し、Masker は eval / audit の後に実行する。health eval が合成する chunk draft は構造チェック用で **`documentAiUsePolicy: 'direct'`**（eval は `chunk.text` のみ参照）— Masker 前の H-3 由来の挙動を維持。
+5. **Masker 失敗時のエラー記録は text 経路と同型に `maskerError` のみ**とする。`orchestratePdfPath` の外側 catch は `MaskerPhaseError` を `recordConversionFailure` でラップせず rethrow する（`runMaskerPhase` 内、または per-chunk ハンドラ内の `recordPhaseFailure('masker')` が `maskerError` を記録済み）。`maskerPipelineFlow` 失敗・**`ai_safe` コミット後の per-chunk マスキング失敗**はいずれも Masker 操作として `maskerError`。`documentIrToKnowledgeChunks` / `replaceChunksForDocument` の失敗は direct 経路と同様 `conversionError`。
+6. **`ai_safe` コミット後の失敗は ai_safe アーティファクトをロールバックする**。`runMaskerPhase` が `status='ai_safe'` + `aiSafeStoragePath` を書いた後に per-chunk マスキング・chunk 合成・chunk persistence のいずれかが失敗した場合、`failed` 化と同時に masked GCS object を best-effort 削除し、Firestore に `aiSafeStoragePath: null` を併記する（Masker 失敗は §5 の `maskerError`、chunk 保存失敗は `conversionError`）。`aiSafeStoragePath` は `status=ai_safe` かつ `masker.decision=ai_safe_ready` のときだけ、という invariant（`validateFirestoreDocumentInvariants`）を `failed` 終端でも保つため。`failed` 時に `masker` ブロックが残ることは許容（観測用；path は null 化で不変条件を満たす）。
 
-**影響:** `src/lib/uploadOrchestrator.ts`（`orchestratePdfPath`）、`uploadOrchestrator` 単体テスト（`ai_safe` / `restricted` / Masker 失敗の 3 経路を追加）。scan-pdf 公開拡大（`D-P3-H-7 Q4`）の前提の一部を満たすが、live smoke・閾値再評価は別 decision。
+**実装メモ（レビュー反映コミット）:**
+
+- `aa4a9b8` — per-chunk マスク失敗を `maskerError` に分類（`conversionError` と二重記録しない）
+- `96adfdf` — post-`ai_safe` の chunk 手順失敗で GCS masked + `aiSafeStoragePath` をロールバック
+- `43b18ae` — PDF per-chunk マスクを逐次化（`chunkRegenerator` 整合）
+
+**影響:** `src/lib/uploadOrchestrator.ts`（`orchestratePdfPath` / `runPdfCuratorPhase`）、`uploadOrchestrator` 単体テスト（`ai_safe` / `restricted` / Masker 失敗 / per-chunk 失敗 / chunk 保存失敗 / post-`ai_safe` の chunk 合成失敗）。scan-pdf 公開拡大（`D-P3-H-7 Q4`）の前提の一部を満たすが、**dev tenant live smoke 証跡**・`unmaskablePiiFindings` 閾値再評価は別 decision。
 
 ---
 
