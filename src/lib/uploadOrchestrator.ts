@@ -1169,9 +1169,10 @@ async function orchestratePdfPath(args: {
       // first, then rethrow MaskerPhaseError so the outer catch passes through.
       let maskedChunks: typeof chunks;
       try {
-        maskedChunks = await Promise.all(
-          chunks.map((chunk) => maskKnowledgeChunk(chunk))
-        );
+        maskedChunks = [];
+        for (const chunk of chunks) {
+          maskedChunks.push(await maskKnowledgeChunk(chunk));
+        }
       } catch (e) {
         await safeDeleteMaskedObject(args.aiSafeStoragePath);
         await recordPhaseFailure(args.docRef, 'masker', e, {

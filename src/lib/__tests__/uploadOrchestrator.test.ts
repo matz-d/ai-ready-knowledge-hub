@@ -770,6 +770,59 @@ describe('orchestrateUploadProcessing', () => {
       expect((failedCall?.[0] as Record<string, unknown>).aiSafeStoragePath).toBeNull();
     });
 
+    it('rolls back ai_safe and marks failed when PDF chunk synthesis fails after masking', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-chunk-synthesis-fail');
+      curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+      maskerPipelineFlowMock.mockResolvedValue(aiSafePipelineResult);
+      documentIrToKnowledgeChunksMock.mockImplementation((args: unknown) => {
+        if (
+          args &&
+          typeof args === 'object' &&
+          (args as { documentAiUsePolicy?: unknown }).documentAiUsePolicy ===
+            'requires_masking'
+        ) {
+          throw new Error('chunk synthesis boom');
+        }
+        return [
+          {
+            id: 'doc-pdf-chunk-synthesis-fail:p1-b0',
+            docId: 'doc-pdf-chunk-synthesis-fail',
+            sourceType: 'pdf',
+            structureType: 'paragraph',
+            locator: { kind: 'pdf', pageNumber: 1, blockId: 'p1-b0' },
+            text: 'PDF body text',
+            sensitivity: 'Confidential',
+            aiUsePolicy: 'direct',
+            sensitivitySource: 'inherited',
+            extractionProvider: 'pdf-parse',
+          },
+        ];
+      });
+
+      await expect(orchestrateUploadProcessing(pdfBaseInput)).rejects.toThrow(
+        'chunk synthesis boom'
+      );
+
+      expect(maskKnowledgeChunkMock).not.toHaveBeenCalled();
+      expect(replaceChunksForDocumentMock).not.toHaveBeenCalled();
+      expect(deleteMaskedObjectMock).toHaveBeenCalledWith(
+        'masked/doc-pdf-chunk-synthesis-fail/sample.pdf'
+      );
+      const failedCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).status === 'failed'
+      );
+      expect(failedCall).toBeTruthy();
+      expect((failedCall?.[0] as Record<string, unknown>).conversionError).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('chunk synthesis boom'),
+        })
+      );
+      expect((failedCall?.[0] as Record<string, unknown>).aiSafeStoragePath).toBeNull();
+    });
+
     it('continues PDF flow when health eval persistence fails', async () => {
       const consoleWarnSpy = vi
         .spyOn(console, 'warn')
