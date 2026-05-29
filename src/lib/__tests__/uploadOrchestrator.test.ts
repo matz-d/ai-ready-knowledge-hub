@@ -723,6 +723,12 @@ describe('orchestrateUploadProcessing', () => {
           message: expect.stringContaining('マスク処理に失敗しました。'),
         })
       );
+      // ai_safe commit is rolled back so the failed doc keeps the
+      // aiSafeStoragePath invariant: masked object deleted + path nulled.
+      expect(deleteMaskedObjectMock).toHaveBeenCalledWith(
+        'masked/doc-pdf-chunk-mask-fail/sample.pdf'
+      );
+      expect((failedCall?.[0] as Record<string, unknown>).aiSafeStoragePath).toBeNull();
       const conversionFailureCall = updateMock.mock.calls.find(
         ([payload]) =>
           payload &&
@@ -730,6 +736,38 @@ describe('orchestrateUploadProcessing', () => {
           (payload as Record<string, unknown>).conversionError !== undefined
       );
       expect(conversionFailureCall).toBeUndefined();
+    });
+
+    it('rolls back ai_safe and marks failed when chunk replacement fails on PDF path', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-chunk-replace-fail');
+      curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+      maskerPipelineFlowMock.mockResolvedValue(aiSafePipelineResult);
+      replaceChunksForDocumentMock.mockRejectedValue(
+        new Error('chunk replace boom')
+      );
+
+      await expect(orchestrateUploadProcessing(pdfBaseInput)).rejects.toThrow(
+        'chunk replace boom'
+      );
+
+      // Chunk persistence is a conversion step → conversionError, but the
+      // earlier ai_safe commit must still be rolled back to hold the invariant.
+      expect(deleteMaskedObjectMock).toHaveBeenCalledWith(
+        'masked/doc-pdf-chunk-replace-fail/sample.pdf'
+      );
+      const failedCall = updateMock.mock.calls.find(
+        ([payload]) =>
+          payload &&
+          typeof payload === 'object' &&
+          (payload as Record<string, unknown>).status === 'failed'
+      );
+      expect(failedCall).toBeTruthy();
+      expect((failedCall?.[0] as Record<string, unknown>).conversionError).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('chunk replace boom'),
+        })
+      );
+      expect((failedCall?.[0] as Record<string, unknown>).aiSafeStoragePath).toBeNull();
     });
 
     it('continues PDF flow when health eval persistence fails', async () => {

@@ -1580,6 +1580,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 3. `restricted` 時は chunk 化しない（text 経路と同型）。
 4. DocumentIR GCS 保存・`document.convert` AuditEvent・health eval の順序は H-3 の `requires_masking` 分岐を維持し、Masker は eval / audit の後に実行する。
 5. **Masker 失敗時のエラー記録は text 経路と同型に `maskerError` のみ**とする。`orchestratePdfPath` の外側 catch は `MaskerPhaseError` を `recordConversionFailure` でラップせず rethrow する（`runMaskerPhase` 内の `recordPhaseFailure('masker')` が `maskerError` を記録済み）。`ai_safe` コミット後の per-chunk マスキング（`maskKnowledgeChunk`）失敗も Masker 操作として `recordPhaseFailure('masker')` → `MaskerPhaseError` で `maskerError` 扱いとする。変換ステップ（`documentIrToKnowledgeChunks` / `replaceChunksForDocument`）の失敗は direct 経路と同様 `conversionError`。
+6. **`ai_safe` コミット後の失敗は ai_safe アーティファクトをロールバックする**。`runMaskerPhase` が `status='ai_safe'` + `aiSafeStoragePath` を書いた後に per-chunk マスキングや chunk persistence が失敗した場合、`failed` 化と同時に masked GCS object を best-effort 削除し、Firestore に `aiSafeStoragePath: null` を併記する。これは `aiSafeStoragePath` は `status=ai_safe` かつ `masker.decision=ai_safe_ready` のときだけ、という Firestore invariant（`validateFirestoreDocumentInvariants`）を `failed` 終端でも保つため。
 
 **影響:** `src/lib/uploadOrchestrator.ts`（`orchestratePdfPath`）、`uploadOrchestrator` 単体テスト（`ai_safe` / `restricted` / Masker 失敗の 3 経路を追加）。scan-pdf 公開拡大（`D-P3-H-7 Q4`）の前提の一部を満たすが、live smoke・閾値再評価は別 decision。
 

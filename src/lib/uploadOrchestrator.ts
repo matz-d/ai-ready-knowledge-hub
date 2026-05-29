@@ -821,7 +821,8 @@ export function buildRestrictedFirestoreUpdate(
  */
 export async function recordConversionFailure(
   docRef: DocumentReference,
-  cause: unknown
+  cause: unknown,
+  extraFields?: Record<string, unknown>
 ): Promise<void> {
   const message = cause instanceof Error ? cause.message : String(cause);
   const detail = `変換処理に失敗しました。${message}`;
@@ -835,6 +836,7 @@ export async function recordConversionFailure(
         message: truncated,
         occurredAt: FieldValue.serverTimestamp(),
       },
+      ...extraFields,
     });
   } catch (updateErr) {
     console.error('[orchestrator] conversion failed status update', updateErr);
@@ -844,7 +846,8 @@ export async function recordConversionFailure(
 export async function recordPhaseFailure(
   docRef: DocumentReference,
   phase: 'curator' | 'masker',
-  cause: unknown
+  cause: unknown,
+  extraFields?: Record<string, unknown>
 ): Promise<void> {
   const message = cause instanceof Error ? cause.message : String(cause);
   const detail =
@@ -862,6 +865,7 @@ export async function recordPhaseFailure(
         message: truncated,
         occurredAt: FieldValue.serverTimestamp(),
       },
+      ...extraFields,
     });
   } catch (updateErr) {
     console.error(`[orchestrator] ${phase} failed status update`, updateErr);
@@ -1047,6 +1051,10 @@ async function orchestratePdfPath(args: {
     };
   }
 
+  // True once runMaskerPhase has committed status='ai_safe' + aiSafeStoragePath.
+  // A later failure (per-chunk masking / chunk persistence) must roll those
+  // artifacts back so the failed document keeps the aiSafeStoragePath invariant.
+  let aiSafeCommitted = false;
   try {
     const bucketName = getKnowledgeHubBucketName();
     await writeDocumentIrSnapshot({
@@ -1145,6 +1153,7 @@ async function orchestratePdfPath(args: {
     }
 
     if (maskerOutcome.kind === 'ai_safe') {
+      aiSafeCommitted = true;
       const chunks = documentIrToKnowledgeChunks({
         documentIr: args.documentIr,
         docId: args.docId,
@@ -1156,15 +1165,18 @@ async function orchestratePdfPath(args: {
       });
       // Per-chunk masking is a Masker operation: classify failures as
       // maskerError (not conversionError) to match the document-level Masker
-      // failure path. The outer catch then rethrows MaskerPhaseError without
-      // re-recording it as a conversion failure.
+      // failure path. Roll back the ai_safe commit (masked object + status)
+      // first, then rethrow MaskerPhaseError so the outer catch passes through.
       let maskedChunks: typeof chunks;
       try {
         maskedChunks = await Promise.all(
           chunks.map((chunk) => maskKnowledgeChunk(chunk))
         );
       } catch (e) {
-        await recordPhaseFailure(args.docRef, 'masker', e);
+        await safeDeleteMaskedObject(args.aiSafeStoragePath);
+        await recordPhaseFailure(args.docRef, 'masker', e, {
+          aiSafeStoragePath: null,
+        });
         throw new MaskerPhaseError(args.docId, e);
       }
       const db = getFirestoreClient();
@@ -1195,10 +1207,19 @@ async function orchestratePdfPath(args: {
       originalCuratorSensitivity: curatorOutput.result.sensitivity,
     };
   } catch (e) {
-    // Masker failures already recorded maskerError inside runMaskerPhase
-    // (mirrors the text path); don't re-record them as a conversion failure.
+    // Masker failures already recorded maskerError (and rolled back any
+    // ai_safe commit) inside runMaskerPhase or the per-chunk masking handler;
+    // don't re-record them as a conversion failure.
     if (e instanceof MaskerPhaseError) throw e;
-    await recordConversionFailure(args.docRef, e);
+    // Chunk persistence can fail after the ai_safe commit. Roll the masked
+    // object + aiSafeStoragePath back so the failed document keeps the
+    // aiSafeStoragePath invariant. Pre-ai_safe failures leave both untouched.
+    if (aiSafeCommitted) {
+      await safeDeleteMaskedObject(args.aiSafeStoragePath);
+      await recordConversionFailure(args.docRef, e, { aiSafeStoragePath: null });
+    } else {
+      await recordConversionFailure(args.docRef, e);
+    }
     throw e;
   }
 }
