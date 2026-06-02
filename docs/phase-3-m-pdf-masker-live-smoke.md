@@ -217,14 +217,52 @@ operational gaps; both are addressed in code after this smoke run:
   が unknown / non-terminal docId を 400 で返す。UI（`ContextPackageForm`）は
   `docIds` テキスト入力とエラー詳細表示に対応。
 
-**残る課題（docs 同期 2026-05-29）:**
+**残る課題（docs 同期 2026-06-02）:**
 
-- 既定 budget（`DEFAULT_STRATEGIST_INPUT_BUDGET`）と sync target（20 秒）の整合
-  — 実測に合わせたチューニング
 - UI の docIds 導線 — Inventory から docId を選ぶ UX（手入力以外）
-- 非同期 job 化の判断 — [open-questions.md R10](open-questions.md) 参照
-- IAP 越し長時間同期レスポンス — budget 適用後も browser fetch が 502 になる
-  ケースの再 smoke
+- 非同期 job 化 — 同期 live smoke は通ったが `33.716s` を要したため、別 PR で
+  [open-questions.md R10](open-questions.md) の `202 Accepted` 案を扱う
+
+### Context Package budget / strict `docIds` re-smoke（2026-06-02）
+
+PR #12 merge 後の Cloud Run + IAP 境界で、上記の後続実装を再 smoke した。
+
+| Item | Observed |
+| --- | --- |
+| Cloud Run revision | `ai-ready-knowledge-hub-00029-9b9` |
+| Deploy image | `asia-northeast1-docker.pkg.dev/ai-ready-knowledge-hub/knowledge-hub/ai-ready-knowledge-hub:c902c09` |
+| IAP actor | `makoto@m-grow-ai.com` |
+| Target docId | `a74b9520-5442-4579-adb8-2781dae8999b` |
+| Purpose | `invoice billing masked only` |
+| Live request | `POST /api/context-package` → HTTP `200` in `33.716634292s` |
+| Result counts | Included `6`, Excluded `31`, Safety Excluded `0`, Missing `0`, Review Questions `0` |
+| New export audit | `auditEvents/0mpwh5v5k-68aa4bc141a6fbc1` |
+
+Live Markdown / UI の content contract:
+
+- `Confidential (AI-safe via masking)` を含む。
+- `SYN-INV-2[REDACTED:POSTAL_CODE]`、`[REDACTED:BANK_ACCOUNT]`、
+  `[REDACTED:JP_MYNUMBER]`、`[REDACTED:PHONE]` を含む。
+- raw `SYN-INV-2026-0501` は含まない。
+- 「マイナンバー出力あり」は raw 値の出力ではなく、
+  `[REDACTED:JP_MYNUMBER]` への置換済み出力を意味する。
+
+deployed UI で strict `docIds` resolution も確認した。存在しない
+`does-not-exist-live-smoke` を指定すると、`POST /api/context-package` は HTTP
+`400` を返し、UI は `存在しない docId: does-not-exist-live-smoke` を表示した。
+指定 docId が黙って欠落する挙動はない。
+
+Firestore composite index は `action + occurredAt`、`target.docId + occurredAt`
+の 2 本とも `READY`。`document.export` の降順クエリで上記 audit を取得できた。
+
+ローカルの全 Inventory smoke では、既定 budget
+（`maxDocuments: 5`、`maxChunks: 80`、`maxTotalPromptChars: 45_000`、
+`maxCharsPerChunk: 1_200`）が `474` candidates を `80` chunks に制限し、
+`394` drops を response metadata に記録した。Vertex 上限超過は再発していない。
+
+Judgment: pre-LLM budget、strict `docIds`、masked Context Package、Firestore
+audit index は live 境界で動作した。同期生成の `33.716s` は blocker ではないが、
+非同期 job 化を別 PR で進める根拠として残す。
 
 ### scan-pdf eval locator / coverage
 
