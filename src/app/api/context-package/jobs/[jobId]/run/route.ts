@@ -6,8 +6,9 @@
  *
  * 認証:
  * - 本番は Cloud Tasks の OIDC token（service account）で保護する想定。
- * - 加えて共有シークレット `CONTEXT_PACKAGE_JOB_TOKEN`（env）が設定されていれば
- *   `X-Context-Package-Job-Token` ヘッダと照合する（多層防御 / dev での簡易ガード）。
+ * - 加えて共有シークレット `CONTEXT_PACKAGE_JOB_TOKEN`（env）を
+ *   `X-Context-Package-Job-Token` ヘッダと照合する（多層防御）。
+ * - dev / test のみ token 未設定での簡易実行を許可する。
  *
  * Cloud Tasks リトライ制御:
  * - 実行できた（成功・業務的失敗とも job doc に記録済み）→ 200（リトライ不要）。
@@ -24,8 +25,8 @@ export const dynamic = 'force-dynamic';
 function isAuthorized(request: Request): boolean {
   const expected = process.env.CONTEXT_PACKAGE_JOB_TOKEN;
   if (!expected) {
-    // 共有シークレット未設定時は OIDC 等の上位レイヤに委ね、ここでは素通し（dev）。
-    return true;
+    // 本番は IAP に加えて共有シークレットも必須。dev / test のみ簡易実行を許可する。
+    return process.env.NODE_ENV !== 'production';
   }
   return request.headers.get('x-context-package-job-token') === expected;
 }

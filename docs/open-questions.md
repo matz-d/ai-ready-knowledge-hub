@@ -37,6 +37,12 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
 - `ContextPackageForm` は `mode:"auto"` を送り、**202 なら status URL を `POLL_INTERVAL_MS=3000` 間隔でポーリング**、`queued/running` を表示しつつ `succeeded` で result URL を取得して既存結果 UI に流す。`failed/cancelled`・`POLL_TIMEOUT_MS=5min` 超過はエラー表示。進行中ポーリングは新規送信 / アンマウントで `activeJobRef` により中断。
 - **feature flag**: `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED === 'true'` のときだけ `mode:"auto"` を送る。未設定（既定）は従来どおり同期（mode 無し）。**queue 配線と同時にこのフラグを有効化する**こと（未配線で auto を送ると 503）。本番では **Docker build-arg** で焼き込む（`Dockerfile` + `deploy.yml` の GitHub Variable）。理由は [setup-gcp.md](setup-gcp.md) §Context Package 非同期「設計メモ」。
 
+**PR #14 review 反映（2026-06-02）**
+- `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true` の deploy だけ Cloud Tasks / worker / Secret Manager の GitHub Variables を必須化した。非同期 UI 無効時は Cloud Tasks 未配線の環境も deploy できる。
+- worker `/run` は production で `CONTEXT_PACKAGE_JOB_TOKEN` 未設定なら **401 fail-closed**。dev / test のみ token 無し簡易実行を許可する。
+- UI polling 中は submit だけでなく Purpose / Doc IDs 入力も disabled にし、進行中 job と編集中フォームの状態を混在させない。
+- `.github/workflows/actionlint.yml` を追加し、workflow 変更 PR / `main` push で `actionlint` + `shellcheck` を実行する。
+
 **本番実配線 / live smoke（完了 2026-06-02）**
 - Cloud Run revision `ai-ready-knowledge-hub-00033-vrw` へ反映。Cloud Tasks queue `context-package-jobs`、Worker SA、IAP accessor、IAP programmatic OAuth client allowlist、Secret Manager `context-package-job-token`、GitHub Variables を本番プロジェクトへ配線した。
 - IAP audience 付き Worker SA token で `POST /api/context-package` を呼び、job `8ce6a64b-54a5-4368-b7b6-866406c3d308` が **HTTP 202 `queued` → polling `running` → `succeeded` → result HTTP 200** を完走した。Cloud Tasks から worker `/run` への request も HTTP 200。
@@ -45,8 +51,8 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
 
 **残タスク（R10 後続）**
 - **UI の docIds 導線**: Inventory から docId を選ぶ UX（手入力以外）。
-- **result GCS offload**: 大きい package を inline ではなく GCS + `resultRef` で返す（`result_too_large` 回避）。
-- **job GC / cancel**: 古い job の TTL 削除と `cancelled` 遷移の実配線。
+- **result GCS offload**: 大きい package を inline ではなく GCS + `resultRef` で返す（`result_too_large` 回避）。追跡: [#16](https://github.com/matz-d/ai-ready-knowledge-hub/issues/16)
+- **job GC / cancel**: 古い job の TTL 削除と `cancelled` 遷移の実配線。追跡: [#15](https://github.com/matz-d/ai-ready-knowledge-hub/issues/15)
 
 ---
 

@@ -141,7 +141,7 @@ IAP 保護済み。許可ユーザ `makoto@m-grow-ai.com` のみアクセス可�
 | `CONTEXT_PACKAGE_JOB_TOKEN_SECRET` | Secret Manager secret 名。例: `context-package-job-token` |
 | `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED` | `true` で UI が `mode:"auto"` を送る。**Docker build-arg で焼き込み**（下記 §Context Package 非同期） |
 
-`deploy.yml` は Cloud Run へ **`--set-env-vars` で通常環境変数一式を毎回上書き**し、共有 token は Secret Manager から `--set-secrets` で参照する。Console で手動追加した env は次回 deploy で消えるため、追加が必要なら workflow の `ENV_VARS` 配列を正本として更新する。
+`deploy.yml` は Cloud Run へ **`--set-env-vars` で通常環境変数一式を毎回上書き**し、共有 token が設定されている場合は Secret Manager から `--set-secrets` で参照する。Console で手動追加した env は次回 deploy で消えるため、追加が必要なら workflow の `ENV_VARS` 配列を正本として更新する。Context Package 非同期用の GitHub Variables は `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true` の deploy で必須になる。
 
 ---
 
@@ -289,7 +289,7 @@ gcloud secrets add-iam-policy-binding "$JOB_TOKEN_SECRET" \
   --role="roles/secretmanager.secretAccessor"
 ```
 
-GitHub Variable `CONTEXT_PACKAGE_JOB_TOKEN_SECRET` に secret 名を設定する。deploy は Cloud Run の `--set-secrets` で `CONTEXT_PACKAGE_JOB_TOKEN` env へ参照を設定し、enqueue 時に `X-Context-Package-Job-Token` ヘッダとして付与する。token 値自体は GitHub へ保存しない。
+GitHub Variable `CONTEXT_PACKAGE_JOB_TOKEN_SECRET` に secret 名を設定する。deploy は Cloud Run の `--set-secrets` で `CONTEXT_PACKAGE_JOB_TOKEN` env へ参照を設定し、enqueue 時に `X-Context-Package-Job-Token` ヘッダとして付与する。token 値自体は GitHub へ保存しない。worker `/run` は production で token env 未設定なら **401 fail-closed** とする（dev / test のみ token 無し簡易実行を許可）。
 
 ### 6. GitHub / deploy チェックリスト
 
@@ -298,6 +298,10 @@ GitHub Variable `CONTEXT_PACKAGE_JOB_TOKEN_SECRET` に secret 名を設定する
 3. 非同期 UI を有効にする場合のみ `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true`
 4. `main` へ merge または workflow_dispatch で deploy
 5. IAP 経由で Context Package 画面から生成し、202 → ポーリング → 200 を確認
+
+### 7. GitHub Actions workflow lint
+
+`.github/workflows/actionlint.yml` は workflow ファイルを変更する PR、`main` push、手動実行で `rhysd/actionlint:1.7.12` を起動する。image 同梱の `shellcheck` も有効になるため、GitHub Actions YAML と `run:` 内 shell の基本的な静的検査を merge 前に行える。
 
 ---
 

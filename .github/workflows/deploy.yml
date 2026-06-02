@@ -90,12 +90,18 @@ jobs:
             RUNTIME_SERVICE_ACCOUNT
             KNOWLEDGE_HUB_BUCKET
             IAP_JWT_AUDIENCE
-            CONTEXT_PACKAGE_TASKS_QUEUE
-            CONTEXT_PACKAGE_WORKER_BASE_URL
-            CONTEXT_PACKAGE_WORKER_SA_EMAIL
-            CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE
-            CONTEXT_PACKAGE_JOB_TOKEN_SECRET
           )
+
+          async_flag="${NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED:-false}"
+          if [[ "${async_flag}" == "true" ]]; then
+            required_vars+=(
+              CONTEXT_PACKAGE_TASKS_QUEUE
+              CONTEXT_PACKAGE_WORKER_BASE_URL
+              CONTEXT_PACKAGE_WORKER_SA_EMAIL
+              CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE
+              CONTEXT_PACKAGE_JOB_TOKEN_SECRET
+            )
+          fi
 
           for var_name in "${required_vars[@]}"; do
             if [[ -z "${!var_name}" ]]; then
@@ -109,7 +115,6 @@ jobs:
             exit 1
           fi
 
-          async_flag="${NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED:-false}"
           if [[ "${async_flag}" == "true" ]]; then
             echo "Context Package async UI enabled at image build (NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true)"
           fi
@@ -143,9 +148,11 @@ jobs:
             -t "${IMAGE}:latest" \
             .
 
-          echo "short_sha=${SHORT_SHA}" >> "${GITHUB_OUTPUT}"
-          echo "image=${IMAGE}" >> "${GITHUB_OUTPUT}"
-          echo "async_ui_enabled=${ASYNC_BUILD_ARG}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "short_sha=${SHORT_SHA}"
+            echo "image=${IMAGE}"
+            echo "async_ui_enabled=${ASYNC_BUILD_ARG}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Push Docker image
         run: |
@@ -157,8 +164,6 @@ jobs:
         run: |
           # Cloud Run 環境変数の正本はこの workflow。--set-env-vars はサービス全体を
           # 置き換えるため、Console での手動追加は次回 deploy で消える。
-          TASKS_LOCATION="${CONTEXT_PACKAGE_TASKS_LOCATION:-${GCP_REGION}}"
-
           ENV_VARS=(
             "AUTH_MODE=iap"
             "GOOGLE_CLOUD_PROJECT=${GCP_PROJECT_ID}"
@@ -167,18 +172,31 @@ jobs:
             "IAP_JWT_AUDIENCE=${IAP_JWT_AUDIENCE}"
             "MASKER_PROVIDER=simple-rule"
             "FIRESTORE_PREFER_REST=true"
-            "CONTEXT_PACKAGE_TASKS_LOCATION=${TASKS_LOCATION}"
-            "CONTEXT_PACKAGE_TASKS_QUEUE=${CONTEXT_PACKAGE_TASKS_QUEUE}"
-            "CONTEXT_PACKAGE_WORKER_BASE_URL=${CONTEXT_PACKAGE_WORKER_BASE_URL}"
-            "CONTEXT_PACKAGE_WORKER_SA_EMAIL=${CONTEXT_PACKAGE_WORKER_SA_EMAIL}"
-            "CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE=${CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE}"
           )
 
           if [[ -n "${KNOWLEDGE_HUB_TENANT_ID}" ]]; then
             ENV_VARS+=("KNOWLEDGE_HUB_TENANT_ID=${KNOWLEDGE_HUB_TENANT_ID}")
           fi
 
+          if [[ -n "${CONTEXT_PACKAGE_TASKS_QUEUE}" ]]; then
+            ENV_VARS+=("CONTEXT_PACKAGE_TASKS_LOCATION=${CONTEXT_PACKAGE_TASKS_LOCATION:-${GCP_REGION}}")
+            ENV_VARS+=("CONTEXT_PACKAGE_TASKS_QUEUE=${CONTEXT_PACKAGE_TASKS_QUEUE}")
+          fi
+          if [[ -n "${CONTEXT_PACKAGE_WORKER_BASE_URL}" ]]; then
+            ENV_VARS+=("CONTEXT_PACKAGE_WORKER_BASE_URL=${CONTEXT_PACKAGE_WORKER_BASE_URL}")
+          fi
+          if [[ -n "${CONTEXT_PACKAGE_WORKER_SA_EMAIL}" ]]; then
+            ENV_VARS+=("CONTEXT_PACKAGE_WORKER_SA_EMAIL=${CONTEXT_PACKAGE_WORKER_SA_EMAIL}")
+          fi
+          if [[ -n "${CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE}" ]]; then
+            ENV_VARS+=("CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE=${CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE}")
+          fi
+
           ENV_CSV="$(IFS=,; echo "${ENV_VARS[*]}")"
+          DEPLOY_ARGS=("--set-env-vars=${ENV_CSV}")
+          if [[ -n "${CONTEXT_PACKAGE_JOB_TOKEN_SECRET}" ]]; then
+            DEPLOY_ARGS+=("--set-secrets=CONTEXT_PACKAGE_JOB_TOKEN=${CONTEXT_PACKAGE_JOB_TOKEN_SECRET}:latest")
+          fi
 
           gcloud run deploy "${CLOUD_RUN_SERVICE}" \
             --image="${{ steps.image.outputs.image }}:${{ steps.image.outputs.short_sha }}" \
@@ -186,6 +204,5 @@ jobs:
             --region="${GCP_REGION}" \
             --service-account="${RUNTIME_SERVICE_ACCOUNT}" \
             --no-allow-unauthenticated \
-            --set-env-vars="${ENV_CSV}" \
-            --set-secrets="CONTEXT_PACKAGE_JOB_TOKEN=${CONTEXT_PACKAGE_JOB_TOKEN_SECRET}:latest" \
+            "${DEPLOY_ARGS[@]}" \
             --quiet

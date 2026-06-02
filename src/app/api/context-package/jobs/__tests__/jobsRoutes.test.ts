@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { getContextPackageJobMock, runContextPackageJobMock } = vi.hoisted(() => ({
   getContextPackageJobMock: vi.fn(),
@@ -49,6 +49,10 @@ const OWN_TENANT_JOB = {
 beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.CONTEXT_PACKAGE_JOB_TOKEN;
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('GET /jobs/:jobId (status)', () => {
@@ -128,6 +132,13 @@ describe('POST /jobs/:jobId/run (worker)', () => {
       workerRequest({ 'x-context-package-job-token': 'wrong' }),
       params('job-1'),
     );
+    expect(res.status).toBe(401);
+    expect(runContextPackageJobMock).not.toHaveBeenCalled();
+  });
+
+  it('production では共有トークン未設定を 401 で拒否する', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const res = await runWorker(workerRequest(), params('job-1'));
     expect(res.status).toBe(401);
     expect(runContextPackageJobMock).not.toHaveBeenCalled();
   });

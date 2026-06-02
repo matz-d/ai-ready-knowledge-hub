@@ -121,6 +121,13 @@ describe('ContextPackageForm async polling', () => {
     );
     expect(postBody.mode).toBe('auto');
     expect(screen.getByRole('status')).toBeTruthy();
+    expect(
+      (screen.getByLabelText('Purpose（目的）') as HTMLTextAreaElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText('対象 Doc IDs（任意）') as HTMLTextAreaElement)
+        .disabled,
+    ).toBe(true);
 
     // 1回目 status = running、2回目 = succeeded → result fetch。
     await advance(3000);

@@ -134,7 +134,6 @@ export function ContextPackageForm() {
     };
   }, []);
 
-  const isLoading = uiState === 'loading';
   const isBusy = uiState === 'loading' || uiState === 'polling';
   const remaining = MAX_PURPOSE - purpose.length;
 
@@ -331,7 +330,7 @@ export function ContextPackageForm() {
           name="purpose"
           value={purpose}
           onChange={(e) => setPurpose(e.target.value)}
-          disabled={isLoading}
+          disabled={isBusy}
           maxLength={MAX_PURPOSE}
           rows={5}
           placeholder="例: 新入社員向けオンボーディング資料を NotebookLM に渡して Q&A できるようにしたい"
@@ -352,7 +351,7 @@ export function ContextPackageForm() {
           name="docIds"
           value={docIdsRaw}
           onChange={(e) => setDocIdsRaw(e.target.value)}
-          disabled={isLoading}
+          disabled={isBusy}
           rows={3}
           placeholder={"例:\na74b9520-5442-4579-adb8-2781dae8999b\nb3e21f04-..."}
           spellCheck={false}
