@@ -278,7 +278,7 @@ gcloud secrets create "$JOB_TOKEN_SECRET" \
   --project="$PROJECT_ID" \
   --replication-policy=automatic
 
-openssl rand -base64 32 | \
+openssl rand -base64 32 | tr -d '\n' | \
   gcloud secrets versions add "$JOB_TOKEN_SECRET" \
     --project="$PROJECT_ID" \
     --data-file=-

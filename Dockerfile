@@ -41,6 +41,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
+# Cloud Tasks SDK loads proto JSON dynamically, so Next.js standalone tracing misses it.
+COPY --from=builder /app/node_modules/.pnpm/@google-cloud+tasks@*/node_modules/@google-cloud/tasks/build/protos /tmp/cloud-tasks-protos
+RUN set -eux; \
+  protos_dir="$(dirname "$(find ./node_modules/.pnpm -path '*/node_modules/@google-cloud/tasks/build/protos/protos.js' -print -quit)")"; \
+  test -n "$protos_dir"; \
+  cp -a /tmp/cloud-tasks-protos/. "$protos_dir/"; \
+  chown -R nextjs:nodejs "$protos_dir"; \
+  rm -rf /tmp/cloud-tasks-protos
+
 # pdfjs worker is not bundled into standalone; place it beside pdf.mjs in the pnpm tree.
 COPY --from=builder /app/node_modules/.pnpm/pdfjs-dist@*/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs /tmp/pdf.worker.mjs
 RUN set -eux; \
