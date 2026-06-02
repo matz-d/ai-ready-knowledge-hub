@@ -12,7 +12,8 @@ import { z } from 'zod';
 export const CONTEXT_PACKAGE_JOBS_COLLECTION = 'context_package_jobs';
 
 /** 一方向の状態遷移。worker のリトライで二重実行されても壊れないよう、
- *  `running` への昇格は「現状 `queued` のときだけ」に限定する（firestoreAdapter 側で担保）。 */
+ *  `running` への昇格は claim 条件（queued または lease 期限切れ running）と
+ *  attempt token（firestoreAdapter）で担保する。 */
 export type ContextPackageJobStatus =
   | 'queued'
   | 'running'
@@ -85,6 +86,14 @@ export type ContextPackageJob = {
    */
   leaseExpiresAt?: string;
 };
+
+/** claim の結果。`active_lease` は別 worker が lease 有効な `running` を保持中。 */
+export type ClaimContextPackageJobResult =
+  | { claimed: true; attemptToken: string }
+  | {
+      claimed: false;
+      reason: 'not_found' | 'terminal' | 'active_lease';
+    };
 
 /** worker が claim 時に確保する lease の長さ（ms）。20 秒ゲート無しの非同期生成が
  *  現実的に収まる余裕を見て 15 分。期限切れ running は再 claim 可能になる。 */

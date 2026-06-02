@@ -15,6 +15,11 @@ RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
 
+# NEXT_PUBLIC_* は Next.js build 時にクライアントへ焼き込まれる。Cloud Run の runtime
+# env では切り替えできないため、deploy workflow から build-arg で渡す。
+ARG NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=false
+ENV NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=$NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN mkdir -p public && pnpm build

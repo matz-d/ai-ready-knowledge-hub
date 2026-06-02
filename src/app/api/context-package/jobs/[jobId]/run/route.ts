@@ -10,9 +10,10 @@
  *   `X-Context-Package-Job-Token` ヘッダと照合する（多層防御 / dev での簡易ガード）。
  *
  * Cloud Tasks リトライ制御:
- * - 実行できた（成功・業務的失敗とも job doc に記録済み）→ 200（リトライ不要。
- *   失敗は claim 消費済みのため再試行しても冪等 skip になる）。
- * - 想定外の例外（claim 永続化前など）→ 500 でリトライさせる。
+ * - 実行できた（成功・業務的失敗とも job doc に記録済み）→ 200（リトライ不要）。
+ * - 終端状態への重複配信（terminal skip）→ 200（冪等）。
+ * - 有効 lease 下での重複配信（active_lease skip）→ 503（タスク成功扱いにしない）。
+ * - 想定外の例外（transient 失敗など）→ 500 でリトライさせる。
  */
 import { NextResponse } from 'next/server';
 import { runContextPackageJob } from '../../../../../../lib/contextPackageJobs/runJob';
@@ -27,6 +28,18 @@ function isAuthorized(request: Request): boolean {
     return true;
   }
   return request.headers.get('x-context-package-job-token') === expected;
+}
+
+function workerHttpStatus(
+  outcome: Awaited<ReturnType<typeof runContextPackageJob>>,
+): number {
+  if (outcome.outcome === 'skipped') {
+    if (outcome.reason === 'active_lease') return 503;
+    if (outcome.reason === 'not_found') return 404;
+    // terminal: 既に succeeded / failed / cancelled — 再実行不要。
+    return 200;
+  }
+  return 200;
 }
 
 export async function POST(
@@ -44,9 +57,8 @@ export async function POST(
 
   try {
     const outcome = await runContextPackageJob(jobId);
-    return NextResponse.json(outcome, { status: 200 });
+    return NextResponse.json(outcome, { status: workerHttpStatus(outcome) });
   } catch (e) {
-    // claim 永続化前などの想定外例外のみ 500 にして Cloud Tasks の再試行に委ねる。
     console.error('[context-package-job] worker crashed', { jobId, error: e });
     return NextResponse.json({ error: 'worker_failure', jobId }, { status: 500 });
   }

@@ -98,6 +98,7 @@ import {
   createContextPackageJob,
   failContextPackageJob,
   getContextPackageJob,
+  releaseContextPackageJobLease,
 } from '../firestoreAdapter';
 import { CONTEXT_PACKAGE_JOBS_COLLECTION } from '../schema';
 
@@ -107,6 +108,16 @@ const REQUEST = {
   tenantId: 'tenant-1',
   actor: { userId: 'u1', ipAddress: '', userAgent: '' },
 };
+
+function jobPath(jobId: string) {
+  return `${CONTEXT_PACKAGE_JOBS_COLLECTION}/${jobId}`;
+}
+
+function storedAttemptToken(jobId: string): string {
+  const token = fakeDb.store.get(jobPath(jobId))?.attemptToken;
+  expect(typeof token).toBe('string');
+  return token as string;
+}
 
 beforeEach(() => {
   fakeDb.store.clear();
@@ -118,89 +129,226 @@ describe('contextPackageJobs firestoreAdapter', () => {
 
     expect(job.status).toBe('queued');
     expect(job.jobId).toBeTruthy();
-    const stored = fakeDb.store.get(
-      `${CONTEXT_PACKAGE_JOBS_COLLECTION}/${job.jobId}`,
-    );
+    const stored = fakeDb.store.get(jobPath(job.jobId));
     expect(stored?.status).toBe('queued');
     expect(stored?.request).toEqual(REQUEST);
   });
 
-  it('claim は queued を一度だけ running に昇格し、二度目は false（冪等ガード）', async () => {
+  it('claim は queued を running に昇格し attemptToken を発行する', async () => {
     const job = await createContextPackageJob(REQUEST);
 
     const first = await claimContextPackageJob(job.jobId);
-    const second = await claimContextPackageJob(job.jobId);
 
-    expect(first).toBe(true);
-    expect(second).toBe(false);
+    expect(first).toEqual({
+      claimed: true,
+      attemptToken: expect.any(String),
+    });
     const stored = await getContextPackageJob(job.jobId);
     expect(stored?.status).toBe('running');
+    expect(stored?.leaseExpiresAt).toBeTruthy();
+    expect(fakeDb.store.get(jobPath(job.jobId))?.attemptToken).toBeTruthy();
   });
 
-  it('存在しない jobId の claim は false', async () => {
-    expect(await claimContextPackageJob('missing')).toBe(false);
-  });
-
-  it('lease 期限切れの running は再 claim できる（worker クラッシュ復旧）', async () => {
+  it('claim は lease 有効な running を active_lease で拒否する（重複配信）', async () => {
     const job = await createContextPackageJob(REQUEST);
-    await claimContextPackageJob(job.jobId);
+    const first = await claimContextPackageJob(job.jobId);
+    expect(first.claimed).toBe(true);
 
-    // lease を過去に書き換えて「持ち主が落ちた」状態を再現する。
-    const path = `${CONTEXT_PACKAGE_JOBS_COLLECTION}/${job.jobId}`;
+    const second = await claimContextPackageJob(job.jobId);
+
+    expect(second).toEqual({ claimed: false, reason: 'active_lease' });
+  });
+
+  it('存在しない jobId の claim は not_found', async () => {
+    expect(await claimContextPackageJob('missing')).toEqual({
+      claimed: false,
+      reason: 'not_found',
+    });
+  });
+
+  it('lease 期限切れの running は再 claim でき新しい attemptToken が付く', async () => {
+    const job = await createContextPackageJob(REQUEST);
+    const first = await claimContextPackageJob(job.jobId);
+    expect(first.claimed).toBe(true);
+    if (!first.claimed) throw new Error('expected claim');
+    const token1 = first.attemptToken;
+
+    const path = jobPath(job.jobId);
     const stored = fakeDb.store.get(path)!;
     fakeDb.store.set(path, {
       ...stored,
       leaseExpiresAt: new Date(Date.now() - 1000).toISOString(),
     });
 
-    expect(await claimContextPackageJob(job.jobId)).toBe(true);
+    const second = await claimContextPackageJob(job.jobId);
+    expect(second.claimed).toBe(true);
+    if (!second.claimed) throw new Error('expected reclaim');
+    expect(second.attemptToken).not.toBe(token1);
   });
 
-  it('lease 有効な running は再 claim を拒否する', async () => {
+  it('terminal 状態の claim は terminal を返す', async () => {
     const job = await createContextPackageJob(REQUEST);
-    await claimContextPackageJob(job.jobId);
+    const claim = await claimContextPackageJob(job.jobId);
+    expect(claim.claimed).toBe(true);
+    if (!claim.claimed) throw new Error('expected claim');
 
-    // 直後（lease 有効）の再 claim は false。
-    expect(await claimContextPackageJob(job.jobId)).toBe(false);
+    await completeContextPackageJob(job.jobId, claim.attemptToken, { ok: true });
+
+    expect(await claimContextPackageJob(job.jobId)).toEqual({
+      claimed: false,
+      reason: 'terminal',
+    });
   });
 
-  it('complete は succeeded + result + progress を書き込む', async () => {
+  it('complete は succeeded + result を書き込み attemptToken を消す', async () => {
     const job = await createContextPackageJob(REQUEST);
     await claimContextPackageJob(job.jobId);
+    const token = storedAttemptToken(job.jobId);
 
-    await completeContextPackageJob(
+    const ok = await completeContextPackageJob(
       job.jobId,
+      token,
       { markdown: '# ok', counts: { included: 1 } },
       { sourceDocumentsReviewed: 3, safeChunks: 1, budgetDroppedChunks: 0 },
     );
 
+    expect(ok).toBe(true);
     const stored = await getContextPackageJob(job.jobId);
     expect(stored?.status).toBe('succeeded');
     expect(stored?.result).toMatchObject({ markdown: '# ok' });
-    expect(stored?.progress).toEqual({
-      sourceDocumentsReviewed: 3,
-      safeChunks: 1,
-      budgetDroppedChunks: 0,
-    });
-    // terminal なので lease は消える。
     expect(stored?.leaseExpiresAt).toBeUndefined();
+    expect(fakeDb.store.get(jobPath(job.jobId))?.attemptToken).toBeUndefined();
   });
 
-  it('fail は failed + error を書き込む', async () => {
+  it('fail は running + attemptToken 一致時のみ failed にする', async () => {
     const job = await createContextPackageJob(REQUEST);
     await claimContextPackageJob(job.jobId);
+    const token = storedAttemptToken(job.jobId);
 
-    await failContextPackageJob(job.jobId, {
-      code: 'no_inventory_documents',
-      message: 'none',
-    });
+    const ok = await failContextPackageJob(
+      job.jobId,
+      { code: 'no_inventory_documents', message: 'none' },
+      { attemptToken: token },
+    );
 
+    expect(ok).toBe(true);
     const stored = await getContextPackageJob(job.jobId);
     expect(stored?.status).toBe('failed');
     expect(stored?.error).toEqual({
       code: 'no_inventory_documents',
       message: 'none',
     });
+  });
+
+  it('queued のまま fail できる（enqueue 失敗経路、attemptToken 不要）', async () => {
+    const job = await createContextPackageJob(REQUEST);
+
+    const ok = await failContextPackageJob(job.jobId, {
+      code: 'enqueue_failed',
+      message: 'queue down',
+    });
+
+    expect(ok).toBe(true);
+    expect((await getContextPackageJob(job.jobId))?.status).toBe('failed');
+  });
+
+  it('stale worker の complete は新 worker の running を上書きしない', async () => {
+    const job = await createContextPackageJob(REQUEST);
+    const first = await claimContextPackageJob(job.jobId);
+    expect(first.claimed).toBe(true);
+    if (!first.claimed) throw new Error('expected claim');
+    const staleToken = first.attemptToken;
+
+    const path = jobPath(job.jobId);
+    fakeDb.store.set(path, {
+      ...fakeDb.store.get(path)!,
+      leaseExpiresAt: new Date(Date.now() - 1000).toISOString(),
+    });
+    const second = await claimContextPackageJob(job.jobId);
+    expect(second.claimed).toBe(true);
+    if (!second.claimed) throw new Error('expected reclaim');
+
+    const staleComplete = await completeContextPackageJob(job.jobId, staleToken, {
+      markdown: 'stale',
+    });
+    expect(staleComplete).toBe(false);
+
+    const freshComplete = await completeContextPackageJob(
+      job.jobId,
+      second.attemptToken,
+      { markdown: 'fresh' },
+    );
+    expect(freshComplete).toBe(true);
+
+    const stored = await getContextPackageJob(job.jobId);
+    expect(stored?.result).toMatchObject({ markdown: 'fresh' });
+  });
+
+  it('stale worker の fail は新 worker の状態を上書きしない', async () => {
+    const job = await createContextPackageJob(REQUEST);
+    const first = await claimContextPackageJob(job.jobId);
+    expect(first.claimed).toBe(true);
+    if (!first.claimed) throw new Error('expected claim');
+
+    const path = jobPath(job.jobId);
+    fakeDb.store.set(path, {
+      ...fakeDb.store.get(path)!,
+      leaseExpiresAt: new Date(Date.now() - 1000).toISOString(),
+    });
+    const second = await claimContextPackageJob(job.jobId);
+    expect(second.claimed).toBe(true);
+    if (!second.claimed) throw new Error('expected reclaim');
+
+    const staleFail = await failContextPackageJob(
+      job.jobId,
+      { code: 'upstream_failure', message: 'stale' },
+      { attemptToken: first.attemptToken },
+    );
+    expect(staleFail).toBe(false);
+
+    const freshFail = await failContextPackageJob(
+      job.jobId,
+      { code: 'no_inventory_documents', message: 'fresh' },
+      { attemptToken: second.attemptToken },
+    );
+    expect(freshFail).toBe(true);
+
+    expect((await getContextPackageJob(job.jobId))?.error?.message).toBe('fresh');
+  });
+
+  it('transient 失敗 → lease 解放 → 再 claim → 最終成功', async () => {
+    const job = await createContextPackageJob(REQUEST);
+    const first = await claimContextPackageJob(job.jobId);
+    expect(first.claimed).toBe(true);
+    if (!first.claimed) throw new Error('expected claim');
+
+    const released = await releaseContextPackageJobLease(
+      job.jobId,
+      first.attemptToken,
+    );
+    expect(released).toBe(true);
+
+    const redelivery = await claimContextPackageJob(job.jobId);
+    expect(redelivery.claimed).toBe(true);
+    if (!redelivery.claimed) throw new Error('expected reclaim');
+
+    const ok = await completeContextPackageJob(
+      job.jobId,
+      redelivery.attemptToken,
+      { markdown: '# recovered' },
+    );
+    expect(ok).toBe(true);
+    expect((await getContextPackageJob(job.jobId))?.status).toBe('succeeded');
+  });
+
+  it('release は attemptToken 不一致では lease を解放しない', async () => {
+    const job = await createContextPackageJob(REQUEST);
+    await claimContextPackageJob(job.jobId);
+
+    expect(
+      await releaseContextPackageJobLease(job.jobId, 'wrong-token'),
+    ).toBe(false);
+    expect(fakeDb.store.get(jobPath(job.jobId))?.leaseExpiresAt).toBeTruthy();
   });
 
   it('getContextPackageJob は存在しない場合 null', async () => {

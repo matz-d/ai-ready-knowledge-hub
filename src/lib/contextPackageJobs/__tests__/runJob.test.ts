@@ -5,6 +5,7 @@ const {
   getContextPackageJobMock,
   completeContextPackageJobMock,
   failContextPackageJobMock,
+  releaseContextPackageJobLeaseMock,
   runStrategistOrchestratorMock,
   recordAuditEventMock,
   NoInventoryDocumentsErrorMock,
@@ -34,6 +35,7 @@ const {
     getContextPackageJobMock: vi.fn(),
     completeContextPackageJobMock: vi.fn(),
     failContextPackageJobMock: vi.fn(),
+    releaseContextPackageJobLeaseMock: vi.fn(),
     runStrategistOrchestratorMock: vi.fn(),
     recordAuditEventMock: vi.fn(),
     NoInventoryDocumentsErrorMock,
@@ -46,6 +48,7 @@ vi.mock('../firestoreAdapter', () => ({
   getContextPackageJob: getContextPackageJobMock,
   completeContextPackageJob: completeContextPackageJobMock,
   failContextPackageJob: failContextPackageJobMock,
+  releaseContextPackageJobLease: releaseContextPackageJobLeaseMock,
 }));
 
 vi.mock('../../../services/strategistOrchestrator', async () => {
@@ -72,6 +75,8 @@ vi.mock('../../audit/auditEvent', async (importOriginal) => {
 });
 
 import { runContextPackageJob } from '../runJob';
+
+const ATTEMPT_TOKEN = 'attempt-token-1';
 
 const STUB_PARENT = {
   id: 'doc-1',
@@ -152,25 +157,43 @@ const JOB = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  completeContextPackageJobMock.mockResolvedValue(undefined);
-  failContextPackageJobMock.mockResolvedValue(undefined);
+  claimContextPackageJobMock.mockResolvedValue({
+    claimed: true,
+    attemptToken: ATTEMPT_TOKEN,
+  });
+  completeContextPackageJobMock.mockResolvedValue(true);
+  failContextPackageJobMock.mockResolvedValue(true);
+  releaseContextPackageJobLeaseMock.mockResolvedValue(true);
   recordAuditEventMock.mockResolvedValue('audit-id');
 });
 
 describe('runContextPackageJob', () => {
-  it('claim に失敗（既に running 等）したら orchestrator を呼ばず skip する', async () => {
-    claimContextPackageJobMock.mockResolvedValue(false);
-    getContextPackageJobMock.mockResolvedValue(JOB);
+  it('active lease で claim できないとき orchestrator を呼ばず skip する', async () => {
+    claimContextPackageJobMock.mockResolvedValue({
+      claimed: false,
+      reason: 'active_lease',
+    });
 
     const outcome = await runContextPackageJob('job-1');
 
-    expect(outcome).toEqual({ outcome: 'skipped', reason: 'not_queued' });
+    expect(outcome).toEqual({ outcome: 'skipped', reason: 'active_lease' });
     expect(runStrategistOrchestratorMock).not.toHaveBeenCalled();
     expect(completeContextPackageJobMock).not.toHaveBeenCalled();
   });
 
-  it('claim 成功で orchestrator を 20秒ゲート無しで実行し、結果と監査を記録する', async () => {
-    claimContextPackageJobMock.mockResolvedValue(true);
+  it('terminal skip は succeeded 済みなどの重複配信', async () => {
+    claimContextPackageJobMock.mockResolvedValue({
+      claimed: false,
+      reason: 'terminal',
+    });
+
+    const outcome = await runContextPackageJob('job-1');
+
+    expect(outcome).toEqual({ outcome: 'skipped', reason: 'terminal' });
+    expect(runStrategistOrchestratorMock).not.toHaveBeenCalled();
+  });
+
+  it('claim 成功で orchestrator を実行し attemptToken 付きで complete する', async () => {
     getContextPackageJobMock.mockResolvedValue(JOB);
     runStrategistOrchestratorMock.mockResolvedValue(stubResult());
 
@@ -180,8 +203,10 @@ describe('runContextPackageJob', () => {
     expect(runStrategistOrchestratorMock).toHaveBeenCalledWith(
       expect.objectContaining({ enforceSyncBudget: false, limit: 50 }),
     );
-    const [jobId, payload, progress] = completeContextPackageJobMock.mock.calls[0];
+    const [jobId, token, payload, progress] =
+      completeContextPackageJobMock.mock.calls[0];
     expect(jobId).toBe('job-1');
+    expect(token).toBe(ATTEMPT_TOKEN);
     expect(payload).toMatchObject({ purpose: 'テスト用途' });
     expect(progress).toEqual({
       sourceDocumentsReviewed: 3,
@@ -191,8 +216,7 @@ describe('runContextPackageJob', () => {
     expect(recordAuditEventMock).toHaveBeenCalledTimes(1);
   });
 
-  it('既知の orchestrator エラーを job error code へマップして fail する', async () => {
-    claimContextPackageJobMock.mockResolvedValue(true);
+  it('既知の orchestrator エラーを attemptToken 付き fail にマップする', async () => {
     getContextPackageJobMock.mockResolvedValue(JOB);
     runStrategistOrchestratorMock.mockRejectedValue(
       new UnresolvedDocIdsErrorMock({
@@ -207,19 +231,84 @@ describe('runContextPackageJob', () => {
     expect(failContextPackageJobMock).toHaveBeenCalledWith(
       'job-1',
       expect.objectContaining({ code: 'unknown_doc_ids' }),
+      { attemptToken: ATTEMPT_TOKEN },
     );
     expect(completeContextPackageJobMock).not.toHaveBeenCalled();
+    expect(releaseContextPackageJobLeaseMock).not.toHaveBeenCalled();
   });
 
-  it('予期せぬ例外は failed にせず rethrow する（lease 期限切れ後の retry に委ねる）', async () => {
-    claimContextPackageJobMock.mockResolvedValue(true);
+  it('業務失敗の fail が stale 拒否されたら active_lease skip を返す', async () => {
+    getContextPackageJobMock.mockResolvedValue(JOB);
+    runStrategistOrchestratorMock.mockRejectedValue(
+      new UnresolvedDocIdsErrorMock({
+        unknownDocIds: ['x'],
+        nonTerminalDocIds: [],
+      }),
+    );
+    failContextPackageJobMock.mockResolvedValue(false);
+
+    const outcome = await runContextPackageJob('job-1');
+
+    expect(outcome).toEqual({ outcome: 'skipped', reason: 'active_lease' });
+  });
+
+  it('業務失敗の fail が stale 拒否でも terminal 済みなら terminal skip を返す', async () => {
+    getContextPackageJobMock
+      .mockResolvedValueOnce(JOB)
+      .mockResolvedValueOnce({ ...JOB, status: 'succeeded' });
+    runStrategistOrchestratorMock.mockRejectedValue(
+      new UnresolvedDocIdsErrorMock({
+        unknownDocIds: ['x'],
+        nonTerminalDocIds: [],
+      }),
+    );
+    failContextPackageJobMock.mockResolvedValue(false);
+
+    const outcome = await runContextPackageJob('job-1');
+
+    expect(outcome).toEqual({ outcome: 'skipped', reason: 'terminal' });
+  });
+
+  it('業務失敗の Firestore 書き込み例外は lease を解放して rethrow する', async () => {
+    getContextPackageJobMock.mockResolvedValue(JOB);
+    runStrategistOrchestratorMock.mockRejectedValue(
+      new UnresolvedDocIdsErrorMock({
+        unknownDocIds: ['x'],
+        nonTerminalDocIds: [],
+      }),
+    );
+    failContextPackageJobMock.mockRejectedValue(new Error('firestore unavailable'));
+
+    await expect(runContextPackageJob('job-1')).rejects.toThrow(
+      'firestore unavailable',
+    );
+    expect(releaseContextPackageJobLeaseMock).toHaveBeenCalledWith(
+      'job-1',
+      ATTEMPT_TOKEN,
+    );
+  });
+
+  it('予期せぬ例外は lease を解放して rethrow する', async () => {
     getContextPackageJobMock.mockResolvedValue(JOB);
     runStrategistOrchestratorMock.mockRejectedValue(new Error('vertex 503 transient'));
 
     await expect(runContextPackageJob('job-1')).rejects.toThrow('vertex 503 transient');
 
-    // lease を残したまま落とすため failed には更新しない（worker route が 500 を返す）。
+    expect(releaseContextPackageJobLeaseMock).toHaveBeenCalledWith(
+      'job-1',
+      ATTEMPT_TOKEN,
+    );
     expect(failContextPackageJobMock).not.toHaveBeenCalled();
     expect(completeContextPackageJobMock).not.toHaveBeenCalled();
+  });
+
+  it('complete が stale 拒否されたら active_lease skip を返す', async () => {
+    getContextPackageJobMock.mockResolvedValue(JOB);
+    runStrategistOrchestratorMock.mockResolvedValue(stubResult());
+    completeContextPackageJobMock.mockResolvedValue(false);
+
+    const outcome = await runContextPackageJob('job-1');
+
+    expect(outcome).toEqual({ outcome: 'skipped', reason: 'active_lease' });
   });
 });

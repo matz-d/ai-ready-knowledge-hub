@@ -18,7 +18,7 @@
 
 IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を受け、`202 Accepted` + Firestore job + Cloud Tasks worker を実装した。設計は当初の「将来案」をほぼそのまま採用。
 
-- **Firestore `context_package_jobs` collection**（`src/lib/contextPackageJobs/`）。状態遷移は一方向 `queued → running → succeeded | failed`（+ `cancelled` 予約）。`running` への昇格はトランザクションで「現状 `queued` のときだけ」許可し、Cloud Tasks リトライによる worker 二重実行を冪等に吸収する（`claimContextPackageJob`）。
+- **Firestore `context_package_jobs` collection**（`src/lib/contextPackageJobs/`）。状態遷移は一方向 `queued → running → succeeded | failed`（+ `cancelled` 予約）。`running` への claim は `queued` または lease 期限切れ時だけ許可し、claim ごとに `attemptToken` を発行する。complete / fail は token 一致時だけ受理し、Cloud Tasks リトライや遅延 worker による上書きを防ぐ。
 - **`POST /api/context-package` に `mode` を追加**（`sync` 既定 / `async` / `auto`）:
   - `sync`: 従来どおり同期実行。budget 超過は **422 `sync_budget_exceeded`** で fail-fast（後方互換）。
   - `async`: 同期実行せず即 job 化、**202** + `jobId` / `statusUrl` / `resultUrl`。
@@ -31,14 +31,14 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
   - `GET /api/context-package/jobs/:jobId/result`（完了後 payload。同期レスポンスと同型）
 - **worker 実行**（`runJob.ts`）は orchestrator を `enforceSyncBudget:false` で実行（pre-LLM budget は引き続き有効、20 秒ゲートのみ外す）。成功時は同期経路と同型の `document.export` 監査も記録。
 - **result 保存**は当面 job doc に inline（`ContextPackageJobResult`）。Firestore 1MB 上限に対し `MAX_INLINE_RESULT_BYTES = 900_000` でサイズガードし、超過時は `result_too_large` で fail（GCS offload は後続）。
-- **必要な環境変数（worker 経路）**: `GOOGLE_CLOUD_PROJECT` / `CONTEXT_PACKAGE_TASKS_LOCATION`（既定 `GOOGLE_CLOUD_LOCATION`）/ `CONTEXT_PACKAGE_TASKS_QUEUE` / `CONTEXT_PACKAGE_WORKER_BASE_URL` / `CONTEXT_PACKAGE_WORKER_SA_EMAIL` / （任意）`CONTEXT_PACKAGE_JOB_TOKEN`。未設定時は enqueue が **503 `job_queue_unavailable`** で「同期で絞るか queue 設定を確認」を促す。
+- **必要な環境変数（worker 経路）**: `GOOGLE_CLOUD_PROJECT` / `CONTEXT_PACKAGE_TASKS_LOCATION`（既定 `GOOGLE_CLOUD_LOCATION`）/ `CONTEXT_PACKAGE_TASKS_QUEUE` / `CONTEXT_PACKAGE_WORKER_BASE_URL` / `CONTEXT_PACKAGE_WORKER_SA_EMAIL` / `CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE`（IAP programmatic access 用 OAuth client ID）/ `CONTEXT_PACKAGE_JOB_TOKEN`（Secret Manager → Cloud Run env）。未設定時は enqueue が **503 `job_queue_unavailable`** で「同期で絞るか queue 設定を確認」を促す。配線手順の正本は [docs/setup-gcp.md](setup-gcp.md) §Context Package 非同期。
 
 **UI polling（実装済み 2026-06-02、同 PR）**
 - `ContextPackageForm` は `mode:"auto"` を送り、**202 なら status URL を `POLL_INTERVAL_MS=3000` 間隔でポーリング**、`queued/running` を表示しつつ `succeeded` で result URL を取得して既存結果 UI に流す。`failed/cancelled`・`POLL_TIMEOUT_MS=5min` 超過はエラー表示。進行中ポーリングは新規送信 / アンマウントで `activeJobRef` により中断。
-- **feature flag**: `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED === 'true'` のときだけ `mode:"auto"` を送る。未設定（既定）は従来どおり同期（mode 無し）。**queue 配線と同時にこのフラグを有効化する**こと（未配線で auto を送ると 503）。
+- **feature flag**: `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED === 'true'` のときだけ `mode:"auto"` を送る。未設定（既定）は従来どおり同期（mode 無し）。**queue 配線と同時にこのフラグを有効化する**こと（未配線で auto を送ると 503）。本番では **Docker build-arg** で焼き込む（`Dockerfile` + `deploy.yml` の GitHub Variable）。理由は [setup-gcp.md](setup-gcp.md) §Context Package 非同期「設計メモ」。
 
 **残タスク（この PR スコープ外）**
-- **インフラ配線**: Cloud Tasks queue / worker 用 service account / OIDC→IAP（audience に IAP OAuth client ID、worker SA に roles/iap.httpsResourceAccessor）の実配線と dev tenant live smoke。**配線完了と同時に `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true` を設定**。
+- **インフラ実配線の live smoke**: [setup-gcp.md](setup-gcp.md) の手順どおり queue / worker SA / IAP accessor / GitHub Variables・Secret を本番プロジェクトへ適用し、IAP 経由で 202 → poll → 200 を証跡化する（workflow・Dockerfile・ドキュメントは整備済み）。
 - **UI の docIds 導線**: Inventory から docId を選ぶ UX（手入力以外）。
 - **result GCS offload**: 大きい package を inline ではなく GCS + `resultRef` で返す（`result_too_large` 回避）。
 - **job GC / cancel**: 古い job の TTL 削除と `cancelled` 遷移の実配線。

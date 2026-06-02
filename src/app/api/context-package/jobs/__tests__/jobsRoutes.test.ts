@@ -136,7 +136,7 @@ describe('POST /jobs/:jobId/run (worker)', () => {
     process.env.CONTEXT_PACKAGE_JOB_TOKEN = 'secret';
     runContextPackageJobMock.mockResolvedValue({
       outcome: 'skipped',
-      reason: 'not_queued',
+      reason: 'terminal',
     });
     const res = await runWorker(
       workerRequest({ 'x-context-package-job-token': 'secret' }),
@@ -144,5 +144,25 @@ describe('POST /jobs/:jobId/run (worker)', () => {
     );
     expect(res.status).toBe(200);
     expect(runContextPackageJobMock).toHaveBeenCalledWith('job-1');
+  });
+
+  it('active lease 中の重複配信は 503（Cloud Tasks を成功扱いにしない）', async () => {
+    runContextPackageJobMock.mockResolvedValue({
+      outcome: 'skipped',
+      reason: 'active_lease',
+    });
+    const res = await runWorker(workerRequest(), params('job-1'));
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.reason).toBe('active_lease');
+  });
+
+  it('terminal skip は 200（冪等な重複配信）', async () => {
+    runContextPackageJobMock.mockResolvedValue({
+      outcome: 'skipped',
+      reason: 'terminal',
+    });
+    const res = await runWorker(workerRequest(), params('job-1'));
+    expect(res.status).toBe(200);
   });
 });

@@ -3,8 +3,8 @@
  *
  * Cloud Tasks が `POST /api/context-package/jobs/{jobId}/run` を叩くと呼ばれる。
  * `queued → running` を冪等に claim し、orchestrator を同期 20 秒ゲート無しで実行、
- * 結果を job doc に書き戻す。Cloud Tasks のリトライで二重起動されても、claim 失敗で
- * 早期 return するため二重実行されない。
+ * 結果を job doc に書き戻す。各 claim で attempt token を発行し、complete / fail は
+ * token 一致時のみ受理する（stale worker による上書きを防ぐ）。
  */
 import { modelId } from '../../agents/_shared/genkitClient';
 import {
@@ -27,6 +27,7 @@ import {
   completeContextPackageJob,
   failContextPackageJob,
   getContextPackageJob,
+  releaseContextPackageJobLease,
 } from './firestoreAdapter';
 import type {
   ContextPackageJobError,
@@ -39,7 +40,59 @@ const MAX_INLINE_RESULT_BYTES = 900_000;
 
 export type RunContextPackageJobOutcome =
   | { outcome: 'claimed_and_run'; status: 'succeeded' | 'failed' }
-  | { outcome: 'skipped'; reason: 'not_found' | 'not_queued' };
+  | {
+      outcome: 'skipped';
+      reason: 'not_found' | 'terminal' | 'active_lease';
+    };
+
+async function outcomeAfterRejectedAttemptWrite(
+  jobId: string,
+): Promise<RunContextPackageJobOutcome> {
+  const existing = await getContextPackageJob(jobId);
+  if (!existing) {
+    return { outcome: 'skipped', reason: 'not_found' };
+  }
+  if (
+    existing.status === 'succeeded' ||
+    existing.status === 'failed' ||
+    existing.status === 'cancelled'
+  ) {
+    return { outcome: 'skipped', reason: 'terminal' };
+  }
+  return { outcome: 'skipped', reason: 'active_lease' };
+}
+
+/**
+ * 業務失敗を永続化してから ack する。stale attempt や Firestore 障害で書き込めない
+ * 場合は成功扱いにせず、Cloud Tasks の再配信または最新 attempt の完了に委ねる。
+ */
+async function persistBusinessFailure(
+  jobId: string,
+  attemptToken: string,
+  error: ContextPackageJobError,
+  progress?: ContextPackageJobProgress,
+): Promise<RunContextPackageJobOutcome> {
+  try {
+    const failed = await failContextPackageJob(jobId, error, {
+      attemptToken,
+      ...(progress ? { progress } : {}),
+    });
+    if (failed) {
+      return { outcome: 'claimed_and_run', status: 'failed' };
+    }
+    return outcomeAfterRejectedAttemptWrite(jobId);
+  } catch (writeError) {
+    await releaseContextPackageJobLease(jobId, attemptToken).catch(
+      (releaseError) => {
+        console.error(
+          '[context-package-job] release lease after failure write error failed',
+          { jobId, releaseError },
+        );
+      },
+    );
+    throw writeError;
+  }
+}
 
 function progressFromResult(
   result: StrategistOrchestratorResult,
@@ -55,7 +108,7 @@ function progressFromResult(
  * 既知の「業務エラー」（入力起因で決定論的に失敗するもの）を job error code へ落とす。
  * これらは retry しても結果が変わらないため `failed` 記録 + 200（retry 不要）にする。
  * 該当しない（= 予期せぬ / transient な可能性がある）エラーは `null` を返し、呼び出し側
- * で lease を残したまま rethrow → worker route 500 → lease 期限切れ後に再 claim させる。
+ * で lease を解放したうえで rethrow → worker route 500 → Cloud Tasks 再配信。
  */
 function toBusinessJobError(error: unknown): ContextPackageJobError | null {
   if (error instanceof UnresolvedDocIdsError) {
@@ -108,24 +161,17 @@ async function recordExportAudit(
 export async function runContextPackageJob(
   jobId: string,
 ): Promise<RunContextPackageJobOutcome> {
-  const claimed = await claimContextPackageJob(jobId);
-  if (!claimed) {
-    const existing = await getContextPackageJob(jobId);
-    return {
-      outcome: 'skipped',
-      reason: existing ? 'not_queued' : 'not_found',
-    };
+  const claim = await claimContextPackageJob(jobId);
+  if (!claim.claimed) {
+    return { outcome: 'skipped', reason: claim.reason };
   }
 
-  // claim 後に request を読む（claim は status だけを見て昇格する）。
+  const { attemptToken } = claim;
+
+  // claim 後に request を読む（claim は status / lease / token だけを見て昇格する）。
   const job = await getContextPackageJob(jobId);
   if (!job) {
-    // claim 直後に消えるのは想定外。failed として記録を試みる。
-    await failContextPackageJob(jobId, {
-      code: 'upstream_failure',
-      message: 'Job document disappeared after claim.',
-    }).catch(() => undefined);
-    return { outcome: 'claimed_and_run', status: 'failed' };
+    return { outcome: 'skipped', reason: 'not_found' };
   }
 
   const { request } = job;
@@ -146,8 +192,9 @@ export async function runContextPackageJob(
 
     const byteSize = Buffer.byteLength(JSON.stringify(payload), 'utf8');
     if (byteSize > MAX_INLINE_RESULT_BYTES) {
-      await failContextPackageJob(
+      return persistBusinessFailure(
         jobId,
+        attemptToken,
         {
           code: 'result_too_large',
           message:
@@ -157,10 +204,21 @@ export async function runContextPackageJob(
         },
         progress,
       );
-      return { outcome: 'claimed_and_run', status: 'failed' };
     }
 
-    await completeContextPackageJob(jobId, payload, progress);
+    const completed = await completeContextPackageJob(
+      jobId,
+      attemptToken,
+      payload,
+      progress,
+    );
+    if (!completed) {
+      console.error(
+        '[context-package-job] complete rejected (stale attempt or status drift)',
+        { jobId },
+      );
+      return { outcome: 'skipped', reason: 'active_lease' };
+    }
 
     try {
       await recordExportAudit(request, result);
@@ -172,19 +230,22 @@ export async function runContextPackageJob(
   } catch (error) {
     const businessError = toBusinessJobError(error);
     if (businessError) {
-      // 入力起因の決定論的失敗: failed に記録し 200 で返す（retry は無意味）。
       console.error('[context-package-job] business failure', { jobId, businessError });
-      await failContextPackageJob(jobId, businessError).catch((failErr) => {
-        console.error('[context-package-job] failContextPackageJob failed', failErr);
-      });
-      return { outcome: 'claimed_and_run', status: 'failed' };
+      return persistBusinessFailure(jobId, attemptToken, businessError);
     }
-    // 予期せぬ / transient な可能性: lease を残したまま rethrow し、worker route で 500。
-    // lease 期限切れ後に別 Cloud Tasks 試行が再 claim する。
-    console.error('[context-package-job] unexpected failure (will retry after lease)', {
-      jobId,
-      error,
+
+    // transient: lease を解放して再配信が再 claim できるようにする（15 分待たない）。
+    // attemptToken は維持されるため、この試行の遅延 complete/fail は stale として拒否される。
+    await releaseContextPackageJobLease(jobId, attemptToken).catch((releaseErr) => {
+      console.error('[context-package-job] releaseContextPackageJobLease failed', {
+        jobId,
+        releaseErr,
+      });
     });
+    console.error(
+      '[context-package-job] unexpected failure (lease released for retry)',
+      { jobId, error },
+    );
     throw error;
   }
 }

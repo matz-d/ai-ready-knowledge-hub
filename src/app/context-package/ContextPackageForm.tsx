@@ -7,6 +7,8 @@ const MAX_PURPOSE = 2000;
 /**
  * 非同期 job 経路（mode:"auto"）の有効化フラグ。Cloud Tasks queue が配線済みの環境
  * でだけ true にする。未配線環境で auto を送ると 503 になるため、既定は同期のまま。
+ * 本番 Cloud Run では NEXT_PUBLIC_* が Docker build 時に焼き込まれる（runtime env では
+ * 切り替え不可）。手順は docs/setup-gcp.md §Context Package 非同期。
  */
 const ASYNC_ENABLED =
   process.env.NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED === 'true';
