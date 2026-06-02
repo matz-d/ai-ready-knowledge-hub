@@ -33,9 +33,12 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
 - **result 保存**は当面 job doc に inline（`ContextPackageJobResult`）。Firestore 1MB 上限に対し `MAX_INLINE_RESULT_BYTES = 900_000` でサイズガードし、超過時は `result_too_large` で fail（GCS offload は後続）。
 - **必要な環境変数（worker 経路）**: `GOOGLE_CLOUD_PROJECT` / `CONTEXT_PACKAGE_TASKS_LOCATION`（既定 `GOOGLE_CLOUD_LOCATION`）/ `CONTEXT_PACKAGE_TASKS_QUEUE` / `CONTEXT_PACKAGE_WORKER_BASE_URL` / `CONTEXT_PACKAGE_WORKER_SA_EMAIL` / （任意）`CONTEXT_PACKAGE_JOB_TOKEN`。未設定時は enqueue が **503 `job_queue_unavailable`** で「同期で絞るか queue 設定を確認」を促す。
 
+**UI polling（実装済み 2026-06-02、同 PR）**
+- `ContextPackageForm` は `mode:"auto"` を送り、**202 なら status URL を `POLL_INTERVAL_MS=3000` 間隔でポーリング**、`queued/running` を表示しつつ `succeeded` で result URL を取得して既存結果 UI に流す。`failed/cancelled`・`POLL_TIMEOUT_MS=5min` 超過はエラー表示。進行中ポーリングは新規送信 / アンマウントで `activeJobRef` により中断。
+- **feature flag**: `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED === 'true'` のときだけ `mode:"auto"` を送る。未設定（既定）は従来どおり同期（mode 無し）。**queue 配線と同時にこのフラグを有効化する**こと（未配線で auto を送ると 503）。
+
 **残タスク（この PR スコープ外）**
-- **インフラ配線**: Cloud Tasks queue / worker 用 service account / IAP バイパスまたは OIDC→IAP の実配線と dev tenant live smoke。
-- **UI**: job 化レスポンス（202）のポーリング導線（status バッジ + 完了時 result 取得）。`ContextPackageForm` は現状同期前提。
+- **インフラ配線**: Cloud Tasks queue / worker 用 service account / OIDC→IAP（audience に IAP OAuth client ID、worker SA に roles/iap.httpsResourceAccessor）の実配線と dev tenant live smoke。**配線完了と同時に `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true` を設定**。
 - **UI の docIds 導線**: Inventory から docId を選ぶ UX（手入力以外）。
 - **result GCS offload**: 大きい package を inline ではなく GCS + `resultRef` で返す（`result_too_large` 回避）。
 - **job GC / cancel**: 古い job の TTL 削除と `cancelled` 遷移の実配線。

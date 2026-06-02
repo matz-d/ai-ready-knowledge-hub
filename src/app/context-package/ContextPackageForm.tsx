@@ -1,8 +1,44 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const MAX_PURPOSE = 2000;
+
+/**
+ * 非同期 job 経路（mode:"auto"）の有効化フラグ。Cloud Tasks queue が配線済みの環境
+ * でだけ true にする。未配線環境で auto を送ると 503 になるため、既定は同期のまま。
+ */
+const ASYNC_ENABLED =
+  process.env.NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED === 'true';
+
+const POLL_INTERVAL_MS = 3000;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+
+type JobLifecycleStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+type JobAcceptedResponse = {
+  jobId: string;
+  status: JobLifecycleStatus;
+  statusUrl: string;
+  resultUrl: string;
+  reason?: string;
+  details?: string;
+};
+
+type JobStatusResponse = {
+  jobId: string;
+  status: JobLifecycleStatus;
+  error?: { code?: string; message?: string };
+  resultUrl?: string;
+};
+
+const JOB_STATUS_LABEL: Record<JobLifecycleStatus, string> = {
+  queued: 'キューに登録しました（順番待ち）',
+  running: '生成中…',
+  succeeded: '完了しました',
+  failed: '失敗しました',
+  cancelled: 'キャンセルされました',
+};
 
 type ChunkSelection = {
   docId: string;
@@ -57,7 +93,7 @@ type ApiErrorResponse = {
   };
 };
 
-type UiState = 'idle' | 'loading' | 'done' | 'error';
+type UiState = 'idle' | 'loading' | 'polling' | 'done' | 'error';
 
 export function parseDocIds(raw: string): string[] {
   return [...new Set(raw.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean))];
@@ -83,8 +119,21 @@ export function ContextPackageForm() {
   const [docIdsErrorDetails, setDocIdsErrorDetails] = useState<DocIdsErrorDetails | null>(null);
   const [suggestedDocIds, setSuggestedDocIds] = useState<string[] | null>(null);
   const [result, setResult] = useState<ContextPackageResult | null>(null);
+  const [jobStatus, setJobStatus] = useState<JobLifecycleStatus | null>(null);
+  const [jobNote, setJobNote] = useState<string | null>(null);
+
+  // 進行中ポーリングのキャンセル用。新規送信 / アンマウントで前の job を止める。
+  // state はクロージャに古い値が残るため、継続判定は ref の最新値で行う。
+  const activeJobRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      activeJobRef.current = null;
+    };
+  }, []);
 
   const isLoading = uiState === 'loading';
+  const isBusy = uiState === 'loading' || uiState === 'polling';
   const remaining = MAX_PURPOSE - purpose.length;
 
   const applyDocIdSuggestion = (ids: string[]) => {
@@ -95,12 +144,81 @@ export function ContextPackageForm() {
     setUiState('idle');
   };
 
+  /**
+   * 202 で受け取った job を status URL で数秒間隔にポーリングし、succeeded なら
+   * result URL を取得して既存の結果 UI に流す。failed / timeout はエラー表示。
+   * activeJobRef が別 jobId に変わったら（新規送信・離脱）静かに中断する。
+   */
+  const pollJob = async (accepted: JobAcceptedResponse) => {
+    activeJobRef.current = accepted.jobId;
+    setUiState('polling');
+    setJobStatus(accepted.status);
+    setJobNote(
+      accepted.reason === 'sync_budget_exceeded'
+        ? '対象が大きいためバックグラウンド生成に切り替えました。'
+        : null,
+    );
+
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+
+    while (activeJobRef.current === accepted.jobId) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      if (activeJobRef.current !== accepted.jobId) return;
+
+      if (Date.now() > deadline) {
+        setErrorMessage(
+          '生成がタイムアウトしました。対象 Doc IDs を絞って再試行してください。',
+        );
+        setUiState('error');
+        return;
+      }
+
+      let statusRes: Response;
+      try {
+        statusRes = await fetch(accepted.statusUrl);
+      } catch {
+        continue; // 一時的なネットワーク失敗は次の間隔で再試行する。
+      }
+      if (activeJobRef.current !== accepted.jobId) return;
+      if (!statusRes.ok) continue;
+
+      const status = (await statusRes.json()) as JobStatusResponse;
+      setJobStatus(status.status);
+
+      if (status.status === 'succeeded') {
+        const resultRes = await fetch(accepted.resultUrl);
+        if (activeJobRef.current !== accepted.jobId) return;
+        if (!resultRes.ok) {
+          setErrorMessage('結果の取得に失敗しました。');
+          setUiState('error');
+          return;
+        }
+        const data = (await resultRes.json()) as ContextPackageResult;
+        setResult(data);
+        setUiState('done');
+        return;
+      }
+      if (status.status === 'failed' || status.status === 'cancelled') {
+        setErrorMessage(
+          status.error?.message ??
+            'バックグラウンド生成に失敗しました。対象を絞って再試行してください。',
+        );
+        setUiState('error');
+        return;
+      }
+      // queued / running は継続。
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    activeJobRef.current = null; // 進行中ポーリングがあれば止める。
     setErrorMessage(null);
     setDocIdsErrorDetails(null);
     setSuggestedDocIds(null);
     setResult(null);
+    setJobStatus(null);
+    setJobNote(null);
     setUiState('loading');
 
     const docIds = parseDocIds(docIdsRaw);
@@ -112,8 +230,17 @@ export function ContextPackageForm() {
         body: JSON.stringify({
           purpose,
           ...(docIds.length > 0 ? { docIds } : {}),
+          // queue 配線済み環境でだけ auto を送る。未配線では同期（既定）のまま。
+          ...(ASYNC_ENABLED ? { mode: 'auto' } : {}),
         }),
       });
+
+      // 202: バックグラウンド job 化。status をポーリングして結果を取りに行く。
+      if (res.status === 202) {
+        const accepted = (await res.json()) as JobAcceptedResponse;
+        await pollJob(accepted);
+        return;
+      }
 
       if (res.ok) {
         const data = (await res.json()) as ContextPackageResult;
@@ -233,12 +360,12 @@ export function ContextPackageForm() {
           <button
             type="submit"
             className="cp-submit"
-            disabled={isLoading || purpose.trim().length === 0}
+            disabled={isBusy || purpose.trim().length === 0}
           >
-            {isLoading ? (
+            {isBusy ? (
               <>
                 <span className="cp-spinner" aria-hidden="true" />
-                生成中…
+                {uiState === 'polling' ? 'バックグラウンド生成中…' : '生成中…'}
               </>
             ) : (
               'Context Package を生成'
@@ -246,6 +373,21 @@ export function ContextPackageForm() {
           </button>
         </div>
       </form>
+
+      {uiState === 'polling' ? (
+        <div className="cp-job-panel" role="status" aria-live="polite">
+          <span className="cp-spinner" aria-hidden="true" />
+          <div>
+            <strong>
+              {jobStatus ? JOB_STATUS_LABEL[jobStatus] : 'バックグラウンド生成中…'}
+            </strong>
+            {jobNote ? <p className="cp-job-note">{jobNote}</p> : null}
+            <p className="cp-job-hint">
+              この画面を開いたまま少しお待ちください（数秒ごとに状態を確認しています）。
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {uiState === 'error' && errorMessage ? (
         <div className="cp-error-panel" role="alert">
