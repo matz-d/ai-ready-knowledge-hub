@@ -7,7 +7,11 @@ const {
   NoKnowledgeChunksErrorMock,
   StrategistSyncBudgetExceededErrorMock,
   UnresolvedDocIdsErrorMock,
+  JobQueueNotConfiguredErrorMock,
   recordAuditEventMock,
+  createContextPackageJobMock,
+  failContextPackageJobMock,
+  enqueueMock,
 } = vi.hoisted(() => {
   class NoInventoryDocumentsErrorMock extends Error {
     constructor(message = 'No terminal inventory documents found.') {
@@ -67,6 +71,13 @@ const {
     }
   }
 
+  class JobQueueNotConfiguredErrorMock extends Error {
+    constructor(missing: string[]) {
+      super(`Cloud Tasks queue is not configured: missing ${missing.join(', ')}`);
+      this.name = 'JobQueueNotConfiguredError';
+    }
+  }
+
   return {
     runStrategistOrchestratorMock: vi.fn(),
     buildStrategistContextPackageMock: vi.fn(),
@@ -74,19 +85,31 @@ const {
     NoKnowledgeChunksErrorMock,
     StrategistSyncBudgetExceededErrorMock,
     UnresolvedDocIdsErrorMock,
+    JobQueueNotConfiguredErrorMock,
     recordAuditEventMock: vi.fn().mockResolvedValue('audit-event-1'),
+    createContextPackageJobMock: vi.fn(),
+    failContextPackageJobMock: vi.fn(),
+    enqueueMock: vi.fn(),
   };
 });
 
 vi.mock('../../../../services/strategistOrchestrator', async () => {
-  // 投影関数は実装をそのまま使う（pure module。genkit / firestore に依存しない）。
-  // raw chunk.text を漏らさない projection を本物で検証するため。
+  // projection / payload / auditTarget は本物を使う（pure module。genkit / firestore に
+  // 依存しない）。raw chunk.text を漏らさない projection を本物で検証するため。
   const responseView = await vi.importActual<
     typeof import('../../../../services/strategistOrchestrator/responseView')
   >('../../../../services/strategistOrchestrator/responseView');
+  const payload = await vi.importActual<
+    typeof import('../../../../services/strategistOrchestrator/contextPackagePayload')
+  >('../../../../services/strategistOrchestrator/contextPackagePayload');
+  const auditTarget = await vi.importActual<
+    typeof import('../../../../services/strategistOrchestrator/auditTarget')
+  >('../../../../services/strategistOrchestrator/auditTarget');
   return {
     runStrategistOrchestrator: runStrategistOrchestratorMock,
     buildStrategistContextPackage: buildStrategistContextPackageMock,
+    buildContextPackageResponsePayload: payload.buildContextPackageResponsePayload,
+    contextPackageAuditTarget: auditTarget.contextPackageAuditTarget,
     NoInventoryDocumentsError: NoInventoryDocumentsErrorMock,
     NoKnowledgeChunksError: NoKnowledgeChunksErrorMock,
     StrategistSyncBudgetExceededError: StrategistSyncBudgetExceededErrorMock,
@@ -104,6 +127,16 @@ vi.mock('../../../../lib/audit/auditEvent', async (importOriginal) => {
     recordAuditEvent: recordAuditEventMock,
   };
 });
+
+vi.mock('../../../../lib/contextPackageJobs/firestoreAdapter', () => ({
+  createContextPackageJob: createContextPackageJobMock,
+  failContextPackageJob: failContextPackageJobMock,
+}));
+
+vi.mock('../../../../lib/contextPackageJobs/enqueuer', () => ({
+  cloudTasksEnqueuer: { enqueue: enqueueMock },
+  JobQueueNotConfiguredError: JobQueueNotConfiguredErrorMock,
+}));
 
 import { POST } from '../route';
 import { createPurposeBinding } from '../../../../lib/audit/auditEvent';
@@ -244,6 +277,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   runStrategistOrchestratorMock.mockResolvedValue(STUB_RESULT);
   buildStrategistContextPackageMock.mockReturnValue({ input: {}, markdown: STUB_MARKDOWN });
+  createContextPackageJobMock.mockResolvedValue({ jobId: 'job-123', status: 'queued' });
+  failContextPackageJobMock.mockResolvedValue(undefined);
+  enqueueMock.mockResolvedValue(undefined);
 });
 
 describe('POST /api/context-package', () => {
@@ -256,7 +292,6 @@ describe('POST /api/context-package', () => {
       purpose: 'テスト用途',
       limit: 50,
     });
-    expect(buildStrategistContextPackageMock).toHaveBeenCalledWith(STUB_RESULT);
     expect(body).toEqual({
       purpose: 'テスト用途',
       generatedAt: '2026-05-14T00:00:00.000Z',
@@ -272,7 +307,8 @@ describe('POST /api/context-package', () => {
       },
       budgetDroppedDocuments: [],
       syncEstimateSeconds: 7.4,
-      markdown: STUB_MARKDOWN,
+      // markdown は本物の payload builder が生成する（内容ではなく projection 経路を検証）。
+      markdown: expect.any(String),
       counts: {
         included: 1,
         excluded: 1,
@@ -560,7 +596,7 @@ describe('POST /api/context-package', () => {
     expect(response.status).toBe(422);
     expect(body.error).toBe('sync_budget_exceeded');
     expect(body.details).toBe(
-      '同期処理の目標時間（20秒）を超える見込みです。対象を絞って再実行してください。',
+      '同期処理の目標時間（20秒）を超える見込みです。対象を絞るか mode:"async" で再実行してください。',
     );
     expect(body.targetSeconds).toBe(20);
     expect(body.estimatedSeconds).toBe(24.8);
@@ -570,5 +606,79 @@ describe('POST /api/context-package', () => {
       },
     });
     expect(recordAuditEventMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/context-package (async modes)', () => {
+  it('mode:"async" は同期実行せず job 化し 202 + jobId / status・result URL を返す', async () => {
+    const response = await POST(
+      buildRequest({ purpose: 'テスト用途', limit: 50, mode: 'async' }),
+    );
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(202);
+    expect(runStrategistOrchestratorMock).not.toHaveBeenCalled();
+    expect(createContextPackageJobMock).toHaveBeenCalledWith(
+      expect.objectContaining({ purpose: 'テスト用途', limit: 50 }),
+    );
+    expect(enqueueMock).toHaveBeenCalledWith('job-123');
+    expect(body).toMatchObject({
+      jobId: 'job-123',
+      status: 'queued',
+      statusUrl: '/api/context-package/jobs/job-123',
+      resultUrl: '/api/context-package/jobs/job-123/result',
+    });
+  });
+
+  it('mode:"auto" は budget 超過時に 422 ではなく job 化へフォールバックする', async () => {
+    runStrategistOrchestratorMock.mockRejectedValue(
+      new StrategistSyncBudgetExceededErrorMock(),
+    );
+
+    const response = await POST(
+      buildRequest({ purpose: 'テスト用途', limit: 100, mode: 'auto' }),
+    );
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(202);
+    expect(enqueueMock).toHaveBeenCalledWith('job-123');
+    expect(body).toMatchObject({
+      jobId: 'job-123',
+      reason: 'sync_budget_exceeded',
+      targetSeconds: 20,
+      syncEstimateSeconds: 24.8,
+    });
+  });
+
+  it('mode:"sync"（既定）は budget 超過で従来どおり 422、job 化しない', async () => {
+    runStrategistOrchestratorMock.mockRejectedValue(
+      new StrategistSyncBudgetExceededErrorMock(),
+    );
+
+    const response = await POST(buildRequest({ purpose: 'テスト用途', limit: 100 }));
+
+    expect(response.status).toBe(422);
+    expect(createContextPackageJobMock).not.toHaveBeenCalled();
+    expect(enqueueMock).not.toHaveBeenCalled();
+  });
+
+  it('queue 未設定（JobQueueNotConfiguredError）なら 503 を返す', async () => {
+    enqueueMock.mockRejectedValue(
+      new JobQueueNotConfiguredErrorMock(['CONTEXT_PACKAGE_TASKS_QUEUE']),
+    );
+
+    const response = await POST(
+      buildRequest({ purpose: 'テスト用途', mode: 'async' }),
+    );
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(503);
+    expect(body.error).toBe('job_queue_unavailable');
+    expect(body.jobId).toBe('job-123');
+    // enqueue 失敗で queued を放置せず failed に更新する。
+    expect(failContextPackageJobMock).toHaveBeenCalledWith(
+      'job-123',
+      expect.objectContaining({ code: 'enqueue_failed' }),
+    );
   });
 });

@@ -1606,7 +1606,9 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 **Cloud Run + IAP re-smoke（2026-06-02）:** PR #12 merge 後の revision `ai-ready-knowledge-hub-00029-9b9`（image `:c902c09`）で、`ai_safe_ready` invoice 1 件を `docIds` 指定して再 smoke。`POST /api/context-package` は HTTP 200 / `33.716634292s`、`document.export` audit `0mpwh5v5k-68aa4bc141a6fbc1`（actor `makoto@m-grow-ai.com`）を記録した。markdown は `Confidential (AI-safe via masking)`、`SYN-INV-2[REDACTED:POSTAL_CODE]`、`[REDACTED:BANK_ACCOUNT]`、`[REDACTED:JP_MYNUMBER]` を含み、raw `SYN-INV-2026-0501` は含まない。unknown docId は deployed UI で HTTP 400 + 詳細表示。Firestore audit composite index 2 本は `READY`。ローカル全 Inventory smoke は既定 `maxTotalPromptChars: 45_000` で `474 → 80` chunks、`394` drops を metadata に記録した。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
 
-**残る見直し候補:** UI の docIds 導線（Inventory からの選択 UX）、非同期 job 化（[open-questions.md R10](open-questions.md)、別 PR）、`unmaskablePiiFindings` 閾値再評価（Masker 本線接続後、`D-P3-H-7 Q2` 後続）。
+**Context Package 非同期 job 本番配線 / live smoke（2026-06-02）:** 同期生成 `33.716634292s` の実測を受け、`202 Accepted` + Firestore job + Cloud Tasks worker を本番配線した。revision `ai-ready-knowledge-hub-00033-vrw` で、IAP audience 付き Worker SA token による job `8ce6a64b-54a5-4368-b7b6-866406c3d308` が HTTP `202` in `1.295306353s` → polling `queued/running/succeeded` → result HTTP `200` を完走。Cloud Tasks worker `/run` は HTTP `200` in `19.652927793s`、result fetch まで約 `22.5s`。初回応答は同期 smoke 比で `32.421s`、約 `96%` 短縮した。生成時間自体ではなく、UI 待機ブロック解消、retry、lease、冪等性を主目的とする。Cloud Tasks queue、Worker SA、IAP accessor、IAP programmatic OAuth client allowlist、Secret Manager、GitHub Variables、UI build-arg flag を配線済み。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md) と [docs/open-questions.md R10](open-questions.md)。
+
+**残る見直し候補:** UI の docIds 導線（Inventory からの選択 UX）、`unmaskablePiiFindings` 閾値再評価（Masker 本線接続後、`D-P3-H-7 Q2` 後続）、非同期 job result の GCS offload、job GC / cancel。
 
 ---
 

@@ -1884,6 +1884,35 @@ pre {
   }
 }
 
+.cp-job-panel {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  max-width: 720px;
+  padding: 18px;
+  border: 1px solid #b9cde3;
+  border-radius: 8px;
+  background: #eef4fb;
+  color: #20364a;
+}
+
+.cp-job-panel strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.cp-job-note {
+  margin: 0 0 4px;
+  line-height: 1.6;
+}
+
+.cp-job-hint {
+  margin: 0;
+  font-size: 13px;
+  color: #50647a;
+  line-height: 1.6;
+}
+
 .cp-error-panel {
   max-width: 720px;
   padding: 18px;

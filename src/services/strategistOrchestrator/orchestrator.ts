@@ -120,6 +120,12 @@ export type RunStrategistOrchestratorInput = {
   docIds?: string[];
   /** pre-LLM input budget（未指定なら {@link DEFAULT_STRATEGIST_INPUT_BUDGET}） */
   inputBudget?: StrategistInputBudgetConfig;
+  /**
+   * 同期 20 秒ゲートを強制するか（既定 true）。非同期 job 経路では false にして、
+   * 20 秒超の見込みでも実行を続ける。pre-LLM budget（Vertex token 上限の絞り込み）は
+   * このフラグに関わらず常に適用する。
+   */
+  enforceSyncBudget?: boolean;
 };
 
 export type RunStrategistOrchestratorDeps = {
@@ -296,8 +302,9 @@ export async function runStrategistOrchestrator(
     );
   }
 
+  const enforceSyncBudget = input.enforceSyncBudget ?? true;
   const syncEstimateSeconds = estimateStrategistSyncSeconds(budgetResult.report);
-  if (syncEstimateSeconds > STRATEGIST_SYNC_TARGET_SECONDS) {
+  if (enforceSyncBudget && syncEstimateSeconds > STRATEGIST_SYNC_TARGET_SECONDS) {
     throw new StrategistSyncBudgetExceededError({
       estimatedSeconds: syncEstimateSeconds,
       targetSeconds: STRATEGIST_SYNC_TARGET_SECONDS,

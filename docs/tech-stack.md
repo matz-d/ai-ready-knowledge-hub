@@ -136,8 +136,11 @@ MVPでは Vector Search と embeddings 生成は行わず、タグ検索 + LLM�
 
 **長時間処理の扱い:**
 - Curator/Masker は10〜30秒かかる可能性
-- Cloud Runのデフォルトタイムアウトは300秒なので、MVPでは同期で十分
-- 将来的にはCloud Tasks/Pub-Subで非同期化検討
+- upload 時の Curator/Masker は Cloud Run のタイムアウト内で同期実行
+- Context Package 生成は Cloud Tasks + Firestore job で非同期実行可能。UI は
+  `202 Accepted` 後に status endpoint を polling し、完了後に result を取得する
+- Context Package worker は IAP audience 付き OIDC token と共有 token で保護し、
+  Firestore lease + attempt token で retry 時の stale worker 上書きを防ぐ
 
 **Server Actions vs API Routes:**
 - 短時間処理 (Inventory表示等) → Server Actions
@@ -154,12 +157,14 @@ MVPでは Vector Search と embeddings 生成は行わず、タグ検索 + LLM�
 | Cloud DLP | PII検出/マスキング | 加点 (AI技術) |
 | Cloud Storage | ファイル保存 | 加点 |
 | Firestore | メタデータDB + AuditEvent ストア | 加点 |
+| Cloud Tasks | Context Package 非同期 worker の配送・retry | 加点 (DevOps) |
+| Secret Manager | Context Package worker 共有 token の Cloud Run 注入 | 加点 (セキュリティ) |
 | Artifact Registry | Docker image レジストリ（CI/CD pipeline の可視化） | 加点 (DevOps) |
 | Cloud IAP | Cloud Run へのアクセス制御（Workspace SSO） | 加点 (セキュリティ) |
 | Workload Identity Federation | GitHub Actions → GCP の keyless 認証 | 加点 (DevOps/セキュリティ) |
 | Vertex AI text-embedding-005 | 将来の埋め込み生成 | 将来拡張 |
 
-→ 8サービスのGoogle Cloud活用（Phase 3-D 完了時点）。「まわす」（CI/CD）「とどける」（IAP + Cloud Run）「つくる」（Vertex AI + DLP）の3軸をすべて Google Cloud で構成。
+→ 10サービスのGoogle Cloud活用（2026-06-02 Context Package 非同期配線時点）。「まわす」（CI/CD + Cloud Tasks）「とどける」（IAP + Cloud Run）「つくる」（Vertex AI + DLP）の3軸をすべて Google Cloud で構成。
 
 ---
 

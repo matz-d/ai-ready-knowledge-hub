@@ -2,7 +2,12 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  serverExternalPackages: ['@napi-rs/canvas', 'pdf-parse', 'pdfjs-dist'],
+  serverExternalPackages: [
+    '@google-cloud/tasks',
+    '@napi-rs/canvas',
+    'pdf-parse',
+    'pdfjs-dist',
+  ],
 };
 
 export default nextConfig;

@@ -7,17 +7,14 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { modelId } from '../../../agents/_shared/genkitClient';
-import type { Sensitivity } from '../../../agents/curator/schema';
 import {
-  buildStrategistContextPackage,
+  buildContextPackageResponsePayload,
+  contextPackageAuditTarget,
   NoInventoryDocumentsError,
   NoKnowledgeChunksError,
   StrategistSyncBudgetExceededError,
   UnresolvedDocIdsError,
   runStrategistOrchestrator,
-  toExcludedChunkView,
-  toIncludedChunkView,
-  toSafetyExcludedChunkView,
   type StrategistOrchestratorResult,
 } from '../../../services/strategistOrchestrator';
 import {
@@ -26,41 +23,47 @@ import {
   recordAuditEvent,
 } from '../../../lib/audit/auditEvent';
 import { PROCESSING_PROFILE_PRESETS } from '../../../lib/processingProfile';
+import {
+  createContextPackageJob,
+  failContextPackageJob,
+} from '../../../lib/contextPackageJobs/firestoreAdapter';
+import {
+  cloudTasksEnqueuer,
+  JobQueueNotConfiguredError,
+  type ContextPackageJobEnqueuer,
+} from '../../../lib/contextPackageJobs/enqueuer';
+import type { ContextPackageJobRequest } from '../../../lib/contextPackageJobs/schema';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function contextPackageAuditTarget(result: StrategistOrchestratorResult): {
-  docId: string;
-  fileName: string;
-  sourceKind: 'upload';
-  sensitivity: Sensitivity | 'Unknown';
-} {
-  const row =
-    result.included[0] ?? result.excluded[0] ?? result.safetyExcluded[0];
-  if (row) {
-    return {
-      docId: row.chunk.docId,
-      fileName: row.parent.fileName,
-      sourceKind: 'upload',
-      sensitivity: row.chunk.sensitivity,
-    };
-  }
-  return {
-    docId: 'context-package',
-    fileName:
-      result.purpose.trim().length > 0
-        ? result.purpose.slice(0, 200)
-        : 'Context Package',
-    sourceKind: 'upload',
-    sensitivity: 'Unknown',
-  };
+/** route から差し替え可能にしておく（テストで Cloud Tasks 呼び出しを mock する）。 */
+const jobEnqueuer: ContextPackageJobEnqueuer = cloudTasksEnqueuer;
+
+/**
+ * 実行モード。
+ * - `sync`:  常に同期実行。pre-LLM budget 超過は 422 で fail-fast（今回 PR の既存挙動）。
+ * - `async`: 常に job 化し 202 を返す。
+ * - `auto`:  まず同期を試み、budget 超過時に 422 ではなく job 化へフォールバックする。
+ */
+type ExecutionMode = 'sync' | 'async' | 'auto';
+
+/**
+ * pre-LLM budget 超過（同期 20 秒ゲート）に当たったとき、422 で返すか job 化へ
+ * フォールバックするかを決める製品ポリシー。
+ *
+ * 既定方針: `auto` のときだけ job 化へフォールバックする。`sync` 明示時は従来どおり
+ * 422 を返し、呼び出し側に「対象を絞る」か「async を明示する」かを委ねる。
+ */
+function shouldFallbackToAsync(mode: ExecutionMode): boolean {
+  return mode === 'auto';
 }
 
 const RequestSchema = z.object({
   purpose: z.string().min(1).max(2000),
   limit: z.number().int().min(1).max(100).default(100),
   docIds: z.array(z.string().trim().min(1).max(200)).max(20).optional(),
+  mode: z.enum(['sync', 'async', 'auto']).default('sync'),
 });
 
 /** Maps strict docIds resolution failures to 400. Prefer `unknown_doc_ids` when both
@@ -106,7 +109,21 @@ export async function POST(request: Request) {
     );
   }
 
-  const { purpose, limit, docIds } = parsed.data;
+  const { purpose, limit, docIds, mode } = parsed.data;
+
+  const { tenantId, actor } = auditActorFromRequest(request);
+  const jobRequest: ContextPackageJobRequest = {
+    purpose,
+    limit,
+    ...(docIds && docIds.length > 0 ? { docIds } : {}),
+    tenantId,
+    actor,
+  };
+
+  // 明示 async は同期実行を試さず即 job 化する。
+  if (mode === 'async') {
+    return enqueueJobResponse(jobRequest);
+  }
 
   try {
     const result = await runStrategistOrchestrator({
@@ -114,10 +131,8 @@ export async function POST(request: Request) {
       limit,
       ...(docIds && docIds.length > 0 ? { docIds } : {}),
     });
-    const { markdown } = buildStrategistContextPackage(result);
 
     try {
-      const { tenantId, actor } = auditActorFromRequest(request);
       const region = defaultCloudRegion();
       await recordAuditEvent({
         tenantId,
@@ -145,33 +160,7 @@ export async function POST(request: Request) {
       console.error('[context-package] recordAuditEvent failed', auditErr);
     }
 
-    return NextResponse.json({
-      purpose: result.purpose,
-      generatedAt: result.generatedAt,
-      sourceDocumentsReviewed: result.sourceDocumentsReviewed,
-      // raw chunk.text を境界外へ出さないため metadata + AI-safe 本文のみへ projection する。
-      included: result.included.map(toIncludedChunkView),
-      excluded: result.excluded.map(toExcludedChunkView),
-      safetyExcluded: result.safetyExcluded.map(toSafetyExcludedChunkView),
-      missing: result.missing,
-      humanReviewQuestions: result.humanReviewQuestions,
-      syncEstimateSeconds: result.syncEstimateSeconds,
-      markdown,
-      counts: {
-        included: result.included.length,
-        excluded: result.excluded.length,
-        safetyExcluded: result.safetyExcluded.length,
-        missing: result.missing.length,
-        humanReviewQuestions: result.humanReviewQuestions.length,
-      },
-      budget: {
-        ...result.budget,
-        // 観測用の明示エイリアス（report の droppedChunks と同値）
-        budgetDroppedCount: result.budget.droppedChunks,
-      },
-      // budget で落とした safe chunk の文書別内訳。空でなければ package は不完全。
-      budgetDroppedDocuments: result.budgetDroppedDocuments,
-    });
+    return NextResponse.json(buildContextPackageResponsePayload(result));
   } catch (e) {
     if (e instanceof UnresolvedDocIdsError) {
       return NextResponse.json(unresolvedDocIdsResponse(e), { status: 400 });
@@ -183,17 +172,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'no_knowledge_chunks' }, { status: 409 });
     }
     if (e instanceof StrategistSyncBudgetExceededError) {
+      // budget 超過: auto なら 422 で諦めず job 化へフォールバックする。
+      if (shouldFallbackToAsync(mode)) {
+        return enqueueJobResponse(jobRequest, {
+          syncBudget: {
+            estimatedSeconds: e.estimatedSeconds,
+            targetSeconds: e.targetSeconds,
+          },
+        });
+      }
       return NextResponse.json(
         {
           error: 'sync_budget_exceeded',
           details:
-            '同期処理の目標時間（20秒）を超える見込みです。対象を絞って再実行してください。',
+            '同期処理の目標時間（20秒）を超える見込みです。対象を絞るか mode:"async" で再実行してください。',
           estimatedSeconds: e.estimatedSeconds,
           targetSeconds: e.targetSeconds,
           budget: e.budget,
           recommendation: {
             hint:
-              'docIds フィルタや limit 指定で対象文書を絞ると、同期レスポンスで完了しやすくなります。',
+              'docIds フィルタや limit 指定で対象文書を絞ると、同期レスポンスで完了しやすくなります。広い母集団は mode:"async" で job 化できます。',
             suggestedDocIds: e.suggestedDocIds,
           },
         },
@@ -203,4 +201,64 @@ export async function POST(request: Request) {
     console.error('[context-package] orchestrator failed', e);
     return NextResponse.json({ error: 'upstream_failure' }, { status: 502 });
   }
+}
+
+/**
+ * job を作成し Cloud Tasks へ enqueue したうえで 202 Accepted を返す。
+ * queue 未設定（env 不足）のときは 503 で「同期 or 設定」を促す。
+ */
+async function enqueueJobResponse(
+  jobRequest: ContextPackageJobRequest,
+  meta?: { syncBudget?: { estimatedSeconds: number; targetSeconds: number } },
+): Promise<NextResponse> {
+  const job = await createContextPackageJob(jobRequest);
+  try {
+    await jobEnqueuer.enqueue(job.jobId);
+  } catch (e) {
+    // enqueue できなかった job を queued のまま放置しない（worker が拾えず詰まる）。
+    const message = e instanceof Error ? e.message : String(e);
+    await failContextPackageJob(job.jobId, {
+      code: 'enqueue_failed',
+      message,
+    }).catch((failErr) => {
+      console.error('[context-package] failContextPackageJob after enqueue error failed', failErr);
+    });
+
+    if (e instanceof JobQueueNotConfiguredError) {
+      console.error('[context-package] job queue not configured', e);
+      return NextResponse.json(
+        {
+          error: 'job_queue_unavailable',
+          details:
+            '非同期 job キューが未設定です。対象を絞って同期実行するか、queue 設定を確認してください。',
+          jobId: job.jobId,
+        },
+        { status: 503 },
+      );
+    }
+    console.error('[context-package] enqueue failed', e);
+    return NextResponse.json(
+      { error: 'enqueue_failed', jobId: job.jobId },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json(
+    {
+      jobId: job.jobId,
+      status: job.status,
+      statusUrl: `/api/context-package/jobs/${job.jobId}`,
+      resultUrl: `/api/context-package/jobs/${job.jobId}/result`,
+      ...(meta?.syncBudget
+        ? {
+            reason: 'sync_budget_exceeded',
+            details:
+              '同期目標時間を超える見込みのため job 化しました。完了後に result を取得してください。',
+            syncEstimateSeconds: meta.syncBudget.estimatedSeconds,
+            targetSeconds: meta.syncBudget.targetSeconds,
+          }
+        : {}),
+    },
+    { status: 202 },
+  );
 }

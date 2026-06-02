@@ -40,6 +40,7 @@
     "@google-cloud/dlp": "^6.6.1",
     "@google-cloud/firestore": "^8.5.0",
     "@google-cloud/storage": "^7.18.0",
+    "@google-cloud/tasks": "^6.2.2",
     "@napi-rs/canvas": "0.1.80",
     "csv-parse": "^6.2.1",
     "exceljs": "^4.4.0",

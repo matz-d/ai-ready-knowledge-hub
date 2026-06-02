@@ -217,11 +217,12 @@ operational gaps; both are addressed in code after this smoke run:
   が unknown / non-terminal docId を 400 で返す。UI（`ContextPackageForm`）は
   `docIds` テキスト入力とエラー詳細表示に対応。
 
-**残る課題（docs 同期 2026-06-02）:**
+**同期 re-smoke 時点の課題（同日後続で一部解消）:**
 
 - UI の docIds 導線 — Inventory から docId を選ぶ UX（手入力以外）
-- 非同期 job 化 — 同期 live smoke は通ったが `33.716s` を要したため、別 PR で
-  [open-questions.md R10](open-questions.md) の `202 Accepted` 案を扱う
+- ~~非同期 job 化~~ — 同期 live smoke の `33.716s` を根拠に実装し、同日の
+  [Context Package 非同期 live smoke](#context-package-非同期-job-本番-live-smoke2026-06-02)
+  で本番配線まで完了
 
 ### Context Package budget / strict `docIds` re-smoke（2026-06-02）
 
@@ -262,7 +263,42 @@ Firestore composite index は `action + occurredAt`、`target.docId + occurredAt
 
 Judgment: pre-LLM budget、strict `docIds`、masked Context Package、Firestore
 audit index は live 境界で動作した。同期生成の `33.716s` は blocker ではないが、
-非同期 job 化を別 PR で進める根拠として残す。
+非同期 job 化を進める根拠として残す。
+
+### Context Package 非同期 job 本番 live smoke（2026-06-02）
+
+同期 re-smoke 後、`202 Accepted` + Firestore job + Cloud Tasks worker を本番へ
+配線した。IAP audience 付き Worker SA token で service-to-service 境界を確認し、
+同一の `ai_safe_ready` invoice を `docIds` 指定して再 smoke した。
+
+| Item | Observed |
+| --- | --- |
+| Cloud Run revision | `ai-ready-knowledge-hub-00033-vrw` |
+| Target docId | `a74b9520-5442-4579-adb8-2781dae8999b` |
+| Job ID | `8ce6a64b-54a5-4368-b7b6-866406c3d308` |
+| Initial request | `POST /api/context-package` → HTTP `202` in `1.295306353s` |
+| Polling | `queued` → `running` → `succeeded` |
+| Worker request | `POST /api/context-package/jobs/:jobId/run` → HTTP `200` in `19.652927793s` |
+| Result request | `GET /api/context-package/jobs/:jobId/result` → HTTP `200` |
+| End-to-end result fetch | 約 `22.5s` |
+| Queue after smoke | `context-package-jobs` pending task なし |
+
+同期 smoke の初回応答 `33.716634292s` と比べ、非同期化後の初回応答は
+`1.295306353s`。`32.421s`、約 `96%` 短縮した。生成時間自体はモデル応答で
+変動するが、UI は長い HTTP 応答でブロックされず、status polling で進行状態を
+表示できる。
+
+本番配線では Cloud Tasks queue、Worker SA、IAP accessor、IAP programmatic
+OAuth client allowlist、Secret Manager `context-package-job-token`、GitHub
+Variables を設定した。`NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true` は Docker
+build-arg で client bundle に焼き込み、`mode:"auto"` と polling UI が含まれることを
+確認した。今回の最終 smoke は service-to-service IAP 境界の検証であり、human
+browser の手動操作は追加していない。
+
+実配線時に Secret Manager token の末尾改行で worker が 401 になる事象を確認した。
+token を改行なしで version `2` へ rotate し、[setup-gcp.md](setup-gcp.md) の生成例も
+`tr -d '\n'` 付きへ修正した。smoke 用に一時付与した Token Creator 権限は検証後に
+削除済み。
 
 ### scan-pdf eval locator / coverage
 
