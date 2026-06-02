@@ -35,7 +35,11 @@ export const KnowledgeChunkLocatorSchema = z.discriminatedUnion('kind', [
     kind: z.literal('slide'),
     slide: z.number().int().min(1),
   }),
-  z.object({ kind: z.literal('imageText') }),
+  z.object({
+    kind: z.literal('imageText'),
+    page: z.number().int().min(1).optional(),
+    bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
+  }),
   z.object({ kind: z.literal('paragraph') }),
 ]);
 
@@ -111,7 +115,9 @@ function canonicalLocatorString(locator: KnowledgeChunkLocator): string {
     case 'slide':
       return `slide:${locator.slide}`;
     case 'imageText':
-      return 'imageText';
+      return `imageText:${locator.page ?? ''}:${
+        locator.bbox?.join(',') ?? ''
+      }`;
     case 'paragraph':
       return 'paragraph';
     default: {

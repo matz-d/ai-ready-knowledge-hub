@@ -18,6 +18,7 @@ import {
   type ConversionEvalStage,
 } from '../conversionEvalStage';
 import type { AxisRollupStatus } from '../evalSafetyReadiness';
+import { chunkHasPageEvidence, chunkHasTableEvidence } from './pageEvidence';
 import type { HeuristicEvalChunk, HeuristicEvalInput } from './types';
 
 export function evalLocatorQuality<TChunk extends HeuristicEvalChunk>(
@@ -25,12 +26,16 @@ export function evalLocatorQuality<TChunk extends HeuristicEvalChunk>(
 ): Pick<ConversionEvalResult, 'locatorQuality'> {
   const pages = input.documentIr.pages;
 
-  const hasPageLocators = pages.some((page) =>
+  const hasPageLocatorsFromDocumentIr = pages.some((page) =>
     page.blocks.some((block) => block.locator?.pageNumber !== undefined)
   );
-  const hasTableLocators = pages.some((page) =>
+  const hasTableLocatorsFromDocumentIr = pages.some((page) =>
     page.blocks.some((block) => block.locator?.tableIndex !== undefined)
   );
+  const hasPageLocators =
+    hasPageLocatorsFromDocumentIr || input.chunks.some(chunkHasPageEvidence);
+  const hasTableLocators =
+    hasTableLocatorsFromDocumentIr || input.chunks.some(chunkHasTableEvidence);
 
   return {
     locatorQuality: {

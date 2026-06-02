@@ -62,7 +62,11 @@ describe('KnowledgeChunkLocatorSchema', () => {
       paragraphId: 'p-9',
     };
     const slide: KnowledgeChunkLocator = { kind: 'slide', slide: 2 };
-    const imageText: KnowledgeChunkLocator = { kind: 'imageText' };
+    const imageText: KnowledgeChunkLocator = {
+      kind: 'imageText',
+      page: 3,
+      bbox: [10, 20, 110, 60],
+    };
     const paragraph: KnowledgeChunkLocator = { kind: 'paragraph' };
 
     expect(KnowledgeChunkLocatorSchema.parse(spreadsheet)).toEqual(spreadsheet);
@@ -135,6 +139,23 @@ describe('computeChunkSourceHash', () => {
     });
     expect(a).not.toBe(b);
     expect(a).not.toBe(c);
+  });
+
+  it('changes for imageText when page or bbox changes', () => {
+    const pageOne = computeChunkSourceHash({
+      extractorInput: 'x',
+      locator: { kind: 'imageText', page: 1, bbox: [10, 20, 110, 60] },
+    });
+    const pageTwo = computeChunkSourceHash({
+      extractorInput: 'x',
+      locator: { kind: 'imageText', page: 2, bbox: [10, 20, 110, 60] },
+    });
+    const bboxChange = computeChunkSourceHash({
+      extractorInput: 'x',
+      locator: { kind: 'imageText', page: 1, bbox: [10, 20, 120, 60] },
+    });
+    expect(pageOne).not.toBe(pageTwo);
+    expect(pageOne).not.toBe(bboxChange);
   });
 });
 

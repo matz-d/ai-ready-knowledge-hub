@@ -10,7 +10,7 @@
  * | `paragraph` | `paragraph` | direct |
  * | `heading`   | `paragraph` | demoted; `headingLevel` recorded in `extractionWarnings` |
  * | `table`     | `table`     | one IR row block → one chunk (rowIndex carried via paragraphId) |
- * | `image_text`| `imageText` | locator collapses to `{ kind: 'imageText' }` |
+ * | `image_text`| `imageText` | locator keeps `page` + `bbox` when available |
  * | `note`      | (dropped)   | not surfaced as a chunk |
  *
  * Locator synthesis:
@@ -26,10 +26,9 @@
  *   - `table-{tableIndex}-row-{rowIndex}` when both are present on the block locator;
  *   - otherwise the block's `blockId`.
  *
- * Information that has no place in {@link KnowledgeChunk} (heading level,
- * bbox) is preserved as breadcrumbs in `extractionWarnings` — that field is
- * intended for audit annotations and is the only schema-honest landing zone
- * until the production schema grows a `metadata` column.
+ * Information that has no place in {@link KnowledgeChunk} (for example heading
+ * level on demoted headings) is preserved as breadcrumbs in
+ * `extractionWarnings`.
  *
  * Size policy:
  *   Each candidate chunk is sized against {@link MAX_FIRESTORE_CHUNK_DOCUMENT_BYTES}
@@ -128,7 +127,14 @@ function buildLocator(
   structureType: KnowledgeChunk['structureType']
 ): KnowledgeChunkLocator {
   if (structureType === 'imageText') {
-    return { kind: 'imageText' };
+    const locator: KnowledgeChunkLocator = {
+      kind: 'imageText',
+      page: block.locator?.pageNumber ?? pageNumber,
+    };
+    if (block.locator?.bbox) {
+      locator.bbox = block.locator.bbox;
+    }
+    return locator;
   }
   switch (subtype) {
     case 'official-doc-pdf':
@@ -164,6 +170,21 @@ function buildExtractionWarnings(
     );
   }
   const bbox: DocumentIrLocator['bbox'] | undefined = block.locator?.bbox;
+  if (block.kind === 'image_text') {
+    const imageTextLocatorDetails: string[] = [];
+    if (block.locator?.pageNumber !== undefined) {
+      imageTextLocatorDetails.push(`page=${block.locator.pageNumber}`);
+    }
+    if (bbox) {
+      imageTextLocatorDetails.push(
+        `bbox=[${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}]`
+      );
+    }
+    if (imageTextLocatorDetails.length > 0) {
+      warnings.push(`imageTextLocator=${imageTextLocatorDetails.join(' ')}`);
+    }
+    return warnings.length > 0 ? warnings : undefined;
+  }
   if (bbox) {
     warnings.push(
       `bbox=[${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}] (locator schema has no bbox; preserved as warning)`

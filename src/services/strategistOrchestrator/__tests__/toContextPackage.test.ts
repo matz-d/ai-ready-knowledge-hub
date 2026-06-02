@@ -5,6 +5,7 @@ import type {
   StrategistChunkSelection,
   StrategistOrchestratorResult,
 } from '../types';
+import { DEFAULT_STRATEGIST_INPUT_BUDGET } from '../budget';
 import { buildStrategistContextPackage } from '../toContextPackage';
 
 function parent() {
@@ -64,6 +65,16 @@ function minimalResult(
     safetyExcluded: [],
     missing: [],
     humanReviewQuestions: [],
+    budget: {
+      config: DEFAULT_STRATEGIST_INPUT_BUDGET,
+      totalCandidates: 0,
+      keptChunks: 0,
+      droppedChunks: 0,
+      keptDocuments: 0,
+      estimatedPromptChars: 0,
+      estimatedPromptTokens: 0,
+    },
+    syncEstimateSeconds: 0,
     ...overrides,
   };
 }

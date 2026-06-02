@@ -4,7 +4,10 @@ import {
   type ConversionEvalResult,
 } from './conversionEvalResult';
 import type { ConversionEvalStage } from './conversionEvalStage';
-import type { DocumentSourceSubtype } from './documentIr';
+import type { DocumentIr, DocumentSourceSubtype } from './documentIr';
+import { evalCoverage } from './heuristic/evalCoverage';
+import { evalLocatorQuality } from './heuristic/evalLocatorQuality';
+import type { HeuristicEvalChunk } from './heuristic/types';
 import { attachOverallStatus } from './rollupOverallStatus';
 
 /** Subtype 1+2 (mainline candidates) and subtype 3 (scan-pdf PoC). */
@@ -21,15 +24,14 @@ export type HealthCheckSupportedSubtype =
 export const HEALTH_CHECK_SUPPORTED_SUBTYPE =
   'official-doc-pdf' satisfies HealthCheckSupportedSubtype;
 
-export type ConversionEvalHealthCheckChunk = {
-  text: string;
-};
+export type ConversionEvalHealthCheckChunk = HeuristicEvalChunk;
 
 export type ConversionEvalHealthCheckInput<
   TChunk extends ConversionEvalHealthCheckChunk = ConversionEvalHealthCheckChunk,
 > = {
   sourceSubtype: DocumentSourceSubtype;
   chunkDrafts: readonly TChunk[];
+  documentIr?: DocumentIr;
   schemaValidity: {
     passed: boolean;
     errors?: readonly string[];
@@ -51,6 +53,21 @@ function countOversizedChunks<TChunk extends object>(
     const bytes = Buffer.byteLength(JSON.stringify(chunk), 'utf8');
     return bytes > MAX_FIRESTORE_CHUNK_DOCUMENT_BYTES;
   }).length;
+}
+
+function createEmptyHeuristicDocumentIr(
+  sourceSubtype: DocumentSourceSubtype
+): DocumentIr {
+  return {
+    schemaVersion: 1,
+    source: {
+      fileName: 'health-check-input',
+      mediaType: 'application/octet-stream',
+      sourceKind: 'poc',
+      sourceSubtype,
+    },
+    pages: [],
+  };
 }
 
 /**
@@ -78,10 +95,20 @@ export function runConversionEvalHealthCheck<
   const averageChunkLength = chunkCount === 0 ? 0 : totalLength / chunkCount;
   const emptyChunks = countEmptyChunks(input.chunkDrafts);
   const oversizedChunks = countOversizedChunks(input.chunkDrafts);
+  const heuristicInput = {
+    documentIr: input.documentIr ?? createEmptyHeuristicDocumentIr(input.sourceSubtype),
+    chunks: input.chunkDrafts,
+  };
+  const coverage = evalCoverage(heuristicInput, {
+    sourceSubtype: input.sourceSubtype,
+  });
+  const locatorQuality = evalLocatorQuality(heuristicInput);
 
   const base = createEmptyConversionEvalResult();
   const result: ConversionEvalResult = {
     ...base,
+    ...coverage,
+    ...locatorQuality,
     schemaValidity: {
       passed: input.schemaValidity.passed,
       errors: [...(input.schemaValidity.errors ?? [])],

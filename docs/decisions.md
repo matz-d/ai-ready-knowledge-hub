@@ -1522,7 +1522,7 @@ Phase 3-H-3 の **実装**に入る前に次を満たす:
 1. M6-4 heuristic 閾値が PR warning として CI で稼働している（subtype 1 / 2 同型）
 2. M6-5 golden recall fixture の expected が 30 日以上 stable（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §7.4 と同型）
 3. Q3 で確定したコスト上限が dev tenant 観測で 90 日 reach されていない（または上限見直しが完了している）
-4. **Masker 本線統合（PDF 経路）が完了し、`requires_masking` scan-pdf が `maskingPending: true` ではなく chunk 化されている** — **Masker 本線は `D-P3-M-PDF-1` で完了（2026-05-29）**。残: dev tenant live smoke 証跡・PII 入り scan-pdf の本線 eval
+4. **Masker 本線統合（PDF 経路）が完了し、`requires_masking` scan-pdf が `maskingPending: true` ではなく PDF Masker 本線へ進む** — **Masker 本線は `D-P3-M-PDF-1` で完了（2026-05-29）**。dev tenant live smoke で `restricted_promoted` / `ai_safe_ready` の両終端を確認済み（[docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）。scan-pdf `imageText` page evidence も health eval で `pageCoverage=1` / `hasPageLocators=true` を確認済み（2026-05-29 後続）。
 5. `unmaskablePiiFindings` の閾値が Masker 統合後の実観測を踏まえて再評価され、`fail-closed` への切替判断が別 decision として確定している
 
 **理由:**
@@ -1592,7 +1592,19 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 - `96adfdf` — post-`ai_safe` の chunk 手順失敗で GCS masked + `aiSafeStoragePath` をロールバック
 - `43b18ae` — PDF per-chunk マスクを逐次化（`chunkRegenerator` 整合）
 
-**影響:** `src/lib/uploadOrchestrator.ts`（`orchestratePdfPath` / `runPdfCuratorPhase`）、`uploadOrchestrator` 単体テスト（`ai_safe` / `restricted` / Masker 失敗 / per-chunk 失敗 / chunk 保存失敗 / post-`ai_safe` の chunk 合成失敗）。scan-pdf 公開拡大（`D-P3-H-7 Q4`）の前提の一部を満たすが、**dev tenant live smoke 証跡**・`unmaskablePiiFindings` 閾値再評価は別 decision。
+**影響:** `src/lib/uploadOrchestrator.ts`（`orchestratePdfPath` / `runPdfCuratorPhase`）、`uploadOrchestrator` 単体テスト（`ai_safe` / `restricted` / Masker 失敗 / per-chunk 失敗 / chunk 保存失敗 / post-`ai_safe` の chunk 合成失敗）。scan-pdf 公開拡大（`D-P3-H-7 Q4`）の前提の一部を満たす。
+
+**後続 live smoke（2026-05-29）:** dev tenant `m-grow-ai.com` / Cloud Run revision `ai-ready-knowledge-hub-00028-tgf` で、scan-pdf の `requires_masking` PDF が `maskingPending` park せず PDF Masker 本線へ進むことを確認。`restricted_promoted`（`synthetic-employment-form-scan.pdf` → `7c3cbcdf-9a18-48cf-8ab0-cf2158ceedfb`）と `ai_safe_ready`（`synthetic-invoice-with-pii-scan.pdf` → `a74b9520-5442-4579-adb8-2781dae8999b`）の両終端を確認済み。証跡は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
+
+**後続 Context Package smoke（2026-05-29）:** `ai_safe_ready` PDF（`a74b9520-5442-4579-adb8-2781dae8999b`）で masked chunks が Context Package に採用されることを確認。markdown は `Confidential (AI-safe via masking)` を含み、raw `SYN-INV-2026-0501` は含まず、masked `SYN-INV-2[REDACTED:POSTAL_CODE]` を含む。一方、`limit: 20` では Strategist 入力が 224,204 tokens となり Vertex 上限 131,072 を超過。`limit: 2` は Cloud Run 内では HTTP 200 / `document.export` audit success だが、browser/IAP fetch は約 33 秒後に Google 502 を受けた。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
+
+**後続実装（2026-05-29、Context Package / eval 同期）:**
+
+1. **Pre-LLM budget（実装済み）** — `src/services/strategistOrchestrator/budget.ts` が safety gate 後・Strategist 前に chunk / document / prompt 文字数を決定論的に絞り込む。`POST /api/context-package` は推定 20 秒超で 422 `sync_budget_exceeded` を返す。
+2. **strict `docIds` resolution（実装済み）** — `resolveInventoryDocumentsByIds` が unknown / non-terminal を 400 で返す。UI は `docIds` 入力とエラー詳細表示に対応。
+3. **scan-pdf `imageText` page evidence（実装済み）** — `src/eval/conversion/heuristic/pageEvidence.ts` が `imageText` locator と warning 内 page ヒントを page evidence として集計。health eval の scan-pdf fixture は `pageCoverage=1` / `hasPageLocators=true`。
+
+**残る見直し候補:** 既定 budget と sync target（20 秒）の整合、UI の docIds 導線（Inventory からの選択 UX）、非同期 job 化判断（[open-questions.md R10](open-questions.md)）、IAP 越し長時間同期の再 smoke、`unmaskablePiiFindings` 閾値再評価（Masker 本線接続後、`D-P3-H-7 Q2` 後続）。
 
 ---
 

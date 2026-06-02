@@ -5,6 +5,8 @@ const {
   buildStrategistContextPackageMock,
   NoInventoryDocumentsErrorMock,
   NoKnowledgeChunksErrorMock,
+  StrategistSyncBudgetExceededErrorMock,
+  UnresolvedDocIdsErrorMock,
   recordAuditEventMock,
 } = vi.hoisted(() => {
   class NoInventoryDocumentsErrorMock extends Error {
@@ -21,11 +23,57 @@ const {
     }
   }
 
+  class StrategistSyncBudgetExceededErrorMock extends Error {
+    readonly estimatedSeconds: number;
+    readonly targetSeconds: number;
+    readonly budget: Record<string, unknown>;
+    readonly suggestedDocIds: string[];
+
+    constructor() {
+      super('Estimated sync duration exceeds the target budget for /api/context-package.');
+      this.name = 'StrategistSyncBudgetExceededError';
+      this.estimatedSeconds = 24.8;
+      this.targetSeconds = 20;
+      this.budget = {
+        config: {
+          maxDocuments: 5,
+          maxChunks: 80,
+          maxTotalPromptChars: 80_000,
+          maxCharsPerChunk: 1_200,
+        },
+        totalCandidates: 100,
+        keptChunks: 80,
+        droppedChunks: 20,
+        keptDocuments: 5,
+        estimatedPromptChars: 80_000,
+        estimatedPromptTokens: 40_000,
+      };
+      this.suggestedDocIds = ['doc-1', 'doc-2'];
+    }
+  }
+
+  class UnresolvedDocIdsErrorMock extends Error {
+    readonly unknownDocIds: string[];
+    readonly nonTerminalDocIds: { docId: string; status: string }[];
+
+    constructor(params: {
+      unknownDocIds: string[];
+      nonTerminalDocIds: { docId: string; status: string }[];
+    }) {
+      super('One or more requested docIds could not be resolved to terminal inventory documents.');
+      this.name = 'UnresolvedDocIdsError';
+      this.unknownDocIds = params.unknownDocIds;
+      this.nonTerminalDocIds = params.nonTerminalDocIds;
+    }
+  }
+
   return {
     runStrategistOrchestratorMock: vi.fn(),
     buildStrategistContextPackageMock: vi.fn(),
     NoInventoryDocumentsErrorMock,
     NoKnowledgeChunksErrorMock,
+    StrategistSyncBudgetExceededErrorMock,
+    UnresolvedDocIdsErrorMock,
     recordAuditEventMock: vi.fn().mockResolvedValue('audit-event-1'),
   };
 });
@@ -35,6 +83,8 @@ vi.mock('../../../../services/strategistOrchestrator', () => ({
   buildStrategistContextPackage: buildStrategistContextPackageMock,
   NoInventoryDocumentsError: NoInventoryDocumentsErrorMock,
   NoKnowledgeChunksError: NoKnowledgeChunksErrorMock,
+  StrategistSyncBudgetExceededError: StrategistSyncBudgetExceededErrorMock,
+  UnresolvedDocIdsError: UnresolvedDocIdsErrorMock,
 }));
 
 vi.mock('../../../../lib/audit/auditEvent', async (importOriginal) => {
@@ -126,6 +176,21 @@ const STUB_RESULT = {
   ],
   missing: ['最新の運用責任者'],
   humanReviewQuestions: ['旧ルールは廃止済みですか？'],
+  budget: {
+    config: {
+      maxDocuments: 5,
+      maxChunks: 80,
+      maxTotalPromptChars: 80_000,
+      maxCharsPerChunk: 1_200,
+    },
+    totalCandidates: 12,
+    keptChunks: 10,
+    droppedChunks: 2,
+    keptDocuments: 3,
+    estimatedPromptChars: 14_200,
+    estimatedPromptTokens: 7_100,
+  },
+  syncEstimateSeconds: 7.4,
 };
 
 const STUB_MARKDOWN = '# Context Package\n\n## 目的\nテスト用途\n';
@@ -156,6 +221,11 @@ describe('POST /api/context-package', () => {
       safetyExcluded: STUB_RESULT.safetyExcluded,
       missing: ['最新の運用責任者'],
       humanReviewQuestions: ['旧ルールは廃止済みですか？'],
+      budget: {
+        ...STUB_RESULT.budget,
+        budgetDroppedCount: 2,
+      },
+      syncEstimateSeconds: 7.4,
       markdown: STUB_MARKDOWN,
       counts: {
         included: 1,
@@ -208,6 +278,59 @@ describe('POST /api/context-package', () => {
       purpose: 'テスト用途',
       limit: 100,
     });
+  });
+
+  it('passes docIds filter when provided', async () => {
+    const response = await POST(
+      buildRequest({ purpose: 'テスト用途', limit: 10, docIds: ['doc-1', 'doc-2'] }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(runStrategistOrchestratorMock).toHaveBeenCalledWith({
+      purpose: 'テスト用途',
+      limit: 10,
+      docIds: ['doc-1', 'doc-2'],
+    });
+  });
+
+  it('returns 400 unknown_doc_ids when a requested docId does not exist', async () => {
+    runStrategistOrchestratorMock.mockRejectedValue(
+      new UnresolvedDocIdsErrorMock({
+        unknownDocIds: ['doc-missing'],
+        nonTerminalDocIds: [],
+      }),
+    );
+
+    const response = await POST(
+      buildRequest({ purpose: 'テスト用途', docIds: ['doc-missing'] }),
+    );
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('unknown_doc_ids');
+    expect(body.details).toMatchObject({ unknownDocIds: ['doc-missing'] });
+    expect(recordAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 non_terminal_doc_ids with status when a requested docId is not terminal', async () => {
+    runStrategistOrchestratorMock.mockRejectedValue(
+      new UnresolvedDocIdsErrorMock({
+        unknownDocIds: [],
+        nonTerminalDocIds: [{ docId: 'doc-draft', status: 'uploaded' }],
+      }),
+    );
+
+    const response = await POST(
+      buildRequest({ purpose: 'テスト用途', docIds: ['doc-draft'] }),
+    );
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('non_terminal_doc_ids');
+    expect(body.details).toMatchObject({
+      nonTerminalDocIds: [{ docId: 'doc-draft', status: 'uploaded' }],
+    });
+    expect(recordAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('returns 400 for missing purpose', async () => {
@@ -288,6 +411,29 @@ describe('POST /api/context-package', () => {
 
     expect(response.status).toBe(502);
     expect(body.error).toBe('upstream_failure');
+    expect(recordAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 422 with narrowing guidance when sync budget is exceeded', async () => {
+    runStrategistOrchestratorMock.mockRejectedValue(
+      new StrategistSyncBudgetExceededErrorMock(),
+    );
+
+    const response = await POST(buildRequest({ purpose: 'テスト用途', limit: 100 }));
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(422);
+    expect(body.error).toBe('sync_budget_exceeded');
+    expect(body.details).toBe(
+      '同期処理の目標時間（20秒）を超える見込みです。対象を絞って再実行してください。',
+    );
+    expect(body.targetSeconds).toBe(20);
+    expect(body.estimatedSeconds).toBe(24.8);
+    expect(body).toMatchObject({
+      recommendation: {
+        suggestedDocIds: ['doc-1', 'doc-2'],
+      },
+    });
     expect(recordAuditEventMock).not.toHaveBeenCalled();
   });
 });

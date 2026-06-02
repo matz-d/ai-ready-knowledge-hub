@@ -64,6 +64,41 @@ describe('runConversionEvalHealthCheck', () => {
     expect(result.overall.status).toBe('pass');
   });
 
+  it('derives page evidence from imageText locator during health checks', () => {
+    const result = runConversionEvalHealthCheck({
+      sourceSubtype: 'scan-pdf',
+      chunkDrafts: [
+        {
+          text: 'scanned line',
+          structureType: 'imageText',
+          locator: { kind: 'imageText', page: 1, bbox: [10, 20, 110, 60] },
+        },
+      ],
+      schemaValidity: { passed: true },
+    });
+
+    expect(result.coverage.pageCoverage).toBe(1);
+    expect(result.locatorQuality.hasPageLocators).toBe(true);
+  });
+
+  it('derives page evidence from extractionWarnings when locator has no page', () => {
+    const result = runConversionEvalHealthCheck({
+      sourceSubtype: 'scan-pdf',
+      chunkDrafts: [
+        {
+          text: 'scanned line',
+          structureType: 'imageText',
+          locator: { kind: 'imageText' },
+          extractionWarnings: ['imageTextLocator=page=2 bbox=[0,0,100,20]'],
+        },
+      ],
+      schemaValidity: { passed: true },
+    });
+
+    expect(result.coverage.pageCoverage).toBe(1);
+    expect(result.locatorQuality.hasPageLocators).toBe(true);
+  });
+
   it('accepts slide-pdf subtype for subtype 2 health checks', () => {
     const result = runConversionEvalHealthCheck({
       sourceSubtype: 'slide-pdf',

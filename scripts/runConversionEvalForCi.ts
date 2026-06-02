@@ -336,7 +336,8 @@ async function evaluateFixture(
   if (stage === 'health') {
     result = runConversionEvalHealthCheck({
       sourceSubtype: fixture.sourceSubtype,
-      chunkDrafts: chunks.map((chunk) => ({ text: chunk.text })),
+      documentIr,
+      chunkDrafts: chunks,
       schemaValidity,
     });
   } else if (stage === 'heuristic') {
