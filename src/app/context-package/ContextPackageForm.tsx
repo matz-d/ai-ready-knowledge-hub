@@ -10,7 +10,7 @@ type ChunkSelection = {
   rationale: string;
   confidence?: number;
   reason?: string;
-  chunk: { title?: string; text: string; sensitivity: string };
+  chunk: { title?: string; sensitivity: string };
   parent: { fileName: string; documentType: string; businessDomain: string };
 };
 
@@ -19,7 +19,7 @@ type SafetyExcludedChunk = {
   chunkId: string;
   rationale: string;
   reason: string;
-  chunk: { title?: string; text: string; sensitivity: string };
+  chunk: { title?: string; sensitivity: string };
   parent: { fileName: string; documentType: string; businessDomain: string };
 };
 
@@ -33,6 +33,7 @@ type ContextPackageResult = {
   missing: string[];
   humanReviewQuestions: string[];
   markdown: string;
+  budgetDroppedDocuments: { docId: string; fileName: string; droppedChunks: number }[];
   counts: {
     included: number;
     excluded: number;
@@ -302,6 +303,33 @@ export function ContextPackageForm() {
             </span>
             <span>レビュー文書数: {result.sourceDocumentsReviewed}</span>
           </div>
+
+          {result.budgetDroppedDocuments.length > 0 ? (
+            <div className="cp-truncation-warning" role="alert">
+              <strong>⚠️ この Context Package は不完全です</strong>
+              <p>
+                入力 budget の上限に収めるため、安全に使えるはずの chunk が
+                {' '}
+                {result.budgetDroppedDocuments.reduce(
+                  (sum, d) => sum + d.droppedChunks,
+                  0,
+                )}
+                {' '}
+                件（
+                {result.budgetDroppedDocuments.length}
+                {' '}
+                文書）除外されました。完全なカバレッジが必要な場合は、対象 Doc IDs
+                を絞って再実行してください。
+              </p>
+              <ul className="cp-truncation-list">
+                {result.budgetDroppedDocuments.map((d) => (
+                  <li key={d.docId}>
+                    {d.fileName} — {d.droppedChunks} chunk(s) dropped
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="cp-counts-grid">
             <div className="cp-count-card">

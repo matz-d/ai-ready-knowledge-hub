@@ -89,7 +89,10 @@ describe('runConversionEvalHealthCheck', () => {
           text: 'scanned line',
           structureType: 'imageText',
           locator: { kind: 'imageText' },
-          extractionWarnings: ['imageTextLocator=page=2 bbox=[0,0,100,20]'],
+          // page=1: the chunk-fallback coverage uses the max observed page number
+          // as denominator, so a single chunk must be on page 1 to mean "full
+          // coverage" (a lone page-2 chunk would imply an unseen page 1 → 0.5).
+          extractionWarnings: ['imageTextLocator=page=1 bbox=[0,0,100,20]'],
         },
       ],
       schemaValidity: { passed: true },

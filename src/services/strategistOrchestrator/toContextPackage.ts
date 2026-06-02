@@ -30,7 +30,7 @@ function strategistChunkDisplayName(
   return `${parent.fileName} (${hint})`;
 }
 
-function chunkRequiresMasking(chunk: KnowledgeChunk): boolean {
+export function chunkRequiresMasking(chunk: KnowledgeChunk): boolean {
   return chunk.aiUsePolicy === 'requires_masking';
 }
 
@@ -40,7 +40,7 @@ function chunkRequiresMasking(chunk: KnowledgeChunk): boolean {
  * `maskedText` は実質的に存在する想定。万一 maskedText が無い chunk が
  * included に流れてきた場合、unmasked text を露出させないために throw する。
  */
-function includedBodyForChunk(chunk: KnowledgeChunk): string {
+export function includedBodyForChunk(chunk: KnowledgeChunk): string {
   if (chunkRequiresMasking(chunk)) {
     const masked = chunk.maskedText?.trim();
     if (masked) {
@@ -110,6 +110,10 @@ function buildStrategistExportInput(
     humanReviewDocuments: result.safetyExcluded.map(safetyToHumanReviewDocument),
     missingKnowledge: [...result.missing],
     questionsForHumanOwner: [...result.humanReviewQuestions],
+    budgetTruncatedDocuments: result.budgetDroppedDocuments.map((doc) => ({
+      fileName: doc.fileName,
+      droppedChunks: doc.droppedChunks,
+    })),
   };
 }
 

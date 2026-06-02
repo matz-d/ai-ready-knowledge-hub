@@ -1969,6 +1969,32 @@ pre {
   gap: 20px;
 }
 
+.cp-truncation-warning {
+  padding: 16px 18px;
+  border: 1px solid #e0c285;
+  border-radius: 8px;
+  background: #fdf6e3;
+  color: #5a4412;
+}
+
+.cp-truncation-warning strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.cp-truncation-warning p {
+  margin: 0 0 8px;
+  line-height: 1.6;
+}
+
+.cp-truncation-list {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
 .cp-result-meta {
   display: flex;
   flex-wrap: wrap;

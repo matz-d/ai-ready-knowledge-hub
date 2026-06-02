@@ -279,6 +279,7 @@ describe('runStrategistOrchestrator', () => {
       droppedChunks: 0,
       keptDocuments: 1,
     });
+    expect(result.budgetDroppedDocuments).toEqual([]);
     expect(result.syncEstimateSeconds).toBeGreaterThan(0);
   });
 
@@ -311,6 +312,10 @@ describe('runStrategistOrchestrator', () => {
     );
     expect(result.syncEstimateSeconds).toBeLessThanOrEqual(20);
     expect(strategistFlowStub).toHaveBeenCalledTimes(1);
+    // dropped chunks surface as a per-document truncation breakdown.
+    expect(result.budgetDroppedDocuments).toEqual([
+      { docId: 'doc-1', fileName: 'sample.md', droppedChunks: result.budget.droppedChunks },
+    ]);
   });
 
   it('throws StrategistSyncBudgetExceededError before strategistFlow when custom budget estimate exceeds 20s', async () => {

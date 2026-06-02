@@ -13,6 +13,7 @@ export {
 } from './budget';
 export type {
   BudgetCandidate,
+  BudgetDroppedDocument,
   StrategistInputBudgetConfig,
   StrategistInputBudgetReport,
   StrategistInputBudgetResult,
@@ -23,3 +24,13 @@ export type {
   StrategistOrchestratorParent,
   StrategistOrchestratorResult,
 } from './types';
+export {
+  toIncludedChunkView,
+  toExcludedChunkView,
+  toSafetyExcludedChunkView,
+} from './responseView';
+export type {
+  IncludedChunkView,
+  ExcludedChunkView,
+  SafetyExcludedChunkView,
+} from './responseView';

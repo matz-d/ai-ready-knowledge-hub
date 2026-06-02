@@ -173,10 +173,10 @@ Observed behavior:
 
 ```bash
 # 最新 document.export（index error なしで 1 件以上）
-npx tsx -e "import './scripts/loadEnv.ts'; import { getFirestoreClient } from './src/lib/firestore.ts'; (async () => { const db = getFirestoreClient(); const snap = await db.collection('auditEvents').where('action','==','document.export').orderBy('occurredAt','desc').limit(5).get(); console.log(JSON.stringify({ count: snap.size, events: snap.docs.map(d => ({ id: d.id, docId: d.get('target')?.docId, occurredAt: d.get('occurredAt')?.toDate?.()?.toISOString?.() })) }, null, 2)); })();"
+pnpm exec tsx -e "import './scripts/loadEnv.ts'; import { getFirestoreClient } from './src/lib/firestore.ts'; (async () => { const db = getFirestoreClient(); const snap = await db.collection('auditEvents').where('action','==','document.export').orderBy('occurredAt','desc').limit(5).get(); console.log(JSON.stringify({ count: snap.size, events: snap.docs.map(d => ({ id: d.id, docId: d.get('target')?.docId, occurredAt: d.get('occurredAt')?.toDate?.()?.toISOString?.() })) }, null, 2)); })();"
 
 # 本 smoke の ai_safe invoice（docId lookup）
-npx tsx -e "import './scripts/loadEnv.ts'; import { getFirestoreClient } from './src/lib/firestore.ts'; (async () => { const docId = 'a74b9520-5442-4579-adb8-2781dae8999b'; const db = getFirestoreClient(); const snap = await db.collection('auditEvents').where('target.docId','==',docId).orderBy('occurredAt','desc').limit(10).get(); console.log(JSON.stringify({ docId, count: snap.size, events: snap.docs.map(d => ({ id: d.id, action: d.get('action'), occurredAt: d.get('occurredAt')?.toDate?.()?.toISOString?.() })) }, null, 2)); })();"
+pnpm exec tsx -e "import './scripts/loadEnv.ts'; import { getFirestoreClient } from './src/lib/firestore.ts'; (async () => { const docId = 'a74b9520-5442-4579-adb8-2781dae8999b'; const db = getFirestoreClient(); const snap = await db.collection('auditEvents').where('target.docId','==',docId).orderBy('occurredAt','desc').limit(10).get(); console.log(JSON.stringify({ docId, count: snap.size, events: snap.docs.map(d => ({ id: d.id, action: d.get('action'), occurredAt: d.get('occurredAt')?.toDate?.()?.toISOString?.() })) }, null, 2)); })();"
 ```
 
 期待: 前者に `0mpqmmgow-452b55aa7ef489aa` が含まれる。後者は当該 docId の

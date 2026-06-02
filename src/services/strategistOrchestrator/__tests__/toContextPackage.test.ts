@@ -74,6 +74,7 @@ function minimalResult(
       estimatedPromptChars: 0,
       estimatedPromptTokens: 0,
     },
+    budgetDroppedDocuments: [],
     syncEstimateSeconds: 0,
     ...overrides,
   };
@@ -202,6 +203,39 @@ describe('buildStrategistContextPackage', () => {
     );
     expect(input.missingKnowledge).toEqual(['topic a']);
     expect(input.questionsForHumanOwner).toEqual(['q1?']);
+  });
+
+  it('surfaces budget truncation in the manifest and a dedicated section', () => {
+    const { markdown, input } = buildStrategistContextPackage(
+      minimalResult({
+        included: [selection(baseChunk({ id: 'inc', text: 'kept body' }), 'keep')],
+        budgetDroppedDocuments: [
+          { docId: 'doc-1', fileName: 'policy.xlsx', droppedChunks: 2 },
+          { docId: 'doc-2', fileName: 'handbook.pdf', droppedChunks: 1 },
+        ],
+      }),
+    );
+
+    expect(input.budgetTruncatedDocuments).toEqual([
+      { fileName: 'policy.xlsx', droppedChunks: 2 },
+      { fileName: 'handbook.pdf', droppedChunks: 1 },
+    ]);
+    expect(markdown).toContain('Budget truncation: 3 safe chunk(s) across 2 document(s)');
+    expect(markdown).toContain('## Budget Truncation (Incomplete Coverage)');
+    expect(markdown).toContain('handbook.pdf');
+    expect(markdown).toContain('This package is INCOMPLETE');
+  });
+
+  it('omits the truncation warning when nothing was dropped', () => {
+    const { markdown } = buildStrategistContextPackage(
+      minimalResult({
+        included: [selection(baseChunk({ id: 'inc', text: 'kept body' }), 'keep')],
+      }),
+    );
+    expect(markdown).not.toContain('Budget truncation:');
+    expect(markdown).not.toContain('This package is INCOMPLETE');
+    // The section header still renders with an explicit "None".
+    expect(markdown).toContain('## Budget Truncation (Incomplete Coverage)\n\n- None');
   });
 
   it('matches markdown snapshot for a stable strategist-shaped payload', () => {

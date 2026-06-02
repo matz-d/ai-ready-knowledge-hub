@@ -60,26 +60,39 @@ export function chunkHasTableEvidence(chunk: HeuristicEvalChunk): boolean {
   );
 }
 
+/**
+ * chunk の page evidence だけからページカバレッジを概算する。
+ * `documentIr` に使えるページ情報が無い時の fallback 専用（{@link evalCoverage} 参照）。
+ *
+ * 分母 (`totalPages`) は「観測できた distinct ページ数」ではなく
+ * **観測した最大ページ番号** を使う。前者だと evidence が page 1, 3 のように
+ * 飛んでいても 2/2 = 1.0 となり、間の page 2（chunk が一切無いページ）が母数から
+ * 消えてカバレッジ 100% に見えてしまう。真のページ総数は documentIr 無しでは
+ * 分からないため、最大ページ番号を保守的な代理母数とし、欠番を欠落として残す
+ * （page 1, 3 → pagesWithText=2 / totalPages=3 ≈ 0.67）。
+ */
 export function summarizeChunkPageCoverage(
   chunks: readonly HeuristicEvalChunk[]
 ): {
   totalPages: number;
   pagesWithText: number;
 } {
-  const allPages = new Set<number>();
+  let maxPage = 0;
   const pagesWithText = new Set<number>();
 
   for (const chunk of chunks) {
     const page = pageFromChunk(chunk);
     if (page === undefined) continue;
-    allPages.add(page);
+    if (page > maxPage) {
+      maxPage = page;
+    }
     if (chunk.text.trim().length > 0) {
       pagesWithText.add(page);
     }
   }
 
   return {
-    totalPages: allPages.size,
+    totalPages: maxPage,
     pagesWithText: pagesWithText.size,
   };
 }

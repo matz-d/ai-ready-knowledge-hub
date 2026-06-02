@@ -78,14 +78,24 @@ const {
   };
 });
 
-vi.mock('../../../../services/strategistOrchestrator', () => ({
-  runStrategistOrchestrator: runStrategistOrchestratorMock,
-  buildStrategistContextPackage: buildStrategistContextPackageMock,
-  NoInventoryDocumentsError: NoInventoryDocumentsErrorMock,
-  NoKnowledgeChunksError: NoKnowledgeChunksErrorMock,
-  StrategistSyncBudgetExceededError: StrategistSyncBudgetExceededErrorMock,
-  UnresolvedDocIdsError: UnresolvedDocIdsErrorMock,
-}));
+vi.mock('../../../../services/strategistOrchestrator', async () => {
+  // 投影関数は実装をそのまま使う（pure module。genkit / firestore に依存しない）。
+  // raw chunk.text を漏らさない projection を本物で検証するため。
+  const responseView = await vi.importActual<
+    typeof import('../../../../services/strategistOrchestrator/responseView')
+  >('../../../../services/strategistOrchestrator/responseView');
+  return {
+    runStrategistOrchestrator: runStrategistOrchestratorMock,
+    buildStrategistContextPackage: buildStrategistContextPackageMock,
+    NoInventoryDocumentsError: NoInventoryDocumentsErrorMock,
+    NoKnowledgeChunksError: NoKnowledgeChunksErrorMock,
+    StrategistSyncBudgetExceededError: StrategistSyncBudgetExceededErrorMock,
+    UnresolvedDocIdsError: UnresolvedDocIdsErrorMock,
+    toIncludedChunkView: responseView.toIncludedChunkView,
+    toExcludedChunkView: responseView.toExcludedChunkView,
+    toSafetyExcludedChunkView: responseView.toSafetyExcludedChunkView,
+  };
+});
 
 vi.mock('../../../../lib/audit/auditEvent', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../lib/audit/auditEvent')>();
@@ -190,8 +200,43 @@ const STUB_RESULT = {
     estimatedPromptChars: 14_200,
     estimatedPromptTokens: 7_100,
   },
+  budgetDroppedDocuments: [],
   syncEstimateSeconds: 7.4,
 };
+
+// route が境界で投影した後の安全な形（raw chunk.text を含まない）。
+const EXPECTED_INCLUDED = [
+  {
+    docId: 'doc-1',
+    chunkId: 'chunk-1',
+    rationale: '目的に合致',
+    confidence: 0.9,
+    aiSafeViaMasking: false,
+    chunk: { sensitivity: 'Internal' },
+    parent: { fileName: 'Runbook.md', documentType: 'メモ', businessDomain: '社内手順' },
+    aiSafeContent: 'stub',
+  },
+];
+const EXPECTED_EXCLUDED = [
+  {
+    docId: 'doc-1',
+    chunkId: 'chunk-2',
+    rationale: '古い',
+    reason: 'superseded_or_stale',
+    chunk: { sensitivity: 'Internal' },
+    parent: { fileName: 'Runbook.md', documentType: 'メモ', businessDomain: '社内手順' },
+  },
+];
+const EXPECTED_SAFETY_EXCLUDED = [
+  {
+    docId: 'doc-1',
+    chunkId: 'chunk-3',
+    rationale: 'Restricted',
+    reason: 'restricted_sensitivity',
+    chunk: { sensitivity: 'Restricted' },
+    parent: { fileName: 'Runbook.md', documentType: 'メモ', businessDomain: '社内手順' },
+  },
+];
 
 const STUB_MARKDOWN = '# Context Package\n\n## 目的\nテスト用途\n';
 
@@ -216,15 +261,16 @@ describe('POST /api/context-package', () => {
       purpose: 'テスト用途',
       generatedAt: '2026-05-14T00:00:00.000Z',
       sourceDocumentsReviewed: 3,
-      included: STUB_RESULT.included,
-      excluded: STUB_RESULT.excluded,
-      safetyExcluded: STUB_RESULT.safetyExcluded,
+      included: EXPECTED_INCLUDED,
+      excluded: EXPECTED_EXCLUDED,
+      safetyExcluded: EXPECTED_SAFETY_EXCLUDED,
       missing: ['最新の運用責任者'],
       humanReviewQuestions: ['旧ルールは廃止済みですか？'],
       budget: {
         ...STUB_RESULT.budget,
         budgetDroppedCount: 2,
       },
+      budgetDroppedDocuments: [],
       syncEstimateSeconds: 7.4,
       markdown: STUB_MARKDOWN,
       counts: {
@@ -268,6 +314,95 @@ describe('POST /api/context-package', () => {
         },
       })
     );
+  });
+
+  it('never serializes raw chunk text; included carries masked AI-safe body only', async () => {
+    runStrategistOrchestratorMock.mockResolvedValue({
+      ...STUB_RESULT,
+      included: [
+        {
+          docId: 'doc-1',
+          chunkId: 'masked-1',
+          rationale: 'masked body is AI-safe',
+          confidence: 0.8,
+          chunk: {
+            ...STUB_CHUNK_BASE,
+            id: 'masked-1',
+            aiUsePolicy: 'requires_masking',
+            sensitivity: 'Confidential',
+            text: 'RAW_SECRET_CUSTOMER_NAME',
+            maskedText: 'MASKED_OK',
+          },
+          parent: STUB_PARENT,
+        },
+      ],
+      excluded: [
+        {
+          docId: 'doc-1',
+          chunkId: 'ex-1',
+          rationale: 'stale',
+          reason: 'superseded_or_stale',
+          chunk: { ...STUB_CHUNK_BASE, id: 'ex-1', text: 'EXCLUDED_RAW_BODY' },
+          parent: STUB_PARENT,
+        },
+      ],
+      safetyExcluded: [
+        {
+          docId: 'doc-1',
+          chunkId: 'safe-1',
+          rationale: 'restricted',
+          reason: 'restricted_sensitivity',
+          chunk: {
+            ...STUB_CHUNK_BASE,
+            id: 'safe-1',
+            sensitivity: 'Restricted',
+            aiUsePolicy: 'blocked',
+            text: 'RESTRICTED_RAW_BODY',
+          },
+          parent: STUB_PARENT,
+        },
+      ],
+    });
+
+    const response = await POST(buildRequest({ purpose: 'テスト用途' }));
+    const rawJson = await response.text();
+
+    expect(response.status).toBe(200);
+    // raw 本文は included / excluded / safetyExcluded のどこにも出てはいけない。
+    expect(rawJson).not.toContain('RAW_SECRET_CUSTOMER_NAME');
+    expect(rawJson).not.toContain('EXCLUDED_RAW_BODY');
+    expect(rawJson).not.toContain('RESTRICTED_RAW_BODY');
+    // included は masked 本文のみを AI-safe content として持つ。
+    expect(rawJson).toContain('MASKED_OK');
+
+    const body = JSON.parse(rawJson) as {
+      included: { aiSafeContent: string; aiSafeViaMasking: boolean; chunk: Record<string, unknown> }[];
+      excluded: { chunk: Record<string, unknown> }[];
+      safetyExcluded: { chunk: Record<string, unknown> }[];
+    };
+    expect(body.included[0]?.aiSafeContent).toBe('MASKED_OK');
+    expect(body.included[0]?.aiSafeViaMasking).toBe(true);
+    // 投影後の chunk metadata に raw text フィールドが残っていないこと。
+    expect(body.included[0]?.chunk).not.toHaveProperty('text');
+    expect(body.excluded[0]?.chunk).not.toHaveProperty('text');
+    expect(body.safetyExcluded[0]?.chunk).not.toHaveProperty('text');
+  });
+
+  it('exposes budgetDroppedDocuments so truncation is visible to clients', async () => {
+    runStrategistOrchestratorMock.mockResolvedValue({
+      ...STUB_RESULT,
+      budgetDroppedDocuments: [
+        { docId: 'doc-2', fileName: 'handbook.pdf', droppedChunks: 3 },
+      ],
+    });
+
+    const response = await POST(buildRequest({ purpose: 'テスト用途' }));
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(200);
+    expect(body.budgetDroppedDocuments).toEqual([
+      { docId: 'doc-2', fileName: 'handbook.pdf', droppedChunks: 3 },
+    ]);
   });
 
   it('uses default limit of 100 when limit is omitted', async () => {

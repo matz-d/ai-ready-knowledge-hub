@@ -139,6 +139,35 @@ describe('applyStrategistInputBudget', () => {
     expect(report.droppedChunks).toBe(3);
   });
 
+  it('reports dropped chunks per document for downstream truncation visibility', () => {
+    const candidates = [
+      candidate({ id: 'd1-a', docId: 'doc-1' }, { id: 'doc-1', fileName: 'a.csv' }),
+      candidate({ id: 'd1-b', docId: 'doc-1' }, { id: 'doc-1', fileName: 'a.csv' }),
+      candidate({ id: 'd2-a', docId: 'doc-2' }, { id: 'doc-2', fileName: 'b.csv' }),
+    ];
+    const { kept, droppedDocuments } = applyStrategistInputBudget(
+      candidates,
+      'purpose',
+      { ...GENEROUS, maxChunks: 1 },
+    );
+
+    // Only the first chunk survives; the other two (one per doc) are reported dropped.
+    expect(kept.map((c) => c.id)).toEqual(['d1-a']);
+    expect(droppedDocuments).toEqual([
+      { docId: 'doc-1', fileName: 'a.csv', droppedChunks: 1 },
+      { docId: 'doc-2', fileName: 'b.csv', droppedChunks: 1 },
+    ]);
+  });
+
+  it('returns no dropped documents when nothing is dropped', () => {
+    const { droppedDocuments } = applyStrategistInputBudget(
+      [candidate({ id: 'a' }), candidate({ id: 'b' })],
+      'purpose',
+      GENEROUS,
+    );
+    expect(droppedDocuments).toEqual([]);
+  });
+
   it('enforces maxDocuments across distinct docIds', () => {
     const candidates = [
       candidate({ id: 'd1-a', docId: 'doc-1' }, { id: 'doc-1' }),
@@ -245,6 +274,7 @@ describe('Context Package masked-text regression', () => {
         estimatedPromptChars: 0,
         estimatedPromptTokens: 0,
       },
+      budgetDroppedDocuments: [],
       syncEstimateSeconds: 0,
     });
 

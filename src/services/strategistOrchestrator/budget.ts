@@ -75,10 +75,26 @@ export type StrategistInputBudgetReport = {
   estimatedPromptTokens: number;
 };
 
+/**
+ * budget で落とした safe chunk の文書別内訳。
+ * downstream（result / markdown / UI）に truncation を明示するために返す。
+ */
+export type BudgetDroppedDocument = {
+  docId: string;
+  fileName: string;
+  /** その文書で落とした chunk 数 */
+  droppedChunks: number;
+};
+
 export type StrategistInputBudgetResult = {
   /** Strategist へ渡す chunk（入力順を保持） */
   kept: KnowledgeChunk[];
   report: StrategistInputBudgetReport;
+  /**
+   * budget で落とした chunk の文書別内訳（入力順。空なら truncation なし）。
+   * 「全件レビュー済み」と誤認させないため、落とした事実を構造化して残す。
+   */
+  droppedDocuments: BudgetDroppedDocument[];
 };
 
 /**
@@ -260,8 +276,28 @@ export function applyStrategistInputBudget(
     .filter((_, index) => acceptedIndices.has(index))
     .map((candidate) => candidate.chunk);
 
+  // 落とした chunk を文書別に集計（入力順を保持）。truncation の可視化に使う。
+  const droppedByDoc = new Map<string, BudgetDroppedDocument>();
+  candidates.forEach((candidate, index) => {
+    if (acceptedIndices.has(index)) {
+      return;
+    }
+    const { docId } = candidate.chunk;
+    const existing = droppedByDoc.get(docId);
+    if (existing) {
+      existing.droppedChunks += 1;
+    } else {
+      droppedByDoc.set(docId, {
+        docId,
+        fileName: candidate.parent.fileName,
+        droppedChunks: 1,
+      });
+    }
+  });
+
   return {
     kept,
+    droppedDocuments: Array.from(droppedByDoc.values()),
     report: {
       config,
       totalCandidates: candidates.length,

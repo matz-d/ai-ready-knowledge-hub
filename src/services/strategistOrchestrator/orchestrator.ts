@@ -22,6 +22,7 @@ import type {
 import {
   applyStrategistInputBudget,
   DEFAULT_STRATEGIST_INPUT_BUDGET,
+  type BudgetDroppedDocument,
   type StrategistInputBudgetConfig,
   type StrategistInputBudgetReport,
 } from './budget';
@@ -271,6 +272,7 @@ export async function runStrategistOrchestrator(
       missing: [],
       humanReviewQuestions: [],
       budget: emptyBudgetReport(budgetConfig),
+      budgetDroppedDocuments: [],
       syncEstimateSeconds: 0,
     };
   }
@@ -326,6 +328,7 @@ export async function runStrategistOrchestrator(
     safeJoinedByKey,
     safetyExcluded,
     budget: budgetResult.report,
+    budgetDroppedDocuments: budgetResult.droppedDocuments,
     syncEstimateSeconds,
   });
 }
@@ -414,6 +417,7 @@ function buildResult(params: {
   safeJoinedByKey: Map<string, JoinedChunk>;
   safetyExcluded: SafetyExcludedChunk[];
   budget: StrategistInputBudgetReport;
+  budgetDroppedDocuments: BudgetDroppedDocument[];
   syncEstimateSeconds: number;
 }): StrategistOrchestratorResult {
   return {
@@ -432,6 +436,7 @@ function buildResult(params: {
       (row) => row.question,
     ),
     budget: params.budget,
+    budgetDroppedDocuments: params.budgetDroppedDocuments,
     syncEstimateSeconds: params.syncEstimateSeconds,
   };
 }
