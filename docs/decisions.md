@@ -1604,7 +1604,9 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 2. **strict `docIds` resolution（実装済み）** — `resolveInventoryDocumentsByIds` が unknown / non-terminal を 400 で返す。UI は `docIds` 入力とエラー詳細表示に対応。
 3. **scan-pdf `imageText` page evidence（実装済み）** — `src/eval/conversion/heuristic/pageEvidence.ts` が `imageText` locator と warning 内 page ヒントを page evidence として集計。health eval の scan-pdf fixture は `pageCoverage=1` / `hasPageLocators=true`。
 
-**残る見直し候補:** 既定 budget と sync target（20 秒）の整合、UI の docIds 導線（Inventory からの選択 UX）、非同期 job 化判断（[open-questions.md R10](open-questions.md)）、IAP 越し長時間同期の再 smoke、`unmaskablePiiFindings` 閾値再評価（Masker 本線接続後、`D-P3-H-7 Q2` 後続）。
+**Cloud Run + IAP re-smoke（2026-06-02）:** PR #12 merge 後の revision `ai-ready-knowledge-hub-00029-9b9`（image `:c902c09`）で、`ai_safe_ready` invoice 1 件を `docIds` 指定して再 smoke。`POST /api/context-package` は HTTP 200 / `33.716634292s`、`document.export` audit `0mpwh5v5k-68aa4bc141a6fbc1`（actor `makoto@m-grow-ai.com`）を記録した。markdown は `Confidential (AI-safe via masking)`、`SYN-INV-2[REDACTED:POSTAL_CODE]`、`[REDACTED:BANK_ACCOUNT]`、`[REDACTED:JP_MYNUMBER]` を含み、raw `SYN-INV-2026-0501` は含まない。unknown docId は deployed UI で HTTP 400 + 詳細表示。Firestore audit composite index 2 本は `READY`。ローカル全 Inventory smoke は既定 `maxTotalPromptChars: 45_000` で `474 → 80` chunks、`394` drops を metadata に記録した。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
+
+**残る見直し候補:** UI の docIds 導線（Inventory からの選択 UX）、非同期 job 化（[open-questions.md R10](open-questions.md)、別 PR）、`unmaskablePiiFindings` 閾値再評価（Masker 本線接続後、`D-P3-H-7 Q2` 後続）。
 
 ---
 

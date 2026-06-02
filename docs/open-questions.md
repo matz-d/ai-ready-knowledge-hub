@@ -6,16 +6,17 @@
 
 ## R10: Context Package API の長時間同期レスポンス方針（2026-05-29 起票）
 
-**現状（2026-05-29 同期）**
+**現状（2026-06-02 同期）**
 - **Pre-LLM budget（実装済み）:** `src/services/strategistOrchestrator/budget.ts` が safety gate 通過後・Strategist 呼出前に chunk / document / prompt 文字数を決定論的に絞り込む（`DEFAULT_STRATEGIST_INPUT_BUDGET`）。
 - **strict `docIds` resolution（実装済み）:** unknown / non-terminal docId は 400（`unknown_doc_ids` / `non_terminal_doc_ids`）。`ContextPackageForm` は docIds テキスト入力とエラー詳細表示に対応。
 - `POST /api/context-package` は同期応答を継続しつつ、pre-LLM budget 適用後の推定時間が 20 秒目標を超える場合は **422 `sync_budget_exceeded`** を返す。
 - 422 では「対象を絞ってください」を明示し、`docIds` フィルタ（+ `limit` 調整）で再試行するガイダンスを返す。
 - これにより browser/IAP fetch での無言 502 に寄る前に、説明可能な API 応答へ fail-fast させる。
+- **2026-06-02 re-smoke:** 既定 budget は `maxTotalPromptChars: 45_000` に調整済み。全 Inventory のローカル smoke は `474` candidates を `80` chunks に制限し、`394` drops を metadata に記録した。Cloud Run + IAP の docId 指定 smoke は HTTP `200` / `33.716s`、unknown docId は HTTP `400` で UI に詳細表示した。証跡は [phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
 
 **残る調整（未決ではないが優先作業）**
-- 既定 budget と sync target（20 秒）の整合 — 実測に合わせた `DEFAULT_STRATEGIST_INPUT_BUDGET` チューニング
 - UI の docIds 導線 — Inventory から docId を選ぶ UX（手入力以外）
+- 非同期 job 化 — IAP 越し同期生成に `33.716s` を要したため、別 PR で下記 `202 Accepted` 案を扱う
 
 **次の判断ポイント（202 Accepted + 非同期 job 化へ進む条件）**
 1. `docIds`/`limit` で絞っても 422 が多発し、業務上「1 回で広い母集団を処理したい」要求が継続する。
@@ -266,7 +267,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 - `unmaskablePiiFindings` 閾値の fail-closed への切替判断（Masker 統合後、別 decision で起票）
 - ~~scan-pdf の `coverage.pageCoverage` / `locatorQuality.hasPageLocators` eval-shape~~ — **解消済み（2026-05-29）:** `pageEvidence.ts` が `imageText` locator / warning を page evidence として集計。health eval の scan-pdf fixture は `pageCoverage=1` / `hasPageLocators=true`。
 - ~~`ai_safe` PDF を含む Context Package export smoke（masked GCS body / masked chunks の採用確認）~~ — masked chunks 採用は確認済み（[phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）。
-- ~~Context Package endpoint の pre-LLM token/chunk budget~~ — **実装済み（2026-05-29）:** `budget.ts` + 422 `sync_budget_exceeded`。残: 既定 budget と sync target の整合、UI docIds 導線、非同期 job 化判断（R10）、IAP 越し長時間同期の再 smoke。
+- ~~Context Package endpoint の pre-LLM token/chunk budget~~ — **実装済み（2026-05-29）、live re-smoke 完了（2026-06-02）:** `budget.ts` + 422 `sync_budget_exceeded`。既定 `maxTotalPromptChars: 45_000`、全 Inventory `474 → 80` chunks / `394` drops、Cloud Run + IAP HTTP `200` / `33.716s` を確認。残: UI docIds 導線、非同期 job 化（R10、別 PR）。
 
 **M1 / M6 共通運用（確定・再議論しない）:**
 - 同一 tenant で複数の `pdf-conversion-subtype-*` flag を **同時 ON にしない**（`/api/documents` は 403）。本線 upload 上限は **5 MiB**（`MAX_UPLOAD_BYTES`）。PoC の 30 MB は runner 専用。subtype 3 追加後は 1+3 / 2+3 / 1+2+3 同時 ON も同様に拒否する（M6-2）。
@@ -283,7 +284,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 - **案 C（成熟度別 blocker 軸）への移行条件** — 案 B 試走後の再評価（現状維持）。
 - **feature flag 公開範囲拡大条件** — subtype 1 は dev tenant 限定のまま。subtype 2/3 は別 flag で再判断。
 - **`inferenceDestination`** — subtype 2/3 の Vertex 呼出時に `document.convert` へ必須（[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §4.2）。
-- ~~**Masker 本線統合（PDF 経路）**~~ — **完了**（`D-P3-M-PDF-1`、live smoke 証跡: [phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）。~~scan-pdf locator / coverage eval 見直し~~ — **解消済み**（`pageEvidence.ts`、health eval `pageCoverage=1` / `hasPageLocators=true`）。~~Context Package pre-LLM budget~~ — **実装済み**（`budget.ts`、strict docIds、422 `sync_budget_exceeded`）。残: `safety_readiness` 本格評価、`unmaskablePiiFindings` 閾値再評価、既定 budget チューニング、UI docIds 導線、非同期 job 化（R10）。
+- ~~**Masker 本線統合（PDF 経路）**~~ — **完了**（`D-P3-M-PDF-1`、live smoke 証跡: [phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）。~~scan-pdf locator / coverage eval 見直し~~ — **解消済み**（`pageEvidence.ts`、health eval `pageCoverage=1` / `hasPageLocators=true`）。~~Context Package pre-LLM budget~~ — **実装済み・live re-smoke 完了**（`budget.ts`、strict docIds、422 `sync_budget_exceeded`、既定 `maxTotalPromptChars: 45_000`）。残: `safety_readiness` 本格評価、`unmaskablePiiFindings` 閾値再評価、UI docIds 導線、非同期 job 化（R10、別 PR）。
 
 ### 提供形態
 
