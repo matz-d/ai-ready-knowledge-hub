@@ -19,6 +19,8 @@ FROM base AS builder
 # env では切り替えできないため、deploy workflow から build-arg で渡す。
 ARG NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=false
 ENV NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=$NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED
+# Cloud Build の Docker build は Node 既定 heap だと Next.js typecheck が OOM になる。
+ENV NODE_OPTIONS=--max-old-space-size=4096
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
