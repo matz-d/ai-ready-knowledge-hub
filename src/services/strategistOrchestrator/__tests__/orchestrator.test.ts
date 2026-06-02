@@ -2,11 +2,15 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   NoInventoryDocumentsError,
   NoKnowledgeChunksError,
+  StrategistSyncBudgetExceededError,
+  UnresolvedDocIdsError,
   runStrategistOrchestrator,
   type RunStrategistOrchestratorDeps,
 } from '../orchestrator';
+import { DEFAULT_STRATEGIST_INPUT_BUDGET } from '../budget';
 import type { StrategistOutput } from '../../../agents/strategist/schema';
 import type { InventoryDocument } from '../../../lib/inventory';
+import type { ResolvedInventoryDocument } from '../../../lib/inventoryFirestoreAdapter';
 import type { KnowledgeChunk } from '../../../lib/knowledgeChunkSchema';
 
 function inventoryDoc(
@@ -52,10 +56,13 @@ function chunk(overrides: Partial<KnowledgeChunk> = {}): KnowledgeChunk {
 function deps(params: {
   documents?: InventoryDocument[];
   chunksByDocId?: Record<string, KnowledgeChunk[]>;
+  resolveByIds?: RunStrategistOrchestratorDeps['resolveInventoryDocumentsByIds'];
   safetyGate?: RunStrategistOrchestratorDeps['safetyGate'];
   strategistFlow?: RunStrategistOrchestratorDeps['strategistFlow'];
 }): Required<RunStrategistOrchestratorDeps> {
   const listInventoryDocuments = vi.fn(async () => params.documents ?? []);
+  const resolveInventoryDocumentsByIds =
+    params.resolveByIds ?? vi.fn(async () => [] as ResolvedInventoryDocument[]);
   const listChunks = vi.fn(async (documentId: string) =>
     params.chunksByDocId?.[documentId] ?? [],
   );
@@ -76,6 +83,7 @@ function deps(params: {
 
   return {
     listInventoryDocuments,
+    resolveInventoryDocumentsByIds,
     listChunks,
     safetyGate: safetyGate!,
     strategistFlow: strategistFlow!,
@@ -149,6 +157,16 @@ describe('runStrategistOrchestrator', () => {
         chunk: safeRejected,
       }),
     ]);
+    expect(result.budget).toEqual({
+      config: DEFAULT_STRATEGIST_INPUT_BUDGET,
+      totalCandidates: 0,
+      keptChunks: 0,
+      droppedChunks: 0,
+      keptDocuments: 0,
+      estimatedPromptChars: 0,
+      estimatedPromptTokens: 0,
+    });
+    expect(result.syncEstimateSeconds).toBe(0);
   });
 
   it('separates included, strategist excluded, and safety excluded chunks', async () => {
@@ -254,5 +272,173 @@ describe('runStrategistOrchestrator', () => {
       '旧ルールを廃止済みとして扱ってよいですか？',
     ]);
     expect(result.sourceDocumentsReviewed).toBe(1);
+    expect(result.budget).toMatchObject({
+      config: DEFAULT_STRATEGIST_INPUT_BUDGET,
+      totalCandidates: 2,
+      keptChunks: 2,
+      droppedChunks: 0,
+      keptDocuments: 1,
+    });
+    expect(result.budgetDroppedDocuments).toEqual([]);
+    expect(result.syncEstimateSeconds).toBeGreaterThan(0);
+  });
+
+  it('keeps default budget worst-case estimate within the 20s sync target', async () => {
+    const heavyChunks = Array.from({ length: 80 }, (_, i) =>
+      chunk({
+        id: `heavy-${i}`,
+        text: 'x'.repeat(1_200),
+      }),
+    );
+    const strategistFlowStub = vi.fn(async () => ({
+      included: [],
+      excluded: [],
+      missing: [],
+      humanReviewQuestions: [],
+    })) as unknown as RunStrategistOrchestratorDeps['strategistFlow'];
+    const injected = deps({
+      documents: [inventoryDoc()],
+      chunksByDocId: { 'doc-1': heavyChunks },
+      strategistFlow: strategistFlowStub,
+    });
+
+    const result = await runStrategistOrchestrator({ purpose: 'test' }, injected);
+
+    expect(result.budget.config).toEqual(DEFAULT_STRATEGIST_INPUT_BUDGET);
+    expect(result.budget.keptChunks).toBeLessThan(DEFAULT_STRATEGIST_INPUT_BUDGET.maxChunks);
+    expect(result.budget.droppedChunks).toBeGreaterThan(0);
+    expect(result.budget.estimatedPromptChars).toBeLessThanOrEqual(
+      DEFAULT_STRATEGIST_INPUT_BUDGET.maxTotalPromptChars,
+    );
+    expect(result.syncEstimateSeconds).toBeLessThanOrEqual(20);
+    expect(strategistFlowStub).toHaveBeenCalledTimes(1);
+    // dropped chunks surface as a per-document truncation breakdown.
+    expect(result.budgetDroppedDocuments).toEqual([
+      { docId: 'doc-1', fileName: 'sample.md', droppedChunks: result.budget.droppedChunks },
+    ]);
+  });
+
+  it('throws StrategistSyncBudgetExceededError before strategistFlow when custom budget estimate exceeds 20s', async () => {
+    const heavyChunks = Array.from({ length: 80 }, (_, i) =>
+      chunk({
+        id: `heavy-${i}`,
+        text: 'x'.repeat(1_200),
+      }),
+    );
+    const strategistFlowStub = vi.fn(async () => {
+      throw new Error('strategistFlow must not be called');
+    }) as unknown as RunStrategistOrchestratorDeps['strategistFlow'];
+    const injected = deps({
+      documents: [inventoryDoc()],
+      chunksByDocId: { 'doc-1': heavyChunks },
+      strategistFlow: strategistFlowStub,
+    });
+
+    await expect(
+      runStrategistOrchestrator(
+        {
+          purpose: 'test',
+          inputBudget: {
+            ...DEFAULT_STRATEGIST_INPUT_BUDGET,
+            maxTotalPromptChars: 80_000,
+          },
+        },
+        injected,
+      ),
+    ).rejects.toBeInstanceOf(StrategistSyncBudgetExceededError);
+    expect(strategistFlowStub).not.toHaveBeenCalled();
+  });
+
+  describe('docIds strict resolution', () => {
+    it('resolves only the requested docIds and ignores the inventory limit list', async () => {
+      const target = inventoryDoc({ id: 'doc-target', fileName: 'target.md' });
+      const targetChunk = chunk({ id: 'chunk-target', docId: 'doc-target' });
+      const resolveByIds = vi.fn(
+        async (): Promise<ResolvedInventoryDocument[]> => [
+          { docId: 'doc-target', outcome: 'terminal', document: target },
+        ],
+      );
+      const injected = deps({
+        // listInventoryDocuments を空にしておき、docIds 経路がこれに依存しないことを示す。
+        documents: [],
+        chunksByDocId: { 'doc-target': [targetChunk] },
+        resolveByIds,
+      });
+
+      const result = await runStrategistOrchestrator(
+        { purpose: 'test', docIds: ['doc-target'] },
+        injected,
+      );
+
+      expect(resolveByIds).toHaveBeenCalledWith(['doc-target']);
+      expect(injected.listInventoryDocuments).not.toHaveBeenCalled();
+      expect(injected.listChunks).toHaveBeenCalledWith('doc-target');
+      expect(injected.listChunks).toHaveBeenCalledTimes(1);
+      expect(result.sourceDocumentsReviewed).toBe(1);
+    });
+
+    it('throws UnresolvedDocIdsError listing unknown docIds', async () => {
+      const resolveByIds = vi.fn(
+        async (): Promise<ResolvedInventoryDocument[]> => [
+          { docId: 'doc-1', outcome: 'unknown' },
+        ],
+      );
+      const injected = deps({ resolveByIds });
+
+      await expect(
+        runStrategistOrchestrator(
+          { purpose: 'test', docIds: ['doc-1'] },
+          injected,
+        ),
+      ).rejects.toMatchObject({
+        name: 'UnresolvedDocIdsError',
+        unknownDocIds: ['doc-1'],
+        nonTerminalDocIds: [],
+      });
+      expect(injected.listChunks).not.toHaveBeenCalled();
+    });
+
+    it('throws UnresolvedDocIdsError listing non-terminal docIds with their status', async () => {
+      const resolveByIds = vi.fn(
+        async (): Promise<ResolvedInventoryDocument[]> => [
+          { docId: 'doc-pending', outcome: 'non_terminal', status: 'masking_pending' },
+        ],
+      );
+      const injected = deps({ resolveByIds });
+
+      const error = await runStrategistOrchestrator(
+        { purpose: 'test', docIds: ['doc-pending'] },
+        injected,
+      ).catch((e) => e);
+
+      expect(error).toBeInstanceOf(UnresolvedDocIdsError);
+      expect(error.unknownDocIds).toEqual([]);
+      expect(error.nonTerminalDocIds).toEqual([
+        { docId: 'doc-pending', status: 'masking_pending' },
+      ]);
+      expect(injected.listChunks).not.toHaveBeenCalled();
+    });
+
+    it('reports both unknown and non-terminal docIds in a single error', async () => {
+      const target = inventoryDoc({ id: 'doc-ok' });
+      const resolveByIds = vi.fn(
+        async (): Promise<ResolvedInventoryDocument[]> => [
+          { docId: 'doc-ok', outcome: 'terminal', document: target },
+          { docId: 'doc-missing', outcome: 'unknown' },
+          { docId: 'doc-draft', outcome: 'non_terminal', status: 'uploaded' },
+        ],
+      );
+      const injected = deps({ resolveByIds });
+
+      await expect(
+        runStrategistOrchestrator(
+          { purpose: 'test', docIds: ['doc-ok', 'doc-missing', 'doc-draft'] },
+          injected,
+        ),
+      ).rejects.toMatchObject({
+        unknownDocIds: ['doc-missing'],
+        nonTerminalDocIds: [{ docId: 'doc-draft', status: 'uploaded' }],
+      });
+    });
   });
 });

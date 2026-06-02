@@ -1250,7 +1250,8 @@ async function persistPdfHealthStageEval(args: {
 
     const evalResult = runConversionEvalHealthCheck({
       sourceSubtype: args.documentIr.source.sourceSubtype,
-      chunkDrafts: chunks.map((chunk) => ({ text: chunk.text })),
+      documentIr: args.documentIr,
+      chunkDrafts: chunks,
       schemaValidity: { passed: true },
     });
     const conversionEvalStorage = createConversionEvalStorage(

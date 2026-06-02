@@ -161,7 +161,7 @@ describe('documentIrToKnowledgeChunks', () => {
     expect(chunks.every((c) => c.structureType === 'table')).toBe(true);
   });
 
-  it('maps image_text to imageText with a collapsed locator', () => {
+  it('maps image_text to imageText with structured page/bbox locator evidence', () => {
     const ir = buildIr(
       [
         {
@@ -182,9 +182,15 @@ describe('documentIrToKnowledgeChunks', () => {
     });
 
     expect(chunk.structureType).toBe('imageText');
-    expect(chunk.locator).toEqual({ kind: 'imageText' });
+    expect(chunk.locator).toEqual({
+      kind: 'imageText',
+      page: 1,
+      bbox: [10, 20, 110, 60],
+    });
     expect(chunk.extractionWarnings ?? []).toEqual(
-      expect.arrayContaining([expect.stringContaining('bbox=[10,20,110,60]')])
+      expect.arrayContaining([
+        expect.stringContaining('imageTextLocator=page=1 bbox=[10,20,110,60]'),
+      ])
     );
   });
 

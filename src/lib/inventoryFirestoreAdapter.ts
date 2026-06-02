@@ -125,6 +125,67 @@ export function adaptFirestoreDocumentToInventory(
   };
 }
 
+/**
+ * 明示的に指定された docId 群を terminal 解決した結果。
+ *
+ * `listInventoryDocumentsFromFirestore` は非 terminal / 破損ドキュメントを黙って
+ * skip するため、「存在しない」と「存在するが terminal でない」を区別できない。
+ * `/api/context-package` の strict docIds resolution はこの区別を必要とするので、
+ * terminal filter の **前** の生 status を保持したまま 1 件ずつ分類する。
+ */
+export type ResolvedInventoryDocument =
+  | { docId: string; outcome: 'terminal'; document: InventoryDocument }
+  | { docId: string; outcome: 'non_terminal'; status: string }
+  | { docId: string; outcome: 'unknown' };
+
+/**
+ * docId 群を Firestore から直接取得し、1 件ずつ terminal 解決する。
+ *
+ * `limit` で絞った最近のドキュメント一覧に依存しないため、指定された docId が
+ * 最近のものでなくても確実に解決できる。順序は入力 docIds に合わせて返す。
+ */
+export async function resolveInventoryDocumentsByIds(
+  docIds: string[]
+): Promise<ResolvedInventoryDocument[]> {
+  if (docIds.length === 0) {
+    return [];
+  }
+
+  const db = getFirestoreClient();
+  const refs = docIds.map((docId) =>
+    db.collection(DOCUMENTS_COLLECTION).doc(docId)
+  );
+  const snapshots = await db.getAll(...refs);
+  const snapshotById = new Map(snapshots.map((snap) => [snap.id, snap]));
+
+  return docIds.map((docId): ResolvedInventoryDocument => {
+    const snapshot = snapshotById.get(docId);
+    if (!snapshot || !snapshot.exists) {
+      return { docId, outcome: 'unknown' };
+    }
+
+    let parsed: FirestoreDocument;
+    try {
+      parsed = parseFirestoreDocumentSnapshot(snapshot);
+    } catch {
+      // 破損ドキュメントは利用不可なので非 terminal 扱いで透過的に通知する。
+      return { docId, outcome: 'non_terminal', status: 'unparseable' };
+    }
+
+    if (!INVENTORY_TERMINAL_STATUSES.has(parsed.status)) {
+      return { docId, outcome: 'non_terminal', status: parsed.status };
+    }
+
+    const document = adaptFirestoreDocumentToInventory(snapshot.id, parsed);
+    if (!document) {
+      // status は terminal だが必須フィールド欠落で使えない（status を添えて通知）。
+      return { docId, outcome: 'non_terminal', status: parsed.status };
+    }
+
+    return { docId, outcome: 'terminal', document };
+  });
+}
+
 export async function listInventoryDocumentsFromFirestore(
   limit = 100
 ): Promise<InventoryDocument[]> {

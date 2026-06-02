@@ -1,0 +1,249 @@
+# Phase 3-M PDF Masker mainline live smoke evidence
+
+Date: 2026-05-29
+
+Purpose: Confirm `D-P3-M-PDF-1` across the real Cloud Run + IAP boundary:
+`requires_masking` PDF uploads no longer park as `curated + maskingPending`.
+They continue through the PDF Masker mainline and terminate as either
+`restricted` or `ai_safe`.
+
+## Boundary
+
+- Project: `ai-ready-knowledge-hub`
+- Region: `asia-northeast1`
+- Cloud Run service: `ai-ready-knowledge-hub`
+- Cloud Run URL: `https://ai-ready-knowledge-hub-mrvutsz24a-an.a.run.app`
+- Smoke revision: `ai-ready-knowledge-hub-00028-tgf`
+- IAP actor: `makoto@m-grow-ai.com`
+- Tenant: `m-grow-ai.com`
+- Active PDF feature flag posture at smoke time:
+  - `pdf-conversion-subtype-1`: `enabledTenants: []`
+  - `pdf-conversion-subtype-2`: `enabledTenants: []`
+  - `pdf-conversion-subtype-3`: `enabledTenants: ["m-grow-ai.com"]`
+- Runtime Masker provider observed from Cloud Run env: `MASKER_PROVIDER=simple-rule`
+
+## Smoke fixtures
+
+| Branch | Fixture | docId | Final status |
+|---|---|---|---|
+| `restricted_promoted` | `sample-data/document-conversion/scan-pdf/synthetic-employment-form-scan.pdf` | `7c3cbcdf-9a18-48cf-8ab0-cf2158ceedfb` | `restricted` |
+| `ai_safe_ready` | `sample-data/document-conversion/scan-pdf/synthetic-invoice-with-pii-scan.pdf` | `a74b9520-5442-4579-adb8-2781dae8999b` | `ai_safe` |
+
+Both fixtures traversed:
+
+```text
+IAP upload
+  -> scan-pdf Gemini OCR
+  -> DocumentIR GCS write
+  -> Curator requires_masking
+  -> conversion_eval health
+  -> document.convert audit
+  -> PDF Masker mainline
+  -> restricted or ai_safe terminal status
+```
+
+## Restricted branch evidence
+
+Firestore `documents/7c3cbcdf-9a18-48cf-8ab0-cf2158ceedfb`:
+
+```json
+{
+  "fileName": "synthetic-employment-form-scan.pdf",
+  "status": "restricted",
+  "sourceSubtype": "scan-pdf",
+  "aiUsePolicy": "blocked",
+  "sensitivity": "Restricted",
+  "sensitivitySource": "masker",
+  "originalCuratorSensitivity": "Confidential",
+  "maskingPending": null,
+  "storagePath": "raw/7c3cbcdf-9a18-48cf-8ab0-cf2158ceedfb/synthetic-employment-form-scan.pdf",
+  "aiSafeStoragePath": null,
+  "latestConversionEvalId": "7c3cbcdf-9a18-48cf-8ab0-cf2158ceedfb:v1",
+  "curator": { "aiUsePolicy": "requires_masking", "sensitivity": "Confidential" },
+  "masker": {
+    "decision": "restricted_promoted",
+    "maskedSpansCount": 3,
+    "recommendedSensitivity": "Restricted",
+    "residualRisk": { "detected": true }
+  },
+  "conversionError": null,
+  "maskerError": null
+}
+```
+
+Additional checks:
+
+- Firestore invariant check: `[]`
+- Chunk count: `0` (expected for `restricted_promoted`)
+- `conversion_eval/7c3cbcdf-9a18-48cf-8ab0-cf2158ceedfb:v1`: health `pass`, `chunkCount: 20`, `unmaskablePiiFindings: 0`
+- GCS raw objects:
+  - `raw/7c3cbcdf-9a18-48cf-8ab0-cf2158ceedfb/synthetic-employment-form-scan.pdf`
+  - `raw/7c3cbcdf-9a18-48cf-8ab0-cf2158ceedfb/document-ir/v1.json`
+
+Audit events for the same docId:
+
+- `document.convert`: `converterId: gemini-vertex-ocr`, `sourceSubtype: scan-pdf`, `evalStatus: pass`, `unmaskablePiiFindings.count: 0`
+- `inferenceDestination`: `vendor: vertex`, `region: asia-northeast1`, `model: gemini-2.5-flash`
+- `document.import`: success
+
+## AI-safe branch evidence
+
+Firestore `documents/a74b9520-5442-4579-adb8-2781dae8999b`:
+
+```json
+{
+  "fileName": "synthetic-invoice-with-pii-scan.pdf",
+  "status": "ai_safe",
+  "sourceSubtype": "scan-pdf",
+  "aiUsePolicy": "requires_masking",
+  "sensitivity": "Confidential",
+  "sensitivitySource": "curator",
+  "originalCuratorSensitivity": null,
+  "maskingPending": null,
+  "storagePath": "raw/a74b9520-5442-4579-adb8-2781dae8999b/synthetic-invoice-with-pii-scan.pdf",
+  "aiSafeStoragePath": "masked/a74b9520-5442-4579-adb8-2781dae8999b/synthetic-invoice-with-pii-scan.pdf",
+  "latestConversionEvalId": "a74b9520-5442-4579-adb8-2781dae8999b:v1",
+  "curator": { "aiUsePolicy": "requires_masking", "sensitivity": "Confidential" },
+  "masker": {
+    "decision": "ai_safe_ready",
+    "maskedSpansCount": 6,
+    "recommendedSensitivity": "Confidential",
+    "residualRisk": { "detected": false }
+  },
+  "conversionError": null,
+  "maskerError": null
+}
+```
+
+Additional checks:
+
+- Firestore invariant check: `[]`
+- Chunk count: `37`
+- First chunk included `maskedText`, `maskedSpansCount`, and `ruleHits`
+- `conversion_eval/a74b9520-5442-4579-adb8-2781dae8999b:v1`: health `pass`, `chunkCount: 37`, `unmaskablePiiFindings: 0`
+- GCS raw objects:
+  - `raw/a74b9520-5442-4579-adb8-2781dae8999b/synthetic-invoice-with-pii-scan.pdf`
+  - `raw/a74b9520-5442-4579-adb8-2781dae8999b/document-ir/v1.json`
+- GCS masked object:
+  - `masked/a74b9520-5442-4579-adb8-2781dae8999b/synthetic-invoice-with-pii-scan.pdf`
+
+Audit events for the same docId:
+
+- `document.convert`: `converterId: gemini-vertex-ocr`, `sourceSubtype: scan-pdf`, `evalStatus: pass`, `unmaskablePiiFindings.count: 0`
+- `inferenceDestination`: `vendor: vertex`, `region: asia-northeast1`, `model: gemini-2.5-flash`
+- `document.import`: success
+
+## Judgment
+
+`D-P3-M-PDF-1` live smoke passed for both terminal branches:
+
+- `requires_masking` PDF no longer parks as `curated + maskingPending`.
+- `restricted_promoted` produces no chunks and keeps `aiSafeStoragePath: null`.
+- `ai_safe_ready` writes a masked GCS object and masked chunks.
+- `document.convert` audit keeps Vertex inference destination metadata.
+- Firestore invariant checks pass for both observed documents.
+
+This closes the previously listed residual task: "Masker PDF mainline dev tenant
+live smoke evidence".
+
+## Follow-up candidates
+
+### `ai_safe` Context Package path
+
+Follow-up smoke on 2026-05-29 used the `ai_safe_ready` document
+`a74b9520-5442-4579-adb8-2781dae8999b` with this purpose:
+
+```text
+税理士事務所の請求書サンプルから、AIに渡せる料金管理・請求処理の文脈だけを整理する。個人情報や口座情報はマスク済みの情報だけ使う。
+```
+
+Observed behavior:
+
+- The first browser/API attempt with `limit: 20` failed in the app with Vertex
+  `INVALID_ARGUMENT`: input token count `224204` exceeded the model limit
+  `131072`. This confirmed the need for a pre-LLM token/chunk budget (since
+  implemented in `budget.ts`; see Judgment below).
+- A narrowed `limit: 2` run completed inside Cloud Run as HTTP 200 in
+  `37.679s` and wrote a `document.export` AuditEvent:
+  `auditEvents/0mpqmmgow-452b55aa7ef489aa`.
+
+**運用確認クエリ（Firestore composite index 反映後）** — 正本は
+[`firestore.indexes.json`](../firestore.indexes.json)（`action` + `occurredAt`、
+`target.docId` + `occurredAt`）。手順は [demo-runbook.md §2 項目 7](demo-runbook.md)。
+
+```bash
+# 最新 document.export（index error なしで 1 件以上）
+pnpm exec tsx -e "import './scripts/loadEnv.ts'; import { getFirestoreClient } from './src/lib/firestore.ts'; (async () => { const db = getFirestoreClient(); const snap = await db.collection('auditEvents').where('action','==','document.export').orderBy('occurredAt','desc').limit(5).get(); console.log(JSON.stringify({ count: snap.size, events: snap.docs.map(d => ({ id: d.id, docId: d.get('target')?.docId, occurredAt: d.get('occurredAt')?.toDate?.()?.toISOString?.() })) }, null, 2)); })();"
+
+# 本 smoke の ai_safe invoice（docId lookup）
+pnpm exec tsx -e "import './scripts/loadEnv.ts'; import { getFirestoreClient } from './src/lib/firestore.ts'; (async () => { const docId = 'a74b9520-5442-4579-adb8-2781dae8999b'; const db = getFirestoreClient(); const snap = await db.collection('auditEvents').where('target.docId','==',docId).orderBy('occurredAt','desc').limit(10).get(); console.log(JSON.stringify({ docId, count: snap.size, events: snap.docs.map(d => ({ id: d.id, action: d.get('action'), occurredAt: d.get('occurredAt')?.toDate?.()?.toISOString?.() })) }, null, 2)); })();"
+```
+
+期待: 前者に `0mpqmmgow-452b55aa7ef489aa` が含まれる。後者は当該 docId の
+`document.convert` / `document.export` 等が `occurredAt` 降順で返る。
+- The browser-side fetch for the same `limit: 2` request received a Google 502
+  HTML response after roughly 33 seconds. Treat this as a UI/IAP boundary
+  timeout risk even though the app completed and audit recorded success.
+- Running the same `runStrategistOrchestrator({ limit: 2 })` path locally
+  against live Firestore confirmed the content contract:
+  - `sourceDocumentsReviewed: 2`
+  - `includedCount: 24`
+  - all included rows for the invoice had `aiUsePolicy: "requires_masking"`
+  - included rows used `maskedText`
+  - rendered markdown contained `Confidential (AI-safe via masking)`
+  - rendered markdown contained `SYN-INV-2[REDACTED:POSTAL_CODE]`
+  - rendered markdown did **not** contain raw `SYN-INV-2026-0501`
+
+Representative included chunk:
+
+```json
+{
+  "chunkId": "a74b9520-5442-4579-adb8-2781dae8999b:p1-ocr1",
+  "aiUsePolicy": "requires_masking",
+  "text": "請求書番号: SYN-INV-2026-0501",
+  "maskedText": "請求書番号: SYN-INV-2[REDACTED:POSTAL_CODE]"
+}
+```
+
+Judgment: masked chunk selection for `ai_safe` PDF works. The smoke exposed two
+operational gaps; both are addressed in code after this smoke run:
+
+- **Pre-LLM budget（実装済み）:** `src/services/strategistOrchestrator/budget.ts`
+  が safety gate 通過後・Strategist 呼出前に chunk / document / prompt 文字数を
+  決定論的に絞り込む。`limit: 20` のような広い Inventory 読み取りでも LLM 入力
+  上限超過を防ぐ。API は推定 20 秒超で **422 `sync_budget_exceeded`** を返し、
+  `docIds` / `limit` で絞るガイダンスを含む。
+- **strict `docIds` resolution（実装済み）:** `resolveInventoryDocumentsByIds`
+  が unknown / non-terminal docId を 400 で返す。UI（`ContextPackageForm`）は
+  `docIds` テキスト入力とエラー詳細表示に対応。
+
+**残る課題（docs 同期 2026-05-29）:**
+
+- 既定 budget（`DEFAULT_STRATEGIST_INPUT_BUDGET`）と sync target（20 秒）の整合
+  — 実測に合わせたチューニング
+- UI の docIds 導線 — Inventory から docId を選ぶ UX（手入力以外）
+- 非同期 job 化の判断 — [open-questions.md R10](open-questions.md) 参照
+- IAP 越し長時間同期レスポンス — budget 適用後も browser fetch が 502 になる
+  ケースの再 smoke
+
+### scan-pdf eval locator / coverage
+
+**Smoke 時点（2026-05-29、本 doc 初版）** の conversion eval レコードは
+`pageCoverage: 0` / `hasPageLocators: false` を報告した。stored chunks は
+`locator.kind: "imageText"` + bbox warning を持っており、mainline 自体の失敗では
+なかった。
+
+**修正後（実装済み）:** `src/eval/conversion/heuristic/pageEvidence.ts` が
+`imageText` locator（`page` / `pageNumber`）と `extractionWarnings` 内の page
+ヒントを page evidence として扱う。health eval の scan-pdf fixture では
+`pageCoverage=1`、`hasPageLocators=true` を確認（
+`runConversionEvalHealthCheck.test.ts`）。live smoke 時に書き込まれた
+`conversion_eval/*:v1` 行は修正前の eval shape のまま残る可能性があるが、
+**現行 health eval 契約では scan-pdf の page locator / coverage は解消済み**。
+
+### `unmaskablePiiFindings` threshold after Masker
+
+Both live-smoked PII fixtures recorded `unmaskablePiiFindings.count: 0`. The
+deterministic unmaskable fixture remains covered by the earlier scan-pdf smoke.
+Public expansion for scan-pdf should still **re-evaluate the threshold** now that
+Masker mainline is connected (`D-P3-H-7 Q2` 後続、別 decision）。

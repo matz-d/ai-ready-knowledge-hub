@@ -86,6 +86,32 @@ Phase 3-E のデモ説明では、標準 profile は **`cloud-managed`** です�
 
    - **Firebase CLI**: ルートの `firestore.indexes.json` を `firebase.json` の `firestore` 設定から参照しているプロジェクトでは、`firebase deploy --only firestore:indexes` で同一定義を反映できる。
 
+7. （Phase 3-D / 3-E）`auditEvents` の運用検索用複合インデックスを用意する。`document.export` など action 別の最新監査と、docId 単位の履歴確認に使う。正本は [`firestore.indexes.json`](../firestore.indexes.json) の `auditEvents` 定義（`action` + `occurredAt`、`target.docId` + `occurredAt`）。
+
+   ```bash
+   gcloud config set project "$GOOGLE_CLOUD_PROJECT"
+   gcloud firestore indexes composite create \
+     --collection-group=auditEvents \
+     --query-scope=collection \
+     --field-config=field-path=action,order=ascending \
+     --field-config=field-path=occurredAt,order=descending
+   gcloud firestore indexes composite create \
+     --collection-group=auditEvents \
+     --query-scope=collection \
+     --field-config=field-path=target.docId,order=ascending \
+     --field-config=field-path=occurredAt,order=descending
+   ```
+
+   ビルド完了後、次の確認クエリで `FAILED_PRECONDITION`（composite index 不足）が出ないことを確認する（`scripts/loadEnv.ts` 経由で `.env.local` を読む）:
+
+   ```bash
+   # 最新の document.export
+   pnpm exec tsx -e "import './scripts/loadEnv.ts'; import { getFirestoreClient } from './src/lib/firestore.ts'; (async () => { const db = getFirestoreClient(); const snap = await db.collection('auditEvents').where('action','==','document.export').orderBy('occurredAt','desc').limit(5).get(); console.log(JSON.stringify({ count: snap.size, events: snap.docs.map(d => ({ id: d.id, action: d.get('action'), occurredAt: d.get('occurredAt')?.toDate?.()?.toISOString?.(), docId: d.get('target')?.docId })) }, null, 2)); })();"
+
+   # docId 単位（例: Context Package smoke の invoice）
+   DOC_ID=a74b9520-5442-4579-adb8-2781dae8999b pnpm exec tsx -e "import './scripts/loadEnv.ts'; import { getFirestoreClient } from './src/lib/firestore.ts'; (async () => { const docId = process.env.DOC_ID; if (!docId) throw new Error('DOC_ID required'); const db = getFirestoreClient(); const snap = await db.collection('auditEvents').where('target.docId','==',docId).orderBy('occurredAt','desc').limit(10).get(); console.log(JSON.stringify({ docId, count: snap.size, events: snap.docs.map(d => ({ id: d.id, action: d.get('action'), occurredAt: d.get('occurredAt')?.toDate?.()?.toISOString?.() })) }, null, 2)); })();"
+   ```
+
 ## 3. 開発サーバー起動
 
 ```bash

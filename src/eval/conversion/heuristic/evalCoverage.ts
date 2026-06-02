@@ -24,6 +24,10 @@ import {
 } from '../conversionEvalStage';
 import type { AxisRollupStatus } from '../evalSafetyReadiness';
 import type { DocumentIrPage, DocumentSourceSubtype } from '../documentIr';
+import {
+  chunkHasTableEvidence,
+  summarizeChunkPageCoverage,
+} from './pageEvidence';
 import type { HeuristicEvalChunk, HeuristicEvalInput } from './types';
 
 /**
@@ -66,13 +70,27 @@ export function evalCoverage<TChunk extends HeuristicEvalChunk>(
   const isScanPdf = sourceSubtype === 'scan-pdf';
 
   const pagesWithBlocks = pages.filter(pageHasNonEmptyBlock).length;
-  const pageCoverage = totalPages > 0 ? pagesWithBlocks / totalPages : 0;
+  const pageCoverageFromDocumentIr =
+    totalPages > 0 ? pagesWithBlocks / totalPages : 0;
+  const chunkPageCoverage = summarizeChunkPageCoverage(input.chunks);
+  const shouldUseChunkPageCoverage =
+    (totalPages === 0 || pagesWithBlocks === 0) && chunkPageCoverage.totalPages > 0;
+  const pageCoverage = shouldUseChunkPageCoverage
+    ? chunkPageCoverage.pagesWithText / chunkPageCoverage.totalPages
+    : pageCoverageFromDocumentIr;
 
-  const tableCandidates = pages.reduce(
+  const tableCandidatesFromDocumentIr = pages.reduce(
     (sum, page) =>
       sum + page.blocks.filter((block) => block.kind === 'table').length,
     0
   );
+  const tableCandidatesFromChunks = input.chunks.filter(
+    chunkHasTableEvidence
+  ).length;
+  const tableCandidates =
+    tableCandidatesFromDocumentIr > 0
+      ? tableCandidatesFromDocumentIr
+      : tableCandidatesFromChunks;
 
   const textDensityWarnings: string[] = [];
   for (const page of pages) {
@@ -99,7 +117,11 @@ export function evalCoverage<TChunk extends HeuristicEvalChunk>(
       );
     }
   }
-  if (totalPages > 0 && pagesWithBlocks === 0) {
+  if (
+    !shouldUseChunkPageCoverage &&
+    totalPages > 0 &&
+    pagesWithBlocks === 0
+  ) {
     textDensityWarnings.push(
       `document has ${totalPages} page(s) but no page produced a non-empty block (pageCoverage=0)`
     );

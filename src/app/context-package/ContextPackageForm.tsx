@@ -10,7 +10,7 @@ type ChunkSelection = {
   rationale: string;
   confidence?: number;
   reason?: string;
-  chunk: { title?: string; text: string; sensitivity: string };
+  chunk: { title?: string; sensitivity: string };
   parent: { fileName: string; documentType: string; businessDomain: string };
 };
 
@@ -19,7 +19,7 @@ type SafetyExcludedChunk = {
   chunkId: string;
   rationale: string;
   reason: string;
-  chunk: { title?: string; text: string; sensitivity: string };
+  chunk: { title?: string; sensitivity: string };
   parent: { fileName: string; documentType: string; businessDomain: string };
 };
 
@@ -33,6 +33,7 @@ type ContextPackageResult = {
   missing: string[];
   humanReviewQuestions: string[];
   markdown: string;
+  budgetDroppedDocuments: { docId: string; fileName: string; droppedChunks: number }[];
   counts: {
     included: number;
     excluded: number;
@@ -42,12 +43,25 @@ type ContextPackageResult = {
   };
 };
 
+type DocIdsErrorDetails = {
+  unknownDocIds: string[];
+  nonTerminalDocIds: { docId: string; status: string }[];
+};
+
 type ApiErrorResponse = {
   error?: string;
   details?: unknown;
+  recommendation?: {
+    hint?: string;
+    suggestedDocIds?: string[];
+  };
 };
 
 type UiState = 'idle' | 'loading' | 'done' | 'error';
+
+export function parseDocIds(raw: string): string[] {
+  return [...new Set(raw.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean))];
+}
 
 function downloadMarkdown(markdown: string, purpose: string) {
   const slug = purpose.slice(0, 30).replace(/[^\w\u3040-\u9fff]/g, '_');
@@ -63,24 +77,42 @@ function downloadMarkdown(markdown: string, purpose: string) {
 
 export function ContextPackageForm() {
   const [purpose, setPurpose] = useState('');
+  const [docIdsRaw, setDocIdsRaw] = useState('');
   const [uiState, setUiState] = useState<UiState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [docIdsErrorDetails, setDocIdsErrorDetails] = useState<DocIdsErrorDetails | null>(null);
+  const [suggestedDocIds, setSuggestedDocIds] = useState<string[] | null>(null);
   const [result, setResult] = useState<ContextPackageResult | null>(null);
 
   const isLoading = uiState === 'loading';
   const remaining = MAX_PURPOSE - purpose.length;
 
+  const applyDocIdSuggestion = (ids: string[]) => {
+    setDocIdsRaw(ids.join('\n'));
+    setSuggestedDocIds(null);
+    setErrorMessage(null);
+    setDocIdsErrorDetails(null);
+    setUiState('idle');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setDocIdsErrorDetails(null);
+    setSuggestedDocIds(null);
     setResult(null);
     setUiState('loading');
+
+    const docIds = parseDocIds(docIdsRaw);
 
     try {
       const res = await fetch('/api/context-package', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ purpose }),
+        body: JSON.stringify({
+          purpose,
+          ...(docIds.length > 0 ? { docIds } : {}),
+        }),
       });
 
       if (res.ok) {
@@ -93,7 +125,21 @@ export function ContextPackageForm() {
       let errMsg = 'エラーが発生しました。';
       try {
         const body = (await res.json()) as ApiErrorResponse;
-        if (res.status === 400) {
+        if (res.status === 400 && body.error === 'unknown_doc_ids') {
+          const details = body.details as DocIdsErrorDetails | undefined;
+          setDocIdsErrorDetails({
+            unknownDocIds: details?.unknownDocIds ?? [],
+            nonTerminalDocIds: details?.nonTerminalDocIds ?? [],
+          });
+          errMsg = '指定した docId に問題があります。下の詳細を確認してください。';
+        } else if (res.status === 400 && body.error === 'non_terminal_doc_ids') {
+          const details = body.details as DocIdsErrorDetails | undefined;
+          setDocIdsErrorDetails({
+            unknownDocIds: details?.unknownDocIds ?? [],
+            nonTerminalDocIds: details?.nonTerminalDocIds ?? [],
+          });
+          errMsg = '指定した docId がまだ処理中です。下の詳細を確認してください。';
+        } else if (res.status === 400) {
           const detail =
             typeof body.details === 'string'
               ? body.details
@@ -109,6 +155,20 @@ export function ContextPackageForm() {
         } else if (res.status === 502) {
           errMsg =
             'サーバーエラーが発生しました。しばらくしてから再試行してください。';
+        } else if (
+          res.status === 422 &&
+          body.error === 'sync_budget_exceeded'
+        ) {
+          const detail =
+            typeof body.details === 'string'
+              ? body.details
+              : '同期処理の制限を超えました。';
+          const hint = body.recommendation?.hint;
+          errMsg = hint ? `${detail} ${hint}` : detail;
+          const suggested = body.recommendation?.suggestedDocIds;
+          if (suggested && suggested.length > 0) {
+            setSuggestedDocIds(suggested);
+          }
         } else {
           errMsg = body.error ?? errMsg;
         }
@@ -148,6 +208,27 @@ export function ContextPackageForm() {
           placeholder="例: 新入社員向けオンボーディング資料を NotebookLM に渡して Q&A できるようにしたい"
           required
         />
+
+        <div className="cp-label-row" style={{ marginTop: '1rem' }}>
+          <label className="cp-label__text" htmlFor="cp-doc-ids">
+            対象 Doc IDs（任意）
+          </label>
+          <span className="cp-char-count">
+            改行またはカンマ区切り・最大 20 件
+          </span>
+        </div>
+        <textarea
+          id="cp-doc-ids"
+          className="cp-textarea"
+          name="docIds"
+          value={docIdsRaw}
+          onChange={(e) => setDocIdsRaw(e.target.value)}
+          disabled={isLoading}
+          rows={3}
+          placeholder={"例:\na74b9520-5442-4579-adb8-2781dae8999b\nb3e21f04-..."}
+          spellCheck={false}
+        />
+
         <div className="cp-form-footer">
           <button
             type="submit"
@@ -170,6 +251,47 @@ export function ContextPackageForm() {
         <div className="cp-error-panel" role="alert">
           <strong>エラー</strong>
           <p>{errorMessage}</p>
+          {docIdsErrorDetails ? (
+            <div className="cp-docids-error-details">
+              {docIdsErrorDetails.unknownDocIds.length > 0 ? (
+                <div>
+                  <p className="cp-docids-error-label">存在しない docId:</p>
+                  <ul className="cp-docids-error-list">
+                    {docIdsErrorDetails.unknownDocIds.map((id) => (
+                      <li key={id}><code>{id}</code></li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {docIdsErrorDetails.nonTerminalDocIds.length > 0 ? (
+                <div>
+                  <p className="cp-docids-error-label">処理中の docId:</p>
+                  <ul className="cp-docids-error-list">
+                    {docIdsErrorDetails.nonTerminalDocIds.map(({ docId, status }) => (
+                      <li key={docId}><code>{docId}</code> — {status}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {suggestedDocIds && suggestedDocIds.length > 0 ? (
+            <div className="cp-suggested-docids">
+              <p className="cp-docids-error-label">推奨 docIds（budget 内に収まるセット）:</p>
+              <ul className="cp-docids-error-list">
+                {suggestedDocIds.map((id) => (
+                  <li key={id}><code>{id}</code></li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className="cp-apply-suggestion-btn"
+                onClick={() => applyDocIdSuggestion(suggestedDocIds)}
+              >
+                この docIds を適用して再試行
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -181,6 +303,33 @@ export function ContextPackageForm() {
             </span>
             <span>レビュー文書数: {result.sourceDocumentsReviewed}</span>
           </div>
+
+          {result.budgetDroppedDocuments.length > 0 ? (
+            <div className="cp-truncation-warning" role="alert">
+              <strong>⚠️ この Context Package は不完全です</strong>
+              <p>
+                入力 budget の上限に収めるため、安全に使えるはずの chunk が
+                {' '}
+                {result.budgetDroppedDocuments.reduce(
+                  (sum, d) => sum + d.droppedChunks,
+                  0,
+                )}
+                {' '}
+                件（
+                {result.budgetDroppedDocuments.length}
+                {' '}
+                文書）除外されました。完全なカバレッジが必要な場合は、対象 Doc IDs
+                を絞って再実行してください。
+              </p>
+              <ul className="cp-truncation-list">
+                {result.budgetDroppedDocuments.map((d) => (
+                  <li key={d.docId}>
+                    {d.fileName} — {d.droppedChunks} chunk(s) dropped
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="cp-counts-grid">
             <div className="cp-count-card">

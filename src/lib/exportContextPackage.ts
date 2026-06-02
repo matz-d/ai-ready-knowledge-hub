@@ -29,6 +29,15 @@ export type ExcludedContextDocument = {
   status?: string;
 };
 
+/**
+ * pre-LLM input budget で落とした safe chunk の文書別内訳。
+ * これが空でないとき、その Context Package は「全件をレビューした完全版ではない」。
+ */
+export type BudgetTruncatedDocument = {
+  fileName: string;
+  droppedChunks: number;
+};
+
 export type ContextPackageExportInput = {
   purpose: string;
   generatedAt?: Date | string;
@@ -38,6 +47,11 @@ export type ContextPackageExportInput = {
   humanReviewDocuments?: ExcludedContextDocument[];
   missingKnowledge: string[];
   questionsForHumanOwner: string[];
+  /**
+   * budget で Strategist へ渡す前に落とした safe chunk の内訳。
+   * 空 / 未指定なら truncation なし（完全版）。
+   */
+  budgetTruncatedDocuments?: BudgetTruncatedDocument[];
 };
 
 const downstreamInstructions = [
@@ -46,6 +60,23 @@ const downstreamInstructions = [
   'Do not infer missing operational rules.',
   'If required information is missing, ask the human owner.',
 ];
+
+const truncationInstruction =
+  'This package is INCOMPLETE: some safe content was dropped to fit the model input budget (see "Budget Truncation"). Treat coverage as partial and re-run with a narrower docIds scope for full coverage.';
+
+function totalDroppedChunks(documents: BudgetTruncatedDocument[]): number {
+  return documents.reduce((sum, doc) => sum + doc.droppedChunks, 0);
+}
+
+function budgetTruncationMarkdown(documents: BudgetTruncatedDocument[]): string {
+  if (documents.length === 0) {
+    return '- None';
+  }
+
+  return documents
+    .map((doc) => `- ${doc.fileName}\n  - Dropped chunks: ${doc.droppedChunks}`)
+    .join('\n');
+}
 
 function formatGeneratedAt(value: Date | string | undefined): string {
   if (typeof value === 'string') {
@@ -143,6 +174,17 @@ export function exportContextPackageMarkdown(
     })),
   ];
 
+  const truncatedDocuments = input.budgetTruncatedDocuments ?? [];
+  const droppedChunks = totalDroppedChunks(truncatedDocuments);
+  const isTruncated = droppedChunks > 0;
+
+  const manifestTruncationLine = isTruncated
+    ? `\n- ⚠️ Budget truncation: ${droppedChunks} safe chunk(s) across ${truncatedDocuments.length} document(s) were dropped to fit the model input budget — coverage is INCOMPLETE`
+    : '';
+  const instructions = isTruncated
+    ? [...downstreamInstructions, truncationInstruction]
+    : downstreamInstructions;
+
   return `# AI-Ready Context Package
 
 ## Package Manifest
@@ -152,11 +194,11 @@ export function exportContextPackageMarkdown(
 - Source documents reviewed: ${input.sourceDocumentsReviewed}
 - Included documents: ${input.includedDocuments.length}
 - Excluded documents: ${input.excludedDocuments.length}
-- Human review required: ${humanReviewDocuments.length}
+- Human review required: ${humanReviewDocuments.length}${manifestTruncationLine}
 
 ## Instructions for Downstream AI
 
-${downstreamInstructions.join('\n')}
+${instructions.join('\n')}
 
 ## Included Documents
 
@@ -165,6 +207,10 @@ ${includedDocumentsMarkdown(input.includedDocuments)}
 ## Excluded Documents
 
 ${excludedDocumentsMarkdown(allExcludedDocuments)}
+
+## Budget Truncation (Incomplete Coverage)
+
+${budgetTruncationMarkdown(truncatedDocuments)}
 
 ## Missing Knowledge
 

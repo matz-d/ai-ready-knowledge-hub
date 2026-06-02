@@ -64,6 +64,44 @@ describe('runConversionEvalHealthCheck', () => {
     expect(result.overall.status).toBe('pass');
   });
 
+  it('derives page evidence from imageText locator during health checks', () => {
+    const result = runConversionEvalHealthCheck({
+      sourceSubtype: 'scan-pdf',
+      chunkDrafts: [
+        {
+          text: 'scanned line',
+          structureType: 'imageText',
+          locator: { kind: 'imageText', page: 1, bbox: [10, 20, 110, 60] },
+        },
+      ],
+      schemaValidity: { passed: true },
+    });
+
+    expect(result.coverage.pageCoverage).toBe(1);
+    expect(result.locatorQuality.hasPageLocators).toBe(true);
+  });
+
+  it('derives page evidence from extractionWarnings when locator has no page', () => {
+    const result = runConversionEvalHealthCheck({
+      sourceSubtype: 'scan-pdf',
+      chunkDrafts: [
+        {
+          text: 'scanned line',
+          structureType: 'imageText',
+          locator: { kind: 'imageText' },
+          // page=1: the chunk-fallback coverage uses the max observed page number
+          // as denominator, so a single chunk must be on page 1 to mean "full
+          // coverage" (a lone page-2 chunk would imply an unseen page 1 → 0.5).
+          extractionWarnings: ['imageTextLocator=page=1 bbox=[0,0,100,20]'],
+        },
+      ],
+      schemaValidity: { passed: true },
+    });
+
+    expect(result.coverage.pageCoverage).toBe(1);
+    expect(result.locatorQuality.hasPageLocators).toBe(true);
+  });
+
   it('accepts slide-pdf subtype for subtype 2 health checks', () => {
     const result = runConversionEvalHealthCheck({
       sourceSubtype: 'slide-pdf',
