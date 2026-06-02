@@ -4,9 +4,9 @@
 
 ---
 
-## R10: Context Package API の長時間同期レスポンス方針（2026-05-29 起票）
+## R10: Context Package API の長時間同期レスポンス方針（2026-05-29 起票、2026-06-02 解消）
 
-**現状（2026-06-02 同期）**
+**同期経路の比較基準（2026-06-02 re-smoke）**
 - **Pre-LLM budget（実装済み）:** `src/services/strategistOrchestrator/budget.ts` が safety gate 通過後・Strategist 呼出前に chunk / document / prompt 文字数を決定論的に絞り込む（`DEFAULT_STRATEGIST_INPUT_BUDGET`）。
 - **strict `docIds` resolution（実装済み）:** unknown / non-terminal docId は 400（`unknown_doc_ids` / `non_terminal_doc_ids`）。`ContextPackageForm` は docIds テキスト入力とエラー詳細表示に対応。
 - `POST /api/context-package` は同期応答を継続しつつ、pre-LLM budget 適用後の推定時間が 20 秒目標を超える場合は **422 `sync_budget_exceeded`** を返す。
@@ -37,8 +37,13 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
 - `ContextPackageForm` は `mode:"auto"` を送り、**202 なら status URL を `POLL_INTERVAL_MS=3000` 間隔でポーリング**、`queued/running` を表示しつつ `succeeded` で result URL を取得して既存結果 UI に流す。`failed/cancelled`・`POLL_TIMEOUT_MS=5min` 超過はエラー表示。進行中ポーリングは新規送信 / アンマウントで `activeJobRef` により中断。
 - **feature flag**: `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED === 'true'` のときだけ `mode:"auto"` を送る。未設定（既定）は従来どおり同期（mode 無し）。**queue 配線と同時にこのフラグを有効化する**こと（未配線で auto を送ると 503）。本番では **Docker build-arg** で焼き込む（`Dockerfile` + `deploy.yml` の GitHub Variable）。理由は [setup-gcp.md](setup-gcp.md) §Context Package 非同期「設計メモ」。
 
-**残タスク（この PR スコープ外）**
-- **インフラ実配線の live smoke**: [setup-gcp.md](setup-gcp.md) の手順どおり queue / worker SA / IAP accessor / GitHub Variables・Secret を本番プロジェクトへ適用し、IAP 経由で 202 → poll → 200 を証跡化する（workflow・Dockerfile・ドキュメントは整備済み）。
+**本番実配線 / live smoke（完了 2026-06-02）**
+- Cloud Run revision `ai-ready-knowledge-hub-00033-vrw` へ反映。Cloud Tasks queue `context-package-jobs`、Worker SA、IAP accessor、IAP programmatic OAuth client allowlist、Secret Manager `context-package-job-token`、GitHub Variables を本番プロジェクトへ配線した。
+- IAP audience 付き Worker SA token で `POST /api/context-package` を呼び、job `8ce6a64b-54a5-4368-b7b6-866406c3d308` が **HTTP 202 `queued` → polling `running` → `succeeded` → result HTTP 200** を完走した。Cloud Tasks から worker `/run` への request も HTTP 200。
+- 初回応答は同期 smoke の `33.716634292s` から `1.295306353s` へ短縮（`32.421s`、約 `96%` 削減）。worker 実行は `19.652927793s`、polling で result 取得まで約 `22.5s`。生成時間自体はモデル応答で変動するため、主効果は UI の待機ブロック解消、retry、lease、冪等性。
+- `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true` を Docker build-arg で本番 client bundle に焼き込み、`mode:"auto"` と polling UI が含まれることを確認した。今回の最終 smoke は service-to-service IAP 境界の検証であり、human browser の手動操作は追加していない。
+
+**残タスク（R10 後続）**
 - **UI の docIds 導線**: Inventory から docId を選ぶ UX（手入力以外）。
 - **result GCS offload**: 大きい package を inline ではなく GCS + `resultRef` で返す（`result_too_large` 回避）。
 - **job GC / cancel**: 古い job の TTL 削除と `cancelled` 遷移の実配線。
@@ -274,7 +279,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 - `unmaskablePiiFindings` 閾値の fail-closed への切替判断（Masker 統合後、別 decision で起票）
 - ~~scan-pdf の `coverage.pageCoverage` / `locatorQuality.hasPageLocators` eval-shape~~ — **解消済み（2026-05-29）:** `pageEvidence.ts` が `imageText` locator / warning を page evidence として集計。health eval の scan-pdf fixture は `pageCoverage=1` / `hasPageLocators=true`。
 - ~~`ai_safe` PDF を含む Context Package export smoke（masked GCS body / masked chunks の採用確認）~~ — masked chunks 採用は確認済み（[phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）。
-- ~~Context Package endpoint の pre-LLM token/chunk budget~~ — **実装済み（2026-05-29）、live re-smoke 完了（2026-06-02）:** `budget.ts` + 422 `sync_budget_exceeded`。既定 `maxTotalPromptChars: 45_000`、全 Inventory `474 → 80` chunks / `394` drops、Cloud Run + IAP HTTP `200` / `33.716s` を確認。残: UI docIds 導線、非同期 job 化（R10、別 PR）。
+- ~~Context Package endpoint の pre-LLM token/chunk budget~~ — **実装済み（2026-05-29）、live re-smoke 完了（2026-06-02）:** `budget.ts` + 422 `sync_budget_exceeded`。既定 `maxTotalPromptChars: 45_000`、全 Inventory `474 → 80` chunks / `394` drops、Cloud Run + IAP HTTP `200` / `33.716s` を確認。~~非同期 job 化（R10）~~ も **本番配線 / live smoke 完了**。残: UI docIds 選択 UX。
 
 **M1 / M6 共通運用（確定・再議論しない）:**
 - 同一 tenant で複数の `pdf-conversion-subtype-*` flag を **同時 ON にしない**（`/api/documents` は 403）。本線 upload 上限は **5 MiB**（`MAX_UPLOAD_BYTES`）。PoC の 30 MB は runner 専用。subtype 3 追加後は 1+3 / 2+3 / 1+2+3 同時 ON も同様に拒否する（M6-2）。
@@ -291,7 +296,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 - **案 C（成熟度別 blocker 軸）への移行条件** — 案 B 試走後の再評価（現状維持）。
 - **feature flag 公開範囲拡大条件** — subtype 1 は dev tenant 限定のまま。subtype 2/3 は別 flag で再判断。
 - **`inferenceDestination`** — subtype 2/3 の Vertex 呼出時に `document.convert` へ必須（[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §4.2）。
-- ~~**Masker 本線統合（PDF 経路）**~~ — **完了**（`D-P3-M-PDF-1`、live smoke 証跡: [phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）。~~scan-pdf locator / coverage eval 見直し~~ — **解消済み**（`pageEvidence.ts`、health eval `pageCoverage=1` / `hasPageLocators=true`）。~~Context Package pre-LLM budget~~ — **実装済み・live re-smoke 完了**（`budget.ts`、strict docIds、422 `sync_budget_exceeded`、既定 `maxTotalPromptChars: 45_000`）。残: `safety_readiness` 本格評価、`unmaskablePiiFindings` 閾値再評価、UI docIds 導線、非同期 job 化（R10、別 PR）。
+- ~~**Masker 本線統合（PDF 経路）**~~ — **完了**（`D-P3-M-PDF-1`、live smoke 証跡: [phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）。~~scan-pdf locator / coverage eval 見直し~~ — **解消済み**（`pageEvidence.ts`、health eval `pageCoverage=1` / `hasPageLocators=true`）。~~Context Package pre-LLM budget~~ — **実装済み・live re-smoke 完了**（`budget.ts`、strict docIds、422 `sync_budget_exceeded`、既定 `maxTotalPromptChars: 45_000`）。~~非同期 job 化（R10）~~ — **本番配線 / live smoke 完了**。残: `safety_readiness` 本格評価、`unmaskablePiiFindings` 閾値再評価、UI docIds 選択 UX。
 
 ### 提供形態
 
