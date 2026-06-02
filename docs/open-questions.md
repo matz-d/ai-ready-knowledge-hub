@@ -48,6 +48,7 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
 - IAP audience 付き Worker SA token で `POST /api/context-package` を呼び、job `8ce6a64b-54a5-4368-b7b6-866406c3d308` が **HTTP 202 `queued` → polling `running` → `succeeded` → result HTTP 200** を完走した。Cloud Tasks から worker `/run` への request も HTTP 200。
 - 初回応答は同期 smoke の `33.716634292s` から `1.295306353s` へ短縮（`32.421s`、約 `96%` 削減）。worker 実行は `19.652927793s`、polling で result 取得まで約 `22.5s`。生成時間自体はモデル応答で変動するため、主効果は UI の待機ブロック解消、retry、lease、冪等性。
 - `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true` を Docker build-arg で本番 client bundle に焼き込み、`mode:"auto"` と polling UI が含まれることを確認した。今回の最終 smoke は service-to-service IAP 境界の検証であり、human browser の手動操作は追加していない。
+- **PR #14 merge 後 re-smoke（2026-06-03 JST）:** revision `ai-ready-knowledge-hub-00035-jwv` で job `8b84a2a1-48d2-4810-97e1-3501db79ac97` が HTTP `202` in `3.647s` → polling `running/succeeded` → result HTTP `200` を完走。worker `/run` は HTTP `200` in `19.677s`、queue pending task なし。service-to-service IAP token 発行用の一時 Token Creator binding は検証後に削除済み。詳細は [phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
 
 **残タスク（R10 後続）**
 - **UI の docIds 導線**: Inventory から docId を選ぶ UX（手入力以外）。

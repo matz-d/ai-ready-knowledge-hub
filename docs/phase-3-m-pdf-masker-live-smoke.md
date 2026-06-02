@@ -300,6 +300,33 @@ token を改行なしで version `2` へ rotate し、[setup-gcp.md](setup-gcp.m
 `tr -d '\n'` 付きへ修正した。smoke 用に一時付与した Token Creator 権限は検証後に
 削除済み。
 
+### PR #14 merge 後の非同期 job re-smoke（2026-06-03 JST）
+
+PR #14 merge 後の `main` deploy（GitHub Actions
+[`26828671520`](https://github.com/matz-d/ai-ready-knowledge-hub/actions/runs/26828671520)）
+で、review 反映済みの production revision を再確認した。
+
+| Item | Observed |
+| --- | --- |
+| Cloud Run revision | `ai-ready-knowledge-hub-00035-jwv` |
+| Target docId | `a74b9520-5442-4579-adb8-2781dae8999b` |
+| Job ID | `8b84a2a1-48d2-4810-97e1-3501db79ac97` |
+| Initial request | `POST /api/context-package` → HTTP `202` in `3.647037733s` |
+| Polling | `queued` → `running` → `succeeded` |
+| Worker request | `POST /api/context-package/jobs/:jobId/run` → HTTP `200` in `19.677252658s` |
+| Result request | `GET /api/context-package/jobs/:jobId/result` → HTTP `200` |
+| Queue after smoke | `context-package-jobs` pending task なし |
+
+service-to-service IAP token 発行のため active `gcloud` user に
+`roles/iam.serviceAccountTokenCreator` を project-level で一時付与し、smoke 後に削除した。
+project / Worker SA の Token Creator binding が空であることを再確認済み。
+
+本 re-smoke の Purpose は非同期疎通確認用で、Strategist は対象 `37` chunks をすべて
+`purpose_mismatch` で除外した。結果 markdown に raw `SYN-INV-2026-0501` が含まれない
+ことは確認したが、masked chunk 採用時の content contract は直前の
+[Context Package budget / strict `docIds` re-smoke](#context-package-budget--strict-docids-re-smoke2026-06-02)
+を正本証跡とする。
+
 ### scan-pdf eval locator / coverage
 
 **Smoke 時点（2026-05-29、本 doc 初版）** の conversion eval レコードは
