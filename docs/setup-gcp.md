@@ -303,6 +303,137 @@ GitHub Variable `CONTEXT_PACKAGE_JOB_TOKEN_SECRET` に secret 名を設定する
 
 `.github/workflows/actionlint.yml` は workflow ファイルを変更する PR、`main` push、手動実行で `rhysd/actionlint:1.7.12` を起動する。image 同梱の `shellcheck` も有効になるため、GitHub Actions YAML と `run:` 内 shell の基本的な静的検査を merge 前に行える。
 
+### 8. Context Package 非同期 production smoke
+
+`main` deploy 後に Cloud Tasks worker を含む production 経路を確認する手順。
+IAP audience 付き service-to-service token を発行するため、active `gcloud` user に
+`roles/iam.serviceAccountTokenCreator` を **project-level で一時付与**する。検証後は
+必ず削除する。通常運用でこの binding を残さない。
+
+`purpose` は疎通確認だけの文言ではなく、fixture と意味的に一致する
+`invoice billing masked only` を使う。これにより `202 → polling → result 200` に加え、
+masked chunk 採用と raw PII 不在も同じ smoke で確認できる。
+
+```bash
+set -euo pipefail
+
+PROJECT_ID="ai-ready-knowledge-hub"
+WORKER_SA="context-package-worker@${PROJECT_ID}.iam.gserviceaccount.com"
+ACTIVE_ACCOUNT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' | head -n 1)"
+MEMBER="user:${ACTIVE_ACCOUNT}"
+ROLE="roles/iam.serviceAccountTokenCreator"
+BASE_URL="$(gh variable get CONTEXT_PACKAGE_WORKER_BASE_URL --repo matz-d/ai-ready-knowledge-hub)"
+IAP_AUDIENCE="$(gh variable get CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE --repo matz-d/ai-ready-knowledge-hub)"
+DOC_ID="a74b9520-5442-4579-adb8-2781dae8999b"
+
+BODY_FILE="$(mktemp)"
+STATUS_FILE="$(mktemp)"
+TOKEN_FILE="$(mktemp)"
+ADDED_BINDING=0
+
+cleanup() {
+  rm -f "${BODY_FILE}" "${STATUS_FILE}" "${TOKEN_FILE}"
+  if [[ "${ADDED_BINDING}" == "1" ]]; then
+    gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+      --member="${MEMBER}" \
+      --role="${ROLE}" \
+      --quiet >/dev/null
+  fi
+}
+trap cleanup EXIT
+
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="${MEMBER}" \
+  --role="${ROLE}" \
+  --quiet >/dev/null
+ADDED_BINDING=1
+
+# IAM 反映には時間差があるため、token 発行を retry する。token 値は表示しない。
+TOKEN_READY=0
+for attempt in $(seq 1 24); do
+  if gcloud auth print-identity-token \
+      --impersonate-service-account="${WORKER_SA}" \
+      --audiences="${IAP_AUDIENCE}" \
+      --include-email >"${TOKEN_FILE}" 2>/dev/null; then
+    TOKEN_READY=1
+    break
+  fi
+  sleep 5
+done
+[[ "${TOKEN_READY}" == "1" ]]
+TOKEN="$(tr -d '\n' < "${TOKEN_FILE}")"
+
+HTTP_CODE="$(
+  curl --silent --show-error --location \
+    --output "${BODY_FILE}" \
+    --write-out '%{http_code}' \
+    --request POST "${BASE_URL}/api/context-package" \
+    --header "Authorization: Bearer ${TOKEN}" \
+    --header 'Content-Type: application/json' \
+    --data "{\"purpose\":\"invoice billing masked only\",\"docIds\":[\"${DOC_ID}\"],\"limit\":2,\"mode\":\"async\"}"
+)"
+[[ "${HTTP_CODE}" == "202" ]]
+
+STATUS_URL="$(jq -r '.statusUrl' "${BODY_FILE}")"
+RESULT_URL="$(jq -r '.resultUrl' "${BODY_FILE}")"
+
+for attempt in $(seq 1 60); do
+  sleep 3
+  curl --silent --show-error --location \
+    --output "${STATUS_FILE}" \
+    --header "Authorization: Bearer ${TOKEN}" \
+    "${BASE_URL}${STATUS_URL}"
+  STATUS="$(jq -r '.status' "${STATUS_FILE}")"
+  case "${STATUS}" in
+    succeeded) break ;;
+    failed|cancelled)
+      jq -c . "${STATUS_FILE}"
+      exit 1
+      ;;
+  esac
+done
+[[ "${STATUS}" == "succeeded" ]]
+
+RESULT_CODE="$(
+  curl --silent --show-error --location \
+    --output "${BODY_FILE}" \
+    --write-out '%{http_code}' \
+    --header "Authorization: Bearer ${TOKEN}" \
+    "${BASE_URL}${RESULT_URL}"
+)"
+[[ "${RESULT_CODE}" == "200" ]]
+
+MARKDOWN="$(jq -r '.markdown // ""' "${BODY_FILE}")"
+! rg -q 'SYN-INV-2026-0501' <<<"${MARKDOWN}"
+rg -q '\[REDACTED:' <<<"${MARKDOWN}"
+rg -q 'Confidential \(AI-safe via masking\)' <<<"${MARKDOWN}"
+```
+
+`trap` cleanup 後、binding と queue が空であることを確認する。
+
+```bash
+gcloud projects get-iam-policy ai-ready-knowledge-hub --format=json |
+  jq '{bindings: [.bindings[]? | select(.role == "roles/iam.serviceAccountTokenCreator")]}'
+
+gcloud iam service-accounts get-iam-policy \
+  context-package-worker@ai-ready-knowledge-hub.iam.gserviceaccount.com \
+  --project=ai-ready-knowledge-hub \
+  --format=json |
+  jq '{bindings: [.bindings[]? | select(.role == "roles/iam.serviceAccountTokenCreator")]}'
+
+gcloud tasks list \
+  --queue=context-package-jobs \
+  --location=asia-northeast1 \
+  --project=ai-ready-knowledge-hub \
+  --format='value(name)'
+```
+
+期待値:
+
+- project / Worker SA の Token Creator `bindings` は空。
+- queue pending task は空。
+- production の `CONTEXT_PACKAGE_JOB_TOKEN` は Secret Manager 参照のまま。smoke で値を読み出し・変更しない。
+
 ---
 
 ## Notes
