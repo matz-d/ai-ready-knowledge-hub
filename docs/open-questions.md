@@ -14,27 +14,31 @@
 - これにより browser/IAP fetch での無言 502 に寄る前に、説明可能な API 応答へ fail-fast させる。
 - **2026-06-02 re-smoke:** 既定 budget は `maxTotalPromptChars: 45_000` に調整済み。全 Inventory のローカル smoke は `474` candidates を `80` chunks に制限し、`394` drops を metadata に記録した。Cloud Run + IAP の docId 指定 smoke は HTTP `200` / `33.716s`、unknown docId は HTTP `400` で UI に詳細表示した。証跡は [phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
 
-**残る調整（未決ではないが優先作業）**
-- UI の docIds 導線 — Inventory から docId を選ぶ UX（手入力以外）
-- 非同期 job 化 — IAP 越し同期生成に `33.716s` を要したため、別 PR で下記 `202 Accepted` 案を扱う
+**非同期 job 化（実装済み 2026-06-02、Cloud Tasks → worker）**
 
-**次の判断ポイント（202 Accepted + 非同期 job 化へ進む条件）**
-1. `docIds`/`limit` で絞っても 422 が多発し、業務上「1 回で広い母集団を処理したい」要求が継続する。
-2. IAP 越しの実測で 20 秒目標を安定達成できず、同期 UX のリトライ負荷が高い。
-3. Context Package 生成をバックグラウンド実行し、UI からポーリング/通知した方が運用負荷を下げられる。
+IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を受け、`202 Accepted` + Firestore job + Cloud Tasks worker を実装した。設計は当初の「将来案」をほぼそのまま採用。
 
-**将来案（設計メモ）**
-- Firestore に `context_package_jobs` collection を追加し、`POST /api/context-package` は重い入力に対して `202 Accepted` + `jobId` を返す。
-- `context_package_jobs/{jobId}` の最小項目案:
-  - `status`: `queued | running | succeeded | failed | cancelled`
-  - `request`: `purpose`, `limit`, `docIds`, caller tenant/user
-  - `progress`: `sourceDocumentsReviewed`, `safeChunks`, `budgetReport`
-  - `resultRef`: 生成済み Context Package payload 参照（または GCS path）
-  - `error`: failure code/message（再実行可否の判定材料）
-- 別エンドポイント案:
-  - `POST /api/context-package`（同期 or 202 判定）
-  - `GET /api/context-package/jobs/:jobId`（状態取得）
-  - `GET /api/context-package/jobs/:jobId/result`（完了後 payload 取得）
+- **Firestore `context_package_jobs` collection**（`src/lib/contextPackageJobs/`）。状態遷移は一方向 `queued → running → succeeded | failed`（+ `cancelled` 予約）。`running` への昇格はトランザクションで「現状 `queued` のときだけ」許可し、Cloud Tasks リトライによる worker 二重実行を冪等に吸収する（`claimContextPackageJob`）。
+- **`POST /api/context-package` に `mode` を追加**（`sync` 既定 / `async` / `auto`）:
+  - `sync`: 従来どおり同期実行。budget 超過は **422 `sync_budget_exceeded`** で fail-fast（後方互換）。
+  - `async`: 同期実行せず即 job 化、**202** + `jobId` / `statusUrl` / `resultUrl`。
+  - `auto`: まず同期を試し、budget 超過時に 422 ではなく **202 job 化へフォールバック**（`reason: sync_budget_exceeded`）。
+  - フォールバック方針は `shouldFallbackToAsync()`（route）に集約。製品判断で変更しやすくしてある。
+- **エンドポイント**:
+  - `POST /api/context-package`（sync 200 / async・auto 202 / 既存 4xx を維持）
+  - `POST /api/context-package/jobs/:jobId/run`（**Cloud Tasks worker**。共有シークレット `X-Context-Package-Job-Token` で多層防御、本番は OIDC 前提）
+  - `GET /api/context-package/jobs/:jobId`（status / progress / error）
+  - `GET /api/context-package/jobs/:jobId/result`（完了後 payload。同期レスポンスと同型）
+- **worker 実行**（`runJob.ts`）は orchestrator を `enforceSyncBudget:false` で実行（pre-LLM budget は引き続き有効、20 秒ゲートのみ外す）。成功時は同期経路と同型の `document.export` 監査も記録。
+- **result 保存**は当面 job doc に inline（`ContextPackageJobResult`）。Firestore 1MB 上限に対し `MAX_INLINE_RESULT_BYTES = 900_000` でサイズガードし、超過時は `result_too_large` で fail（GCS offload は後続）。
+- **必要な環境変数（worker 経路）**: `GOOGLE_CLOUD_PROJECT` / `CONTEXT_PACKAGE_TASKS_LOCATION`（既定 `GOOGLE_CLOUD_LOCATION`）/ `CONTEXT_PACKAGE_TASKS_QUEUE` / `CONTEXT_PACKAGE_WORKER_BASE_URL` / `CONTEXT_PACKAGE_WORKER_SA_EMAIL` / （任意）`CONTEXT_PACKAGE_JOB_TOKEN`。未設定時は enqueue が **503 `job_queue_unavailable`** で「同期で絞るか queue 設定を確認」を促す。
+
+**残タスク（この PR スコープ外）**
+- **インフラ配線**: Cloud Tasks queue / worker 用 service account / IAP バイパスまたは OIDC→IAP の実配線と dev tenant live smoke。
+- **UI**: job 化レスポンス（202）のポーリング導線（status バッジ + 完了時 result 取得）。`ContextPackageForm` は現状同期前提。
+- **UI の docIds 導線**: Inventory から docId を選ぶ UX（手入力以外）。
+- **result GCS offload**: 大きい package を inline ではなく GCS + `resultRef` で返す（`result_too_large` 回避）。
+- **job GC / cancel**: 古い job の TTL 削除と `cancelled` 遷移の実配線。
 
 ---
 

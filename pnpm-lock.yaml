@@ -23,6 +23,9 @@ importers:
       '@google-cloud/storage':
         specifier: ^7.18.0
         version: 7.19.0
+      '@google-cloud/tasks':
+        specifier: ^6.2.2
+        version: 6.2.2
       '@napi-rs/canvas':
         specifier: 0.1.80
         version: 0.1.80
@@ -502,6 +505,10 @@ packages:
   '@google-cloud/storage@7.19.0':
     resolution: {integrity: sha512-n2FjE7NAOYyshogdc7KQOl/VZb4sneqPjWouSyia9CMDdMhRX5+RIbqalNmC7LOLzuLAN89VlF2HvG8na9G+zQ==}
     engines: {node: '>=14'}
+
+  '@google-cloud/tasks@6.2.2':
+    resolution: {integrity: sha512-+46keXiEGsAjLwXmNf60zba5mi5Y6gTJg5pN/EBM/NL5MHWSpjtmjBFz45J3aLfvUFc44td0DzOGmNXPwStRdA==}
+    engines: {node: '>=18'}
 
   '@grpc/grpc-js@1.14.3':
     resolution: {integrity: sha512-Iq8QQQ/7X3Sac15oB6p0FmUg/klxQvXLeileoqrTRGJYLV+/9tubbr9ipz0GKHjmXVsgFPo/+W+2cA8eNcR+XA==}
@@ -4550,6 +4557,12 @@ snapshots:
       uuid: 8.3.2
     transitivePeerDependencies:
       - encoding
+      - supports-color
+
+  '@google-cloud/tasks@6.2.2':
+    dependencies:
+      google-gax: 5.0.6
+    transitivePeerDependencies:
       - supports-color
 
   '@grpc/grpc-js@1.14.3':

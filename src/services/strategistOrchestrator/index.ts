@@ -1,4 +1,6 @@
 export { buildStrategistContextPackage } from './toContextPackage';
+export { buildContextPackageResponsePayload } from './contextPackagePayload';
+export { contextPackageAuditTarget } from './auditTarget';
 export {
   NoInventoryDocumentsError,
   NoKnowledgeChunksError,
