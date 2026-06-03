@@ -96,6 +96,25 @@ Masker の `recommendedSensitivity === 'Restricted'` を文書メタデータへ
 - `src/agents/strategist/types.ts` … 将来の Strategist 戻り値の型スタブ
 - 検証: `npm run context:demo`（CLI）、トップ画面の W1 適用デモ（Firestore ライブ同期ではない）
 
+### Phase 4-UX: Purpose-Driven Candidate Selection（2026-06-03 追加）
+
+docId 手入力を主導線から外し、purpose だけで候補文書を提示する前段。**metadata-only の助言レイヤ**であり、本文・LLM・GCS は読まない。
+
+```
+User → purpose 入力
+    → POST /api/context-package/candidates
+        → listInventoryDocumentsFromFirestore(inventoryLimit)
+        → selectCandidates(purpose, docs, { responseLimit })
+            → classifyInventory → generateMissingHints → slice
+    → UI: include/exclude/needs_review 候補 + missingHints
+    → User が docIds を選択
+    → POST /api/context-package（既存生成経路 → safetyGate → Strategist）
+```
+
+- **API 契約正本**: [docs/phase-4-ux-direction.md §候補 API 契約](phase-4-ux-direction.md)（request/response 型・status code・UI 既定動作）
+- **決定正本**: [docs/decisions.md](decisions.md) `D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2`
+- **実装**: `src/services/candidateSelection/`（S1 純関数）, `src/app/api/context-package/candidates/route.ts`（S2 API）
+
 ### W2 MVP: Firestore `documents/{docId}` と GCS レイアウト
 
 正本仕様は [docs/firestore-schema.md](firestore-schema.md)。本セクションでは要点だけ示す。
@@ -488,6 +507,7 @@ MVP評価対象:
 
 ## 関連ドキュメント
 
+- [docs/phase-4-ux-direction.md](phase-4-ux-direction.md) — Phase 4-UX 候補 API 契約・作業分配（`D-P4UX-*`）
 - [docs/tech-stack.md](tech-stack.md) — 個別技術の詳細
 - [docs/decisions.md](decisions.md) — なぜこの構成か
 - [docs/concept.md](concept.md) — エージェント設計の背景

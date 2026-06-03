@@ -1,6 +1,21 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CandidateSelectionList } from './CandidateSelectionList';
+import { PreGenerationPreviewPanel } from './PreGenerationPreviewPanel';
+import { SafetyReviewPanel } from './SafetyReviewPanel';
+import {
+  previewRequiresAcknowledgement,
+  projectPreGenerationPreview,
+} from './preGenerationPreview';
+import {
+  canGenerateContextPackage,
+  defaultSelectedDocIds,
+  isCandidatesStale,
+  resolveDocIdsForGeneration,
+  type CandidateRow,
+  type CandidatesApiResponse,
+} from './candidateSelectionUi';
 
 const MAX_PURPOSE = 2000;
 
@@ -88,6 +103,7 @@ type DocIdsErrorDetails = {
 
 type ApiErrorResponse = {
   error?: string;
+  code?: string;
   details?: unknown;
   recommendation?: {
     hint?: string;
@@ -96,6 +112,8 @@ type ApiErrorResponse = {
 };
 
 type UiState = 'idle' | 'loading' | 'polling' | 'done' | 'error';
+
+type CandidatesFetchState = 'idle' | 'loading' | 'ready' | 'error';
 
 export function parseDocIds(raw: string): string[] {
   return [...new Set(raw.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean))];
@@ -109,7 +127,6 @@ function downloadMarkdown(markdown: string, purpose: string) {
   a.href = url;
   a.download = `context-package_${slug}.md`;
   a.click();
-  // 一部ブラウザで click() 直後に revoke すると download が取り消されることがあるため遅延する。
   setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
@@ -117,15 +134,22 @@ export function ContextPackageForm() {
   const [purpose, setPurpose] = useState('');
   const [docIdsRaw, setDocIdsRaw] = useState('');
   const [uiState, setUiState] = useState<UiState>('idle');
+  const [candidatesFetchState, setCandidatesFetchState] =
+    useState<CandidatesFetchState>('idle');
+  const [candidatesPurpose, setCandidatesPurpose] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<CandidateRow[]>([]);
+  const [missingHints, setMissingHints] = useState<string[]>([]);
+  const [inventoryScanned, setInventoryScanned] = useState(0);
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(() => new Set());
+  const [candidatesError, setCandidatesError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [docIdsErrorDetails, setDocIdsErrorDetails] = useState<DocIdsErrorDetails | null>(null);
   const [suggestedDocIds, setSuggestedDocIds] = useState<string[] | null>(null);
   const [result, setResult] = useState<ContextPackageResult | null>(null);
   const [jobStatus, setJobStatus] = useState<JobLifecycleStatus | null>(null);
   const [jobNote, setJobNote] = useState<string | null>(null);
+  const [previewAcknowledged, setPreviewAcknowledged] = useState(false);
 
-  // 進行中ポーリングのキャンセル用。新規送信 / アンマウントで前の job を止める。
-  // state はクロージャに古い値が残るため、継続判定は ref の最新値で行う。
   const activeJobRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -135,21 +159,134 @@ export function ContextPackageForm() {
   }, []);
 
   const isBusy = uiState === 'loading' || uiState === 'polling';
+  const isFetchingCandidates = candidatesFetchState === 'loading';
+  const isFormDisabled = isBusy || isFetchingCandidates;
   const remaining = MAX_PURPOSE - purpose.length;
+  const candidatesStale = isCandidatesStale(purpose, candidatesPurpose);
+  const candidatesReady = candidatesFetchState === 'ready' && !candidatesStale;
+  const docIdsForGeneration = useMemo(
+    () => resolveDocIdsForGeneration(docIdsRaw, selectedDocIds, parseDocIds),
+    [docIdsRaw, selectedDocIds],
+  );
+  const selectedDocIdsForGeneration = useMemo(
+    () => new Set(docIdsForGeneration),
+    [docIdsForGeneration],
+  );
+  const preGenerationPreview = useMemo(() => {
+    if (!candidatesReady) return null;
+    return projectPreGenerationPreview(candidates, selectedDocIdsForGeneration);
+  }, [candidates, candidatesReady, selectedDocIdsForGeneration]);
+  const previewNeedsAck =
+    preGenerationPreview !== null &&
+    previewRequiresAcknowledgement(preGenerationPreview);
+  const generateEnabled =
+    canGenerateContextPackage({
+      purpose,
+      candidatesReady,
+      candidatesStale,
+      isBusy,
+      isFetchingCandidates,
+      docIds: docIdsForGeneration,
+    }) &&
+    (preGenerationPreview === null ||
+      !previewRequiresAcknowledgement(preGenerationPreview) ||
+      previewAcknowledged);
+
+  const invalidateCandidates = () => {
+    setCandidatesFetchState('idle');
+    setCandidates([]);
+    setMissingHints([]);
+    setInventoryScanned(0);
+    setSelectedDocIds(new Set());
+    setCandidatesPurpose(null);
+    setCandidatesError(null);
+    setPreviewAcknowledged(false);
+  };
+
+  const handlePurposeChange = (value: string) => {
+    setPurpose(value);
+    if (candidatesPurpose !== null && value.trim() !== candidatesPurpose) {
+      invalidateCandidates();
+      setResult(null);
+      setUiState('idle');
+      setErrorMessage(null);
+      setDocIdsErrorDetails(null);
+      setSuggestedDocIds(null);
+    }
+  };
 
   const applyDocIdSuggestion = (ids: string[]) => {
     setDocIdsRaw(ids.join('\n'));
     setSuggestedDocIds(null);
     setErrorMessage(null);
     setDocIdsErrorDetails(null);
+    setPreviewAcknowledged(false);
     setUiState('idle');
   };
 
-  /**
-   * 202 で受け取った job を status URL で数秒間隔にポーリングし、succeeded なら
-   * result URL を取得して既存の結果 UI に流す。failed / timeout はエラー表示。
-   * activeJobRef が別 jobId に変わったら（新規送信・離脱）静かに中断する。
-   */
+  const handleToggleCandidate = (docId: string, checked: boolean) => {
+    setPreviewAcknowledged(false);
+    setSelectedDocIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(docId);
+      else next.delete(docId);
+      return next;
+    });
+  };
+
+  const fetchCandidates = async () => {
+    const trimmed = purpose.trim();
+    if (!trimmed) return;
+
+    setCandidatesError(null);
+    setCandidatesFetchState('loading');
+    setErrorMessage(null);
+
+    try {
+      const res = await fetch('/api/context-package/candidates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purpose: trimmed }),
+      });
+
+      if (!res.ok) {
+        let message = '候補の取得に失敗しました。';
+        try {
+          const body = (await res.json()) as ApiErrorResponse;
+          if (res.status === 400 && body.code === 'invalid_request') {
+            message =
+              typeof body.details === 'string'
+                ? `入力エラー: ${body.details}`
+                : '入力内容を確認してください。';
+          } else if (res.status === 409 && body.code === 'no_inventory_documents') {
+            message =
+              '先に Inventory を取り込んでください（/upload または /import/google-sheets からドキュメントをインポートしてください）。';
+          } else if (res.status === 502) {
+            message =
+              'サーバーエラーが発生しました。しばらくしてから再試行してください。';
+          }
+        } catch {
+          /* ignore JSON parse */
+        }
+        setCandidatesError(message);
+        setCandidatesFetchState('error');
+        return;
+      }
+
+      const data = (await res.json()) as CandidatesApiResponse;
+      setCandidates(data.candidates);
+      setMissingHints(data.missingHints);
+      setInventoryScanned(data.inventoryScanned);
+      setSelectedDocIds(new Set(defaultSelectedDocIds(data.candidates)));
+      setCandidatesPurpose(trimmed);
+      setCandidatesFetchState('ready');
+      setPreviewAcknowledged(false);
+    } catch {
+      setCandidatesError('ネットワークエラーが発生しました。');
+      setCandidatesFetchState('error');
+    }
+  };
+
   const pollJob = async (accepted: JobAcceptedResponse) => {
     activeJobRef.current = accepted.jobId;
     setUiState('polling');
@@ -168,7 +305,7 @@ export function ContextPackageForm() {
 
       if (Date.now() > deadline) {
         setErrorMessage(
-          '生成がタイムアウトしました。対象 Doc IDs を絞って再試行してください。',
+          '生成がタイムアウトしました。対象文書を絞って再試行してください。',
         );
         setUiState('error');
         return;
@@ -178,7 +315,7 @@ export function ContextPackageForm() {
       try {
         statusRes = await fetch(accepted.statusUrl);
       } catch {
-        continue; // 一時的なネットワーク失敗は次の間隔で再試行する。
+        continue;
       }
       if (activeJobRef.current !== accepted.jobId) return;
       if (!statusRes.ok) continue;
@@ -207,13 +344,14 @@ export function ContextPackageForm() {
         setUiState('error');
         return;
       }
-      // queued / running は継続。
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    activeJobRef.current = null; // 進行中ポーリングがあれば止める。
+    if (!generateEnabled) return;
+
+    activeJobRef.current = null;
     setErrorMessage(null);
     setDocIdsErrorDetails(null);
     setSuggestedDocIds(null);
@@ -222,21 +360,19 @@ export function ContextPackageForm() {
     setJobNote(null);
     setUiState('loading');
 
-    const docIds = parseDocIds(docIdsRaw);
+    const docIds = docIdsForGeneration;
 
     try {
       const res = await fetch('/api/context-package', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          purpose,
-          ...(docIds.length > 0 ? { docIds } : {}),
-          // queue 配線済み環境でだけ auto を送る。未配線では同期（既定）のまま。
+          purpose: purpose.trim(),
+          docIds,
           ...(ASYNC_ENABLED ? { mode: 'auto' } : {}),
         }),
       });
 
-      // 202: バックグラウンド job 化。status をポーリングして結果を取りに行く。
       if (res.status === 202) {
         const accepted = (await res.json()) as JobAcceptedResponse;
         await pollJob(accepted);
@@ -329,39 +465,41 @@ export function ContextPackageForm() {
           className="cp-textarea"
           name="purpose"
           value={purpose}
-          onChange={(e) => setPurpose(e.target.value)}
-          disabled={isBusy}
+          onChange={(e) => handlePurposeChange(e.target.value)}
+          disabled={isFormDisabled}
           maxLength={MAX_PURPOSE}
           rows={5}
-          placeholder="例: 新入社員向けオンボーディング資料を NotebookLM に渡して Q&A できるようにしたい"
+          placeholder="例: 新入社員向けに給与計算業務を学べる AI を作りたい"
           required
-        />
-
-        <div className="cp-label-row" style={{ marginTop: '1rem' }}>
-          <label className="cp-label__text" htmlFor="cp-doc-ids">
-            対象 Doc IDs（任意）
-          </label>
-          <span className="cp-char-count">
-            改行またはカンマ区切り・最大 20 件
-          </span>
-        </div>
-        <textarea
-          id="cp-doc-ids"
-          className="cp-textarea"
-          name="docIds"
-          value={docIdsRaw}
-          onChange={(e) => setDocIdsRaw(e.target.value)}
-          disabled={isBusy}
-          rows={3}
-          placeholder={"例:\na74b9520-5442-4579-adb8-2781dae8999b\nb3e21f04-..."}
-          spellCheck={false}
         />
 
         <div className="cp-form-footer">
           <button
+            type="button"
+            className="cp-secondary"
+            onClick={() => void fetchCandidates()}
+            disabled={isFormDisabled || purpose.trim().length === 0}
+          >
+            {isFetchingCandidates ? (
+              <>
+                <span className="cp-spinner cp-spinner--dark" aria-hidden="true" />
+                候補を取得中…
+              </>
+            ) : (
+              '候補を表示'
+            )}
+          </button>
+          <button
             type="submit"
             className="cp-submit"
-            disabled={isBusy || purpose.trim().length === 0}
+            disabled={!generateEnabled}
+            title={
+              !candidatesReady
+                ? '先に「候補を表示」で文書を選んでください'
+                : previewNeedsAck && !previewAcknowledged
+                  ? 'プレビューを確認し、チェックを入れてください'
+                  : undefined
+            }
           >
             {isBusy ? (
               <>
@@ -373,6 +511,68 @@ export function ContextPackageForm() {
             )}
           </button>
         </div>
+
+        {candidatesError ? (
+          <div className="cp-candidates-error" role="alert">
+            {candidatesError}
+          </div>
+        ) : null}
+
+        {candidatesStale ? (
+          <p className="cp-stale-hint" role="status">
+            Purpose が変更されました。「候補を表示」を押してから生成してください。
+          </p>
+        ) : null}
+
+        {candidatesReady ? (
+          <>
+            <SafetyReviewPanel
+              candidates={candidates}
+              missingHints={missingHints}
+              selectedDocIds={selectedDocIdsForGeneration}
+            />
+            <CandidateSelectionList
+              candidates={candidates}
+              inventoryScanned={inventoryScanned}
+              selectedDocIds={selectedDocIds}
+              onToggle={handleToggleCandidate}
+              disabled={isFormDisabled}
+            />
+          </>
+        ) : null}
+
+        <details className="cp-advanced">
+          <summary className="cp-advanced-summary">
+            上級者向け: Doc ID を直接指定
+          </summary>
+          <p className="cp-advanced-hint">
+            入力がある場合はチェックボックス選択より優先して生成します（改行またはカンマ区切り・最大
+            20 件）。
+          </p>
+          <textarea
+            id="cp-doc-ids"
+            className="cp-textarea"
+            name="docIds"
+            value={docIdsRaw}
+            onChange={(e) => {
+              setDocIdsRaw(e.target.value);
+              setPreviewAcknowledged(false);
+            }}
+            disabled={isFormDisabled}
+            rows={3}
+            placeholder={'例:\ndoc-abc123\ndoc-def456'}
+            spellCheck={false}
+            aria-label="対象 Doc IDs（上級者向け）"
+          />
+        </details>
+
+        {preGenerationPreview ? (
+          <PreGenerationPreviewPanel
+            preview={preGenerationPreview}
+            acknowledged={previewAcknowledged}
+            onAcknowledgedChange={setPreviewAcknowledged}
+          />
+        ) : null}
       </form>
 
       {uiState === 'polling' ? (
@@ -401,7 +601,9 @@ export function ContextPackageForm() {
                   <p className="cp-docids-error-label">存在しない docId:</p>
                   <ul className="cp-docids-error-list">
                     {docIdsErrorDetails.unknownDocIds.map((id) => (
-                      <li key={id}><code>{id}</code></li>
+                      <li key={id}>
+                        <code>{id}</code>
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -411,7 +613,9 @@ export function ContextPackageForm() {
                   <p className="cp-docids-error-label">処理中の docId:</p>
                   <ul className="cp-docids-error-list">
                     {docIdsErrorDetails.nonTerminalDocIds.map(({ docId, status }) => (
-                      <li key={docId}><code>{docId}</code> — {status}</li>
+                      <li key={docId}>
+                        <code>{docId}</code> — {status}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -423,7 +627,9 @@ export function ContextPackageForm() {
               <p className="cp-docids-error-label">推奨 docIds（budget 内に収まるセット）:</p>
               <ul className="cp-docids-error-list">
                 {suggestedDocIds.map((id) => (
-                  <li key={id}><code>{id}</code></li>
+                  <li key={id}>
+                    <code>{id}</code>
+                  </li>
                 ))}
               </ul>
               <button

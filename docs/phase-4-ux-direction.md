@@ -1,7 +1,7 @@
 # Phase 4-UX: Purpose-Driven Context Package Selection — 方針 / 作業分配（正本）
 
 **日付**: 2026-06-03
-**状態**: 計画確定（S0 決定済み）／実装未着手
+**状態**: S1–S7（Phase 4-UX MVP 機能）実装済み／S9 / S10 未着手
 **正本ポリシー**: 本フェーズの命名・スコープ・分類規則・セキュリティ境界の決定は [docs/decisions.md](decisions.md) `D-P4UX-0` を正とする。本書は作業分配と実装者向け指示文の正本。製品定義そのものはリポジトリ直下 `CLAUDE.md` を正とする。
 
 > **命名注意**: `docs/decisions.md` 既存の「Phase 4」は *マルチテナント商用化 / BigQuery write-once audit* を指す（行 971, 1164, 1395 ほか）。本フェーズはそれとは別物であり、UX 改善フェーズとして **Phase 4-UX** と呼ぶ。旧「Phase 4（商用化）」の参照は壊さず温存する。
@@ -72,34 +72,177 @@
 ### S0. 製品判断・命名確定（前提ゲート）— **確定済み**
 S0 の4決定は上表（`D-P4UX-0`）で確定。以降の作業はこれを前提とする。
 
-### 候補レスポンス型（S1/S2/S3 共通の正本）
+### 候補 API 契約（S1/S2/S3 共通の正本 — UI 実装者向け単一情報源）
+
+> **正本ポリシー**: 本節が `POST /api/context-package/candidates` の request/response 型・status code・reasonCode・UI 既定動作の**唯一の正本**。製品判断（命名・二層構造・分類規則）は [docs/decisions.md](decisions.md) `D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2`。TypeScript 型の実装正本は `src/services/candidateSelection/types.ts`。API ルートは `src/app/api/context-package/candidates/route.ts`。
+>
+> S5/S6/S7（UI）は本契約のみに依存して並行着手できる。本文・`aiSafeContent`・`maskedText`・chunk は**絶対にレスポンスに含めない**。
+
+#### TypeScript 型（UI / API 共通）
 
 ```ts
+// 実装 import 例（フロント / テスト）:
+// import type { CandidateDoc, CandidateRecommendation } from '@/services/candidateSelection';
+
 type CandidateRecommendation = 'include' | 'exclude' | 'needs_review';
 
 type CandidateDoc = {
   docId: string;
   fileName: string;
-  documentType: DocumentType;
-  businessDomain: BusinessDomain;
-  sensitivity: Sensitivity;
-  freshness: Freshness;
+  documentType: DocumentType;       // src/agents/curator/schema.ts（日本語 enum 正本）
+  businessDomain: BusinessDomain;   // 同上
+  sensitivity: Sensitivity;         // 同上
+  freshness: Freshness;             // 同上
   isAuthoritativeCandidate: boolean;
-  status: DocumentLifecycleStatus;  // curated | ai_safe | blocked | restricted
-  updatedAt?: string;
-  score: number;                    // deterministic 関連度
+  status: DocumentLifecycleStatus;  // curated | ai_safe | blocked | restricted | …
+  updatedAt?: string;               // ISO 8601
+  score: number;                    // deterministic raw relevance score（降順ソート済み）
   recommendation: CandidateRecommendation;
   // 除外/確認の理由のみ taxonomy を使う。include には付けない。
   reasonCode?: ExclusionReason;     // ExclusionReasonEnum（増やさない）
-  reasonLabel?: string;             // ExclusionReasonLabels 由来
-  reasonDetail?: string;
+  reasonLabel?: string;             // ExclusionReasonLabels 由来（UI 表示用）
+  reasonDetail?: string;            // 補足説明（任意。UI は reasonLabel の次に表示可）
   // include 側の説明は別名で（enum を汚さない）
   matchReason?: string;
-  scoreBreakdown?: Record<string, number>;
+  scoreBreakdown?: Record<string, number>;  // 例: { fileName, businessDomain, documentType, freshness, authoritative, recency }
 };
 
-// 本文 / aiSafeContent / maskedText は一切含めない（説明はするが中身は渡さない）
+type CandidatesResponse = {
+  candidates: CandidateDoc[];
+  missingHints: string[];           // purpose 領域で足りない情報のヒント（0 件可）
+  inventoryScanned: number;         // Firestore から読んだ件数（= inventoryLimit 以下）
+};
+
+// レスポンスに含めてはいけないフィールド（テストでも assert する）:
+// aiSafeContent, maskedText, rationale, body, chunks, content
 ```
+
+### リクエスト（`POST /api/context-package/candidates`）
+
+```jsonc
+// POST /api/context-package/candidates
+{
+  "purpose": "新人スタッフ向けに給与計算業務を学べるAIを作りたい",
+  "inventoryLimit": 300,   // optional, default 300, max 500
+  "responseLimit": 50      // optional, default 50,  max 100
+}
+```
+
+- `inventoryLimit` と `responseLimit` の**2系統分離**が設計の肝。`inventoryLimit` は Firestore から読む件数（全 Inventory を見る）、`responseLimit` は score 降順でトリミングした後に UI へ返す件数。「最近 100 件だけ」といった実装を防ぐ。
+
+### レスポンス（200 OK）
+
+```jsonc
+{
+  "candidates": [
+    {
+      "docId": "doc-abc123",
+      "fileName": "給与計算チェックリスト.csv",
+      "documentType": "表",
+      "businessDomain": "給与計算",
+      "sensitivity": "Internal",
+      "freshness": "current",
+      "isAuthoritativeCandidate": true,
+      "status": "curated",
+      "updatedAt": "2026-05-20T10:00:00Z",
+      "score": 13.8,
+      "recommendation": "include",
+      "matchReason": "給与計算に関連する現行版の正本候補",
+      "scoreBreakdown": {
+        "fileName": 3,
+        "businessDomain": 4,
+        "documentType": 0,
+        "freshness": 3,
+        "authoritative": 2,
+        "recency": 1.8
+      }
+    },
+    {
+      "docId": "doc-def456",
+      "fileName": "顧問契約書_実案件.pdf",
+      "documentType": "契約書",
+      "businessDomain": "契約管理",
+      "sensitivity": "Restricted",
+      "freshness": "current",
+      "isAuthoritativeCandidate": true,
+      "status": "restricted",
+      "score": 0,
+      "recommendation": "exclude",
+      "reasonCode": "restricted_sensitivity",
+      "reasonLabel": "Restricted 情報"
+    },
+    {
+      "docId": "doc-ghi789",
+      "fileName": "給与計算マニュアル_旧版.pdf",
+      "documentType": "マニュアル",
+      "businessDomain": "給与計算",
+      "sensitivity": "Internal",
+      "freshness": "superseded_candidate",
+      "isAuthoritativeCandidate": false,
+      "status": "curated",
+      "score": 7.4,
+      "recommendation": "needs_review",
+      "reasonCode": "superseded_or_stale",
+      "reasonLabel": "古い／上書き候補"
+    }
+  ],
+  "missingHints": ["給与計算領域に現行版の正本候補文書がありません"],
+  "inventoryScanned": 47
+}
+```
+
+本文 / `aiSafeContent` / `maskedText` は**絶対に含めない**。
+
+### status codes
+
+| HTTP | body `code` | 説明 |
+|---|---|---|
+| 200 | ― | `CandidatesResponse` を返却（`candidates` が空配列も 200） |
+| 400 | `invalid_request` | JSON パース失敗または Zod 検証失敗 |
+| 409 | `no_inventory_documents` | Inventory に文書が 0 件 |
+| 502 | `upstream_failure` | Firestore 読み取り等の upstream 失敗 |
+
+#### エラーレスポンス body
+
+```jsonc
+// 400 — JSON パース失敗
+{ "code": "invalid_request", "details": "JSON body を送信してください。" }
+
+// 400 — Zod 検証失敗（例: purpose 空、limit 範囲外）
+{ "code": "invalid_request", "details": [ /* zod issue 配列 */ ] }
+
+// 409 — Inventory 空
+{ "code": "no_inventory_documents" }
+
+// 502 — upstream 失敗
+{ "code": "upstream_failure" }
+```
+
+### reasonCode → reasonLabel 対応表（`ExclusionReasonLabels` 由来）
+
+候補 API が使用できる `reasonCode` は `ExclusionReasonEnum` の全7値（`src/agents/strategist/schema.ts` 正本）。候補段階で**実際に付与される**のは下表の4値のみ。`purpose_mismatch` / `insufficient_evidence_quality` は deterministic ランキングではスコア低下で表現し、`reasonCode` には載せない。
+
+| reasonCode | reasonLabel | origin | 候補 API での用途 |
+|---|---|---|---|
+| `restricted_sensitivity` | Restricted 情報 | safety_gate | `isBlockedForAi` → `exclude` |
+| `masking_required_unavailable` | マスク済み版なし | safety_gate | `needsMaskerEvaluation` / `maskingPending` → `needs_review` |
+| `superseded_or_stale` | 古い／上書き候補 | strategist | `freshness === 'superseded_candidate'` → `needs_review` |
+| `human_confirmation_required` | 人間確認が必要 | strategist | 上記非該当かつ `status ∉ {curated, ai_safe}`（処理中・失敗等）→ `needs_review` |
+| `cross_customer_confidentiality` | 他顧客・第三者の機密 | safety_gate | 将来拡張（現時点では `isBlockedForAi` が包含） |
+| `purpose_mismatch` | 目的不一致 | strategist | **非使用** |
+| `insufficient_evidence_quality` | 根拠品質不足 | strategist | **非使用** |
+
+### UI 実装者向け既定動作（S5/S6 前提）
+
+| `recommendation` | チェックボックス | 表示フィールド | 生成への docId 渡し |
+|---|---|---|---|
+| `include` | **既定 ON**（ユーザーが OFF 可） | `matchReason`, `scoreBreakdown?`, メタバッジ | 選択 ON の docId のみ |
+| `exclude` | **選択不可（disabled）** | `reasonLabel`（+ `reasonDetail?`） | 渡さない |
+| `needs_review` | **既定 OFF**（ユーザーが ON 可） | `reasonLabel`（+ `reasonDetail?`） | 明示 ON の docId のみ |
+
+- `missingHints` は候補リストとは別枠で表示（S6 Safety Review Panel）。
+- purpose を変更したら `candidates` / 選択 docIds / preview を **invalidate** し、再取得完了まで生成ボタンを無効化（stale candidates で生成させない）。
+- 候補取得後の生成は既存 `POST /api/context-package` に `{ purpose, docIds: string[] }` を渡す（docId 手入力は上級者向け折りたたみに退避）。
 
 ### S1 metadata-only 分類ルール（優先順）
 
@@ -111,60 +254,75 @@ type CandidateDoc = {
                                                         → reasonCode 'superseded_or_stale'（既定 unchecked）
 4. include       : status ∈ {curated, ai_safe} かつ 上記非該当 かつ score >= 閾値
                                                         → matchReason / scoreBreakdown を付与
+5. needs_review  : 上記いずれにも該当しない（処理中 status 等）
+                                                        → reasonCode 'human_confirmation_required'
 ※ aiSafeContent の有無は候補段階で確認しない（権威ある本文ゲートは生成経路の safetyGate に委ねる）
 ```
 
 ---
 
-### S1. 候補ランキング & 分類コアモジュール（M1 中核）
+### S1. 候補ランキング & 分類コアモジュール（M1 中核）— **実装済み**
 - **目的**: purpose と `InventoryDocument[]` から、決定論的に score・recommendation・reasonCode/Label・missingHints を出す純関数群。LLM・chunk・GCS・aiSafeContent 一切なし。
-- **対象**: 新規 `src/services/candidateSelection/`（`ranking.ts`, `classify.ts`, `missingHints.ts`, `synonyms.ts`, `types.ts`, `__tests__/`）
+- **対象**: `src/services/candidateSelection/`（`ranking.ts`, `classify.ts`, `missingHints.ts`, `synonyms.ts`, `selectCandidates.ts`, `types.ts`, `index.ts`, `__tests__/`）
 - **推奨担当AI**: **Claude Code**（設計）→ 実装も Claude Code か Copilot CLI
 - **推奨理由**: inventory / masker upgrade / strategist taxonomy / budget を横断する再利用設計判断が中心。
 - **難易度**: 中 / **認証・GCP**: 不要（純関数）/ **依存**: S0 / **並列**: S5/S8/S9/S11 と並列可
 - **検証**: `pnpm test src/services/candidateSelection` / **完了条件**: 代表 fixture で4分類と missingHints が期待通り、typecheck green。
+- **S2 への入口**: `selectCandidates(purpose, docs, { responseLimit, now? })` を facade として公開（`index.ts` から re-export）。**分類 → missingHints 計算 → responseLimit スライス** の順序を内部で固定し、`{ candidates, missingHints, totalClassified }` を返す。S2 はこの facade を呼ぶこと（`classifyInventory` + `generateMissingHints` を手配線しない）。理由: hints を responseLimit でスライスした後に計算すると、上限を超えた位置の current/authoritative 文書を見落とし「足りない」を誤検出するため。
+- **実装結果（2026-06-03）**: 33 unit test green、`pnpm typecheck` / `pnpm test`（704 件）green。`generateMissingHints` のコアロジックは確定版。
 - **指示文**: §6 参照。
 
-### S2. `POST /api/context-package/candidates` API ルート（M1）
+### S2. `POST /api/context-package/candidates` API ルート（M1）— **実装済み**
 - **目的**: purpose + limit を検証し Inventory を読み S1 を呼んで候補を返す。生成（LLM）はしない。
-- **対象**: 新規 `src/app/api/context-package/candidates/route.ts`, `__tests__/`
+- **対象**: `src/app/api/context-package/candidates/route.ts`, `__tests__/`
 - **推奨担当AI**: **GitHub Copilot CLI**（route + DI test + build を autopilot で一括）
 - **難易度**: 中 / **認証・GCP**: ランタイムで Firestore 読み取り（テストは mock 注入、新規 GCP 設定不要）/ **依存**: S1 / **並列**: S1 完了後は S3/S4 と並列可
 - **検証**: `pnpm test src/app/api/context-package/candidates` / **完了条件**: 200 候補・400 検証・409 空 inventory のテスト green。
 - **指示文**: §6 参照。
 
-### S3. 候補レスポンス契約のドキュメント化（M1）
+### S3. 候補レスポンス契約のドキュメント化（M1）— **実装済み**
 - **目的**: 上の確定版型・status code・reasonCode 一覧を docs 固定し UI が並行着手できるようにする。
-- **対象**: 本書 §候補レスポンス型（正本）。必要なら `docs/architecture.md` に参照を足す。
+- **対象**: 本書 §候補 API 契約（正本）。`docs/architecture.md` に参照を追加済み。
 - **推奨担当AI**: **Claude Code** / 軽微なら Cursor
 - **難易度**: 低 / **認証・GCP**: 不要 / **依存**: S1 / **並列**: S2 と同時進行可
+- **実装結果（2026-06-03）**: UI 向け単一情報源として request/response 型・エラー body・502・UI 既定動作表・TypeScript import パスを本節に集約。`D-P4UX-1` と実装（S2 route / S1 classify）を整合。
 
-### S4. （任意）候補スコアリングの fixture / golden
+### S4. （任意）候補スコアリングの fixture / golden — **実装済み**
 - **目的**: ランキング回帰を golden で守る。
-- **対象**: `sample-data/`（synthetic のみ、実顧客データ・PII 禁止）, `src/services/candidateSelection/__tests__/__snapshots__/`
+- **対象**: `sample-data/candidate-selection/accounting-office-inventory.fixture.json`, `src/services/candidateSelection/__tests__/golden.test.ts`, `__tests__/__snapshots__/golden.test.ts.snap`
 - **推奨担当AI**: **Cursor Composer**
 - **難易度**: 低 / **認証・GCP**: 不要 / **依存**: S1 / **並列**: 可
+- **実装結果（2026-06-03）**: synthetic 10 件 fixture（include / exclude / needs_review 各パターン）+ 3 golden snapshot（日本語 purpose / 英語 synonym / responseLimit）。`pnpm test src/services/candidateSelection` 36 passed。
 
-### S5. Candidate Selection UI（M2）
+### S5. Candidate Selection UI（M2）— **実装済み**
 - **目的**: docId 手入力を主導線から外し、候補チェックボックスリスト（reason / status / sensitivity）で選択 → 生成。
-- **対象**: `src/app/context-package/ContextPackageForm.tsx`, `styles.css`, 新規子コンポーネント
+- **対象**: `src/app/context-package/ContextPackageForm.tsx`, `src/app/styles.css`, `CandidateSelectionList.tsx`, `candidateSelectionUi.ts`
 - **推奨担当AI**: **Cursor Composer**（UI）/ 状態設計の難所は Claude Code に相談
 - **難易度**: 中 / **認証・GCP**: 不要 / **依存**: S2, S3 / **並列**: M5 と並列可
 - **検証**: `pnpm test src/app/context-package` + 手動 / **完了条件**: purpose だけで候補が出て、選択して生成でき、docId 手入力なしで一巡。purpose 変更時に stale candidates で生成させない。
 - **指示文**: §6 参照。
 
-### S6. Safety Review Panel（M3）
+### S6. Safety Review Panel（M3）— **実装済み**
 - **目的**: 生成前に「AI に渡せる / 除外すべき / 人間確認すべき / 足りない」を候補 API 出力から表示。
-- **対象**: 新規 `src/app/context-package/SafetyReviewPanel.tsx`, `styles.css`
+- **対象**: `src/app/context-package/SafetyReviewPanel.tsx`, `src/app/styles.css`
 - **推奨担当AI**: **Cursor Composer**（UI）/ taxonomy→文言マッピングは Claude Code が下書き
 - **難易度**: 中 / **認証・GCP**: 不要 / **依存**: S2, S5 / **並列**: S7 と隣接（同 UI 領域で S5→S6→S7 は直列気味）
 
-### S7. Context Package Preview（生成前の安心）（M4）
+### S7. Context Package Preview（生成前の安心）（M4）— **実装済み**
 - **目的**: 生成前に「この情報を AI に渡します。raw PII / Restricted / stale は含みません」を明示。
-- **対象**: 新規 `src/app/context-package/PreGenerationPreview.tsx`、必要なら候補 API に projection 追加
-- **推奨担当AI**: **Claude Code**（safety projection の整合設計）→ UI は Cursor
+- **対象**: `src/app/context-package/preGenerationPreview.ts`, `PreGenerationPreviewPanel.tsx`（UI。macOS 等では `PreGenerationPreview.tsx` と `preGenerationPreview.ts` が衝突するため Panel 名）, `ContextPackageForm.tsx`
+- **推奨担当AI**: **Claude Code**（safety projection の整合設計＝完了）→ UI は Cursor
 - **難易度**: 中 / **認証・GCP**: 不要 / **依存**: S2, S5, S6 / **並列**: M5 と並列可
 - **注意**: 生成前 deterministic 判定は既存 `isSafeForContextPackageExport` / safety gate と矛盾しないこと。チャンク本文の重い取得はせず文書メタ単位。
+- **projection 実装結果（2026-06-03 / Claude Code）**:
+  - `projectPreGenerationPreview(candidates: CandidateRow[], selectedDocIds: ReadonlySet<string>): PreGenerationPreview` — 純関数・決定論・metadata-only。
+  - 戻り値 `{ willSend, autoExcluded, warnings, unknownDocIds, counts, hasAutoExcluded, hasWarnings }`。各行は `disposition`（`will_send` | `auto_excluded` | `stale_warning` | `masking_pending` | `needs_confirmation`）と日本語 `note` を持つ。
+  - **整合の核**: 候補レイヤは `aiSafeContent` を読まない（二層構造）。よって projection は「除外（安全側）は断言、送信は予測（生成時の本文ゲートで narrowing されうる）」という framing。`auto_excluded` は safetyGate ルール1–2（Restricted / blocked）を metadata でミラーし、downstream gate が同じ除外を必ず enforce するので矛盾しない。`will_send` は予測であり over-promise しない。
+  - **安全インバリアント**: `classify()` が unsafe を最優先判定するため Restricted/blocked は構造的に `will_send` へ落ちない。`Confidential`＋`ai_safe`（マスク済み）は送信可（Restricted のみが安全ブロッカ）。
+  - **advanced override の穴**: 候補一覧にない手入力 docId は `unknownDocIds` で可視化し ack を要求。
+  - `previewRequiresAcknowledgement(preview)`: auto-excluded / warning / unknown があれば true（生成ボタン有効化前の「内容を確認しました」判定用）。
+  - 16 unit test green（最重要は「will_send に unsafe が混ざらない」）。`pnpm typecheck` / `pnpm test src/app/context-package`（33）green。
+- **UI への申し送り（Cursor）**: `PreGenerationPreviewPanel.tsx` は上記 projection を `candidates` + 実効 `docIds`（`resolveDocIdsForGeneration`）から計算して表示する（自前の安全判定を書かない）。生成ボタンは S5 の `canGenerateContextPackage(...)` に加えて `!previewRequiresAcknowledgement(preview) || acknowledged` を AND する。S6 SafetyReviewPanel と視覚言語を揃える。本文・aiSafeContent は出さない。
 
 ### S8. #15 Job GC / stuck-running recovery（Hardening）
 - **目的**: Cloud Tasks リトライ枯渇後に `running` で詰まる job の GC / 復旧、`cancelled` 配線、terminal job retention。
@@ -185,6 +343,13 @@ type CandidateDoc = {
 - **対象**: **`docs/setup-gcp.md` §8（正本）** + `docs/demo-runbook.md`, monitoring 設定
 - **推奨担当AI**: **Codex**（IAP / Cloud Run / Cloud Tasks / live smoke の実機）
 - **難易度**: 高 / **認証・GCP**: 要 / **依存**: S2（candidates health 追加）, S8/S9 と整合 / **並列**: docs 整備は随時、最終確認は統合後
+- **実装結果（2026-06-03 / Codex）**:
+  - `docs/setup-gcp.md` §8 を production async smoke の正本として拡張（preflight / service-to-service smoke / post-smoke cleanup / Monitoring alert / incident triage）。
+  - `docs/demo-runbook.md` から §8 へ参照を追加。
+  - production revision `ai-ready-knowledge-hub-00036-dfb` で service-to-service smoke 完了: job `a5bfcfef-fa29-4c88-94c3-47e897b05ec9` が HTTP 202 → `succeeded` → result HTTP 200、masked content / raw PII 不在を確認。
+  - Firestore TTL（`context_package_jobs.expiresAt`）と GCS lifecycle（`context-package/job-results/`, 14日削除）を設定。
+  - log-based metrics `context_package_job_errors` / `context_package_stale_recoveries` と alert policies 3本（job errors / stale recoveries / Cloud Tasks backlog）を作成。通知 channel は未設定のため、Console で notificationChannels を追加する。
+  - Cloud Scheduler `context-package-job-sweeper` は作成したが、現 production revision は `/api/context-package/jobs/sweep` が HTTP 405 のため **paused**。sweeper route を含む revision deploy 後に resume + manual run で最終確認する。
 - **指示文**: §6 参照。
 
 ### S11. Decision エントリ / direction doc 整備
@@ -300,8 +465,9 @@ src/app/api/context-package/route.ts の作法を踏襲（runtime='nodejs', dyna
 zod 検証: { purpose: string(1..2000), inventoryLimit?: number(default 300, max 500), responseLimit?: number(default 50, max 100) }。
 ※ limit は2系統に分ける: inventoryLimit=Firestore から読む件数（listInventoryDocumentsFromFirestore に渡す）、responseLimit=UI に返す件数。最近100件しか見ない問題を避ける。
 ※ MVP では filters は持たない（superseded は S1 が常に needs_review で返す）。将来 showSuperseded? を追加。
-Inventory は listInventoryDocumentsFromFirestore(inventoryLimit)（src/lib/inventoryFirestoreAdapter.ts）で読み、src/services/candidateSelection に渡し、score 降順で responseLimit 件を返す。
-レスポンスは metadata と reasonLabel/matchReason のみ。aiSafeContent / 本文 / maskedText は絶対に含めない。
+Inventory は listInventoryDocumentsFromFirestore(inventoryLimit)（src/lib/inventoryFirestoreAdapter.ts）で読み、selectCandidates(purpose, docs, { responseLimit })（src/services/candidateSelection。index.ts から export 済み）に渡す。戻り値 { candidates, missingHints, totalClassified } をそのままレスポンスに使う。candidates は score 降順で responseLimit 件に絞り込み済み。
+※ classifyInventory / generateMissingHints を直接呼んで手配線しないこと。selectCandidates が「分類→hints計算→スライス」の順序を保証している（slice 後に hints 計算すると上限超の current/authoritative を missing 誤検出する）。
+レスポンスは { candidates, missingHints } の metadata と reasonLabel/matchReason のみ。aiSafeContent / 本文 / maskedText は絶対に含めない。
 Inventory 0 件は 409 no_inventory_documents。
 M1 では audit を書かない（候補表示は export ではない。必要なら将来 document.candidate_preview を decision 化）。LLM・chunk ロードは呼ばない。
 テストは runStrategistOrchestrator と同じ DI 流儀（deps.listInventoryDocuments）で Firestore をモック。pnpm test 該当範囲と pnpm build を通し PR 作成。
@@ -332,9 +498,22 @@ purpose が変更されたら candidates / selectedDocIds / preview を invalida
 src/app/context-package/ に SafetyReviewPanel.tsx を追加。candidates API レスポンスから include/exclude/needs_review を3カラム、missingHints を別枠で生成前に表示。文言は reasonLabel（ExclusionReasonLabels）を使う。本文は出さない。生成後 result パネルと視覚言語を揃える。styles.css に追記。
 ```
 
-### ▶ S7 → Claude Code（設計）+ Cursor（UI）
+### ▶ S7 設計・projection（Claude Code）— **完了**
 ```
-選択中 candidates から「生成時に AI へ渡る集合」のプレビューを生成前に表示する PreGenerationPreview を作る。Restricted/blocked が混ざらないこと・masking 必要分の扱い・superseded を含む場合の警告を deterministic に表示。判定は既存 isSafeForContextPackageExport / safety gate と矛盾しないこと。チャンク本文の重い取得はしない（文書メタ単位）。projection に unit test を付ける。生成ボタンは「内容を確認しました」確認後に有効化する設計を検討。
+src/app/context-package/preGenerationPreview.ts に純関数 projectPreGenerationPreview / previewRequiresAcknowledgement を実装済み。
+metadata-only・決定論・safetyGate ルール1–3 をミラー。本文/aiSafeContent/chunk を読まない。16 unit test green。
+```
+
+### ▶ S7 UI（Cursor）— **実装済み**
+```
+pnpm 前提。src/app/context-package/PreGenerationPreviewPanel.tsx を新規作成し、ContextPackageForm.tsx に組み込む（ファイル名は `preGenerationPreview.ts` とのケース衝突回避）。
+安全判定は自前で書かず、preGenerationPreview.ts の projectPreGenerationPreview(candidates, selectedDocIds) の戻り値だけを描画する:
+  - willSend（AI へ渡す予定）/ autoExcluded（Restricted 等で自動除外。AI には渡らないと明示）/ warnings（stale・masking 未完・unknownDocIds）を区分表示。
+  - 各行の note（日本語）と disposition を使う。本文・aiSafeContent は絶対に出さない。
+  - counts と hasAutoExcluded / hasWarnings でサマリ（「AI へ渡す N件 / 自動除外 M件 / 要確認 K件」）を出す。
+生成ボタンは S5 の canGenerateContextPackage(...) に加えて (!previewRequiresAcknowledgement(preview) || acknowledged) を AND する。
+acknowledged は「内容を確認しました」チェックボックス state。warning/auto-excluded/unknown が無いときは ack 不要（previewRequiresAcknowledgement が false）。
+S6 SafetyReviewPanel と視覚言語（cp-safety-* クラス系）を揃え、styles.css に追記。pnpm test src/app/context-package を通す。
 ```
 
 ### ▶ S8 → GitHub Copilot Cloud Agent（#15）
@@ -365,7 +544,8 @@ worker lease 15分 / queue max-retry-duration ≥1800s（setup-gcp.md §2）の�
 ---
 
 ## 関連ドキュメント
-- [docs/decisions.md](decisions.md) `D-P4UX-0` — 本フェーズの命名・スコープ・分類規則・セキュリティ境界の正本
+- [docs/decisions.md](decisions.md) `D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2` — 製品判断・API 契約・コアモジュール設計の正本
+- [docs/architecture.md](architecture.md) — Phase 4-UX フロー概要（§Phase 4-UX 参照）
 - [CLAUDE.md](../CLAUDE.md) — 製品定義の正本
 - [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md) — Context Package 同期/非同期 live smoke 証跡
 - [docs/setup-gcp.md](setup-gcp.md) §8 — Context Package 非同期 production smoke（runbook 正本）

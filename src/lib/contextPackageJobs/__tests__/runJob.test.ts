@@ -4,8 +4,11 @@ const {
   claimContextPackageJobMock,
   getContextPackageJobMock,
   completeContextPackageJobMock,
+  completeContextPackageJobWithResultRefMock,
   failContextPackageJobMock,
   releaseContextPackageJobLeaseMock,
+  deleteContextPackageJobResultMock,
+  writeContextPackageJobResultMock,
   runStrategistOrchestratorMock,
   recordAuditEventMock,
   NoInventoryDocumentsErrorMock,
@@ -34,8 +37,11 @@ const {
     claimContextPackageJobMock: vi.fn(),
     getContextPackageJobMock: vi.fn(),
     completeContextPackageJobMock: vi.fn(),
+    completeContextPackageJobWithResultRefMock: vi.fn(),
     failContextPackageJobMock: vi.fn(),
     releaseContextPackageJobLeaseMock: vi.fn(),
+    deleteContextPackageJobResultMock: vi.fn(),
+    writeContextPackageJobResultMock: vi.fn(),
     runStrategistOrchestratorMock: vi.fn(),
     recordAuditEventMock: vi.fn(),
     NoInventoryDocumentsErrorMock,
@@ -47,8 +53,15 @@ vi.mock('../firestoreAdapter', () => ({
   claimContextPackageJob: claimContextPackageJobMock,
   getContextPackageJob: getContextPackageJobMock,
   completeContextPackageJob: completeContextPackageJobMock,
+  completeContextPackageJobWithResultRef:
+    completeContextPackageJobWithResultRefMock,
   failContextPackageJob: failContextPackageJobMock,
   releaseContextPackageJobLease: releaseContextPackageJobLeaseMock,
+}));
+
+vi.mock('../resultStorage', () => ({
+  deleteContextPackageJobResult: deleteContextPackageJobResultMock,
+  writeContextPackageJobResult: writeContextPackageJobResultMock,
 }));
 
 vi.mock('../../../services/strategistOrchestrator', async () => {
@@ -162,8 +175,17 @@ beforeEach(() => {
     attemptToken: ATTEMPT_TOKEN,
   });
   completeContextPackageJobMock.mockResolvedValue(true);
+  completeContextPackageJobWithResultRefMock.mockResolvedValue(true);
   failContextPackageJobMock.mockResolvedValue(true);
   releaseContextPackageJobLeaseMock.mockResolvedValue(true);
+  deleteContextPackageJobResultMock.mockResolvedValue(undefined);
+  writeContextPackageJobResultMock.mockResolvedValue({
+    storage: 'gcs',
+    bucket: 'test-bucket',
+    objectPath: 'context-package/job-results/tenant-1/job-1.json',
+    contentType: 'application/json',
+    byteSize: 900_001,
+  });
   recordAuditEventMock.mockResolvedValue('audit-id');
 });
 
@@ -310,5 +332,78 @@ describe('runContextPackageJob', () => {
     const outcome = await runContextPackageJob('job-1');
 
     expect(outcome).toEqual({ outcome: 'skipped', reason: 'active_lease' });
+  });
+
+  it('GCS offload 後の complete stale 拒否では offloaded object を best-effort 削除する', async () => {
+    getContextPackageJobMock.mockResolvedValue(JOB);
+    runStrategistOrchestratorMock.mockResolvedValue({
+      ...stubResult(),
+      included: [
+        {
+          ...stubResult().included[0],
+          chunk: { ...STUB_CHUNK, text: 'x'.repeat(950_000) },
+        },
+      ],
+    });
+    completeContextPackageJobWithResultRefMock.mockResolvedValue(false);
+
+    const outcome = await runContextPackageJob('job-1');
+
+    expect(outcome).toEqual({ outcome: 'skipped', reason: 'active_lease' });
+    expect(deleteContextPackageJobResultMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        objectPath: 'context-package/job-results/tenant-1/job-1.json',
+      }),
+    );
+  });
+
+  it('payload が大きい場合は GCS offload して resultRef で complete する', async () => {
+    getContextPackageJobMock.mockResolvedValue(JOB);
+    runStrategistOrchestratorMock.mockResolvedValue({
+      ...stubResult(),
+      included: [
+        {
+          ...stubResult().included[0],
+          chunk: { ...STUB_CHUNK, text: 'x'.repeat(950_000) },
+        },
+      ],
+    });
+
+    const outcome = await runContextPackageJob('job-1');
+
+    expect(outcome).toEqual({ outcome: 'claimed_and_run', status: 'succeeded' });
+    expect(writeContextPackageJobResultMock).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'tenant-1', jobId: 'job-1' }),
+    );
+    expect(completeContextPackageJobWithResultRefMock).toHaveBeenCalledWith(
+      'job-1',
+      ATTEMPT_TOKEN,
+      expect.objectContaining({ storage: 'gcs' }),
+      expect.objectContaining({ sourceDocumentsReviewed: 3 }),
+    );
+    expect(completeContextPackageJobMock).not.toHaveBeenCalled();
+  });
+
+  it('GCS offload 失敗は lease 解放して rethrow する（retry を維持）', async () => {
+    getContextPackageJobMock.mockResolvedValue(JOB);
+    runStrategistOrchestratorMock.mockResolvedValue({
+      ...stubResult(),
+      included: [
+        {
+          ...stubResult().included[0],
+          chunk: { ...STUB_CHUNK, text: 'x'.repeat(950_000) },
+        },
+      ],
+    });
+    writeContextPackageJobResultMock.mockRejectedValue(
+      new Error('gcs unavailable'),
+    );
+
+    await expect(runContextPackageJob('job-1')).rejects.toThrow('gcs unavailable');
+    expect(releaseContextPackageJobLeaseMock).toHaveBeenCalledWith(
+      'job-1',
+      ATTEMPT_TOKEN,
+    );
+    expect(failContextPackageJobMock).not.toHaveBeenCalled();
   });
 });

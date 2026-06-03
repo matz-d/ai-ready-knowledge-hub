@@ -6,6 +6,7 @@
  */
 import { NextResponse } from 'next/server';
 import { getContextPackageJob } from '../../../../../../lib/contextPackageJobs/firestoreAdapter';
+import { readContextPackageJobResult } from '../../../../../../lib/contextPackageJobs/resultStorage';
 import { auditActorFromRequest } from '../../../../../../lib/audit/auditEvent';
 
 export const runtime = 'nodejs';
@@ -27,7 +28,7 @@ export async function GET(
     return NextResponse.json({ error: 'job_not_found' }, { status: 404 });
   }
 
-  if (job.status !== 'succeeded' || !job.result) {
+  if (job.status !== 'succeeded' || (!job.result && !job.resultRef)) {
     return NextResponse.json(
       {
         error: 'job_not_succeeded',
@@ -38,5 +39,21 @@ export async function GET(
     );
   }
 
-  return NextResponse.json(job.result);
+  if (job.result) {
+    return NextResponse.json(job.result);
+  }
+
+  try {
+    const payload = await readContextPackageJobResult(job.resultRef!, {
+      tenantId,
+      jobId,
+    });
+    return NextResponse.json(payload);
+  } catch (error) {
+    console.error('[context-package-job] failed to read offloaded result', {
+      jobId,
+      error,
+    });
+    return NextResponse.json({ error: 'result_unavailable' }, { status: 502 });
+  }
 }

@@ -52,8 +52,14 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
 
 **残タスク（R10 後続）**
 - **UI の docIds 導線**: Inventory から docId を選ぶ UX（手入力以外）。
-- **result GCS offload**: 大きい package を inline ではなく GCS + `resultRef` で返す（`result_too_large` 回避）。追跡: [#16](https://github.com/matz-d/ai-ready-knowledge-hub/issues/16)
-- **job GC / cancel**: 古い job の TTL 削除と `cancelled` 遷移の実配線。追跡: [#15](https://github.com/matz-d/ai-ready-knowledge-hub/issues/15)
+- ~~**result GCS offload**~~ — **実装済み（2026-06-03）**。追跡: [#16](https://github.com/matz-d/ai-ready-knowledge-hub/issues/16)
+  - `MAX_INLINE_RESULT_BYTES` 超過時は job result を `context-package/job-results/{tenant}/{job}.json` へ保存し、job doc は `resultRef` を保持する（inline `result` は保持しない）。
+  - `GET /api/context-package/jobs/:jobId/result` は同一 tenant 認可を維持したまま、inline / GCS-backed の両経路で payload を返す。
+  - 保存先オブジェクトは prefix lifecycle（14日）で自動削除する運用に統一。
+- ~~**job GC / cancel**~~ — **実装済み（2026-06-03）**。追跡: [#15](https://github.com/matz-d/ai-ready-knowledge-hub/issues/15)
+  - terminal job（`succeeded` / `failed` / `cancelled`）に `expiresAt` を付与し、Firestore TTL で retention（既定 14 日）後に自動削除する。
+  - `DELETE /api/context-package/jobs/:jobId` を追加し、同一 tenant の `queued` / `running` job を `cancelled` へ遷移可能にした（`succeeded` / `failed` は 409）。
+  - `POST /api/context-package/jobs/sweep` を追加し、lease 期限切れかつ Cloud Tasks retry 窓（既定 1800s）を超えて残留した `running` job を `failed` へ回収する。
 
 ---
 
