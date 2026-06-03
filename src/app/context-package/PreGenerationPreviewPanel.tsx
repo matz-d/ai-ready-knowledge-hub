@@ -105,7 +105,7 @@ export function PreGenerationPreviewPanel({
         <PreviewSection
           title="要確認"
           titleClass="cp-safety-column--review"
-          count={confirmCount}
+          count={preview.counts.warnings}
           emptyLabel="確認が必要な文書はありません。"
           rows={preview.warnings}
         />

@@ -41,14 +41,6 @@ export function defaultSelectedDocIds(
     .map((c) => c.docId);
 }
 
-export function isCandidatesStale(
-  purpose: string,
-  fetchedForPurpose: string | null,
-): boolean {
-  if (fetchedForPurpose === null) return false;
-  return purpose.trim() !== fetchedForPurpose;
-}
-
 /**
  * Advanced manual docIds override checkbox selection when non-empty.
  */
@@ -90,6 +82,14 @@ export function candidateDisplayReason(candidate: CandidateRow): string | undefi
   return candidate.reasonLabel ?? candidate.reasonDetail;
 }
 
+export function isCandidatesStale(
+  purpose: string,
+  fetchedForPurpose: string | null,
+): boolean {
+  if (fetchedForPurpose === null) return false;
+  return purpose.trim() !== fetchedForPurpose;
+}
+
 export function canGenerateContextPackage(params: {
   purpose: string;
   candidatesReady: boolean;
@@ -100,6 +100,8 @@ export function canGenerateContextPackage(params: {
 }): boolean {
   if (params.isBusy || params.isFetchingCandidates) return false;
   if (params.purpose.trim().length === 0) return false;
+  // Defense-in-depth for future callers: ContextPackageForm invalidates stale
+  // candidates on edit, but generation must still refuse mismatched purpose/candidates.
   if (!params.candidatesReady || params.candidatesStale) return false;
   return params.docIds.length > 0;
 }

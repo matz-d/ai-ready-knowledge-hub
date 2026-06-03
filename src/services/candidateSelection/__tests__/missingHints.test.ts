@@ -63,6 +63,6 @@ describe('generateMissingHints', () => {
   it('returns no hints for empty purpose with include candidates present', () => {
     const candidates = [candidate()];
     const hints = generateMissingHints('', candidates);
-    expect(Array.isArray(hints)).toBe(true);
+    expect(hints).toHaveLength(0);
   });
 });

@@ -148,13 +148,20 @@ describe('Rule 4: include safe documents', () => {
 
   it('includes ai_safe documents', () => {
     const result = classifyDocument(
-      doc({ status: 'ai_safe', aiUsePolicy: 'requires_masking' as const }),
+      doc({
+        status: 'ai_safe',
+        aiUsePolicy: 'requires_masking' as const,
+        maskerEvaluation: {
+          recommendedSensitivity: 'Confidential',
+          rationale: 'ok',
+          residualRisk: { detected: false, reasons: ['no re-identification risk'] },
+        },
+      }),
       [],
       NOW,
     );
-    // ai_safe with requires_masking AND maskerEvaluation undefined → rule 2 fires first
-    // So this tests a curated equivalent; make maskerEvaluation present to skip rule 2
-    expect(result.recommendation).not.toBe('exclude');
+    // completed maskerEvaluation skips rule 2 → ai_safe reaches rule 4 (include)
+    expect(result.recommendation).toBe('include');
   });
 
   it('does not set reasonCode for include', () => {

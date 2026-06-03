@@ -43,8 +43,13 @@ export async function GET(
     return NextResponse.json(job.result);
   }
 
+  // inline result が無い succeeded job は GCS offload 経路。31行目で result|resultRef を保証済み。
+  if (!job.resultRef) {
+    return NextResponse.json({ error: 'result_unavailable' }, { status: 502 });
+  }
+
   try {
-    const payload = await readContextPackageJobResult(job.resultRef!, {
+    const payload = await readContextPackageJobResult(job.resultRef, {
       tenantId,
       jobId,
     });

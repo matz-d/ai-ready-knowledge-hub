@@ -27,7 +27,8 @@ export const INCLUDE_SCORE_THRESHOLD = 0;
  *   1. exclude        : isBlockedForAi(doc)                    → restricted_sensitivity
  *   2. needs_review   : needsMaskerEvaluation || maskingPending → masking_required_unavailable
  *   3. needs_review   : freshness === 'superseded_candidate'   → superseded_or_stale (unchecked by default)
- *   4. include        : status ∈ {curated, ai_safe} && !above  → with matchReason/scoreBreakdown
+ *   4. include        : status ∈ {curated, ai_safe} && score ≥ threshold → with matchReason/scoreBreakdown
+ *   4b. needs_review  : status ∈ {curated, ai_safe} && score < threshold → purpose_mismatch (unreachable while threshold === 0)
  *   fallback          : any remaining state                    → human_confirmation_required
  *
  * aiSafeContent is never read here — the authoritative body gate lives in the generation path.
@@ -88,7 +89,7 @@ export function classifyDocument(
     };
   }
 
-  // Rule 4: Safe document — include
+  // Rule 4: Safe document — include when it clears the relevance threshold.
   if (doc.status === 'curated' || doc.status === 'ai_safe') {
     const { score, scoreBreakdown, matchReason } = scoreDocumentForPurpose(doc, terms, now);
     if (score >= INCLUDE_SCORE_THRESHOLD) {
@@ -100,6 +101,19 @@ export function classifyDocument(
         matchReason,
       };
     }
+    // Safe but below the relevance threshold. This is unreachable while
+    // INCLUDE_SCORE_THRESHOLD === 0 (scoring weights are non-negative). If the
+    // threshold is raised, update the Phase 4-UX candidate API contract and tests
+    // with this purpose_mismatch behavior in the same change.
+    return {
+      ...base,
+      score,
+      scoreBreakdown,
+      recommendation: 'needs_review',
+      reasonCode: 'purpose_mismatch',
+      reasonLabel: ExclusionReasonLabels.purpose_mismatch,
+      reasonDetail: '目的との関連度が低いと判定されました。必要か確認してください。',
+    };
   }
 
   // Fallback: unexpected status (uploading, curating, failed, etc.)

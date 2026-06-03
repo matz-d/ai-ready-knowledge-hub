@@ -518,12 +518,6 @@ export function ContextPackageForm() {
           </div>
         ) : null}
 
-        {candidatesStale ? (
-          <p className="cp-stale-hint" role="status">
-            Purpose が変更されました。「候補を表示」を押してから生成してください。
-          </p>
-        ) : null}
-
         {candidatesReady ? (
           <>
             <SafetyReviewPanel

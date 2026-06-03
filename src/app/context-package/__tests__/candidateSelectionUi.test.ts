@@ -130,4 +130,17 @@ describe('canGenerateContextPackage', () => {
       }),
     ).toBe(false);
   });
+
+  it('rejects stale candidates even when the caller still marks candidates ready', () => {
+    expect(
+      canGenerateContextPackage({
+        purpose: 'new purpose',
+        candidatesReady: true,
+        candidatesStale: true,
+        isBusy: false,
+        isFetchingCandidates: false,
+        docIds: ['a'],
+      }),
+    ).toBe(false);
+  });
 });

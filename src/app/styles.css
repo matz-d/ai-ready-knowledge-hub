@@ -1885,16 +1885,6 @@ pre {
   line-height: 1.6;
 }
 
-.cp-stale-hint {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: #fff8e6;
-  border: 1px solid #e8d49a;
-  color: #5a4a1a;
-  font-size: 13px;
-  line-height: 1.6;
-}
 
 .cp-candidates {
   display: grid;
