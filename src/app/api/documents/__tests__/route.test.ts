@@ -173,8 +173,8 @@ const minimalSlidePdfExtraction = {
   conversion: {
     converterId: 'gemini-direct-read' as const,
     calledVertex: true as const,
-    model: 'gemini-2.5-flash',
-    region: 'asia-northeast1',
+    model: 'gemini-3.5-flash',
+    region: 'global',
   },
 };
 
@@ -204,8 +204,8 @@ const minimalScanPdfExtraction = {
   conversion: {
     converterId: 'gemini-vertex-ocr' as const,
     calledVertex: true as const,
-    model: 'gemini-2.5-flash',
-    region: 'asia-northeast1',
+    model: 'gemini-3.1-flash-lite',
+    region: 'global',
     piiFindings: [
       {
         pageNumber: 1,
@@ -894,8 +894,8 @@ describe('POST /api/documents', () => {
             converterId: 'gemini-direct-read',
             inferenceDestination: {
               vendor: 'vertex',
-              region: 'asia-northeast1',
-              model: 'gemini-2.5-flash',
+              region: 'global',
+              model: 'gemini-3.5-flash',
             },
           },
         })
@@ -929,8 +929,8 @@ describe('POST /api/documents', () => {
             converterId: 'gemini-vertex-ocr',
             inferenceDestination: {
               vendor: 'vertex',
-              region: 'asia-northeast1',
-              model: 'gemini-2.5-flash',
+              region: 'global',
+              model: 'gemini-3.1-flash-lite',
             },
           }),
         })

@@ -964,8 +964,8 @@ describe('orchestrateUploadProcessing', () => {
           converterId: 'gemini-direct-read',
           inferenceDestination: {
             vendor: 'vertex',
-            region: 'asia-northeast1',
-            model: 'gemini-2.5-flash',
+            region: 'global',
+            model: 'gemini-3.5-flash',
           },
         },
       });
@@ -983,8 +983,8 @@ describe('orchestrateUploadProcessing', () => {
       );
       expect(payload.inferenceDestination).toEqual({
         vendor: 'vertex',
-        region: 'asia-northeast1',
-        model: 'gemini-2.5-flash',
+        region: 'global',
+        model: 'gemini-3.5-flash',
       });
     });
 

@@ -7,7 +7,7 @@
 | Frontend / Backend | **Next.js 16 (App Router)** | TypeScript統一、Server Actions/Route Handlersで素早く構築 |
 | 実行環境 | **Cloud Run** | ハッカソン必須要件、Next.js standalone 出力を Docker image として配信 |
 | AI Framework | **Genkit (TypeScript)** | TS統一、Google公式、構造化出力 + flow + eval が揃う |
-| AI Provider | **Vertex AI API (Gemini 2.5 Flash)** | 顧客機密データ前提のため (学習に使われない、リージョン固定) |
+| AI Provider | **Vertex AI API (Gemini 3.5 Flash default; scan-pdf OCR は Gemini 3.1 Flash-Lite)** | ハッカソン時点では Google Cloud の managed boundary を信頼し、Gemini 3.x が疎通済みの `global` endpoint を使う |
 | Genkit プラグイン | `@genkit-ai/google-genai` | Vertex AI 接続用 |
 | PII 検出/マスキング | **Cloud DLP + Vertex AI ハイブリッド** | 構造化PII = DLP決定論、文脈PII = Gemini推論 |
 | ファイルストレージ | **Cloud Storage** | 原本保存、Cloud Run と相性良し |
@@ -72,7 +72,7 @@ Genkit の初期PoC (構造化出力 + Cloud Run デプロイ + 簡易eval) が 
 
 **理由:**
 - 顧客機密データを扱う前提 (機密文書を扱うSME向け、初期デモは士業題材)
-- Vertex AI: データを学習に使わない、リージョン固定 (asia-northeast1)、IAM権限制御
+- Vertex AI: データを学習に使わない、IAM権限制御。Cloud Run / storage は東京、Gemini 3.x 推論は `global` endpoint
 - Gemini API直接: 開発者向け、データ取り扱いが Vertex AI ほど厳密でない
 - ハッカソン提出時点では、AI呼び出しは Vertex AI API に統一する
 
@@ -82,6 +82,17 @@ Genkit の初期PoC (構造化出力 + Cloud Run デプロイ + 簡易eval) が 
 
 **README/発表資料での訴求点:**
 「**顧客機密データを扱う前提でVertex AI APIを採用**」を明記 → 審査基準#2 (課題アプローチ力) と #5 (実装力) の両方で得点。
+
+### Gemini 3.x への移行メモ
+
+現行コードは `GEMINI_MODEL` 未指定時に `gemini-3.5-flash` を使う。scan-pdf OCR は `SCAN_PDF_GEMINI_MODEL` 未指定時に `gemini-3.1-flash-lite` を使う。2026-06-03 の実測では `asia-northeast1` の Gemini 3.x はこのプロジェクトから 404、`global` では scan-pdf PoC pass。
+
+| 候補 | 位置づけ |
+|---|---|
+| `gemini-3.5-flash` | 2.5 Flash の第一移行候補。Curator / Masker / Strategist / PDF 経路の標準候補 |
+| `gemini-3.1-flash-lite` | 低コスト・大量処理候補。scan-pdf OCR の比較対象 |
+
+詳細な試験手順は [docs/gemini-model-migration.md](gemini-model-migration.md) を参照。
 
 ---
 

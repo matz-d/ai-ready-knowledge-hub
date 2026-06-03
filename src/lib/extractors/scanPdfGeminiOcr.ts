@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ai, modelId, modelRef } from '../../agents/_shared/genkitClient';
+import { ai, modelRefFor } from '../../agents/_shared/genkitClient';
 
 const GeminiScanPiiFindingSchema = z.object({
   pageNumber: z.number().int().min(1),
@@ -53,6 +53,9 @@ const GeminiUsageSchema = z.object({
 export type GeminiScanPdfOutput = z.infer<typeof GeminiScanPdfOutputSchema>;
 export type GeminiScanPiiFinding = z.infer<typeof GeminiScanPiiFindingSchema>;
 export type GeminiOcrUsage = z.infer<typeof GeminiUsageSchema>;
+
+export const scanPdfGeminiModelId =
+  process.env.SCAN_PDF_GEMINI_MODEL ?? 'gemini-3.1-flash-lite';
 
 export const SCAN_PDF_GEMINI_OCR_SYSTEM_PROMPT =
   'You are an OCR engine for scanned PDFs in an AI-ready document conversion pipeline. Return only JSON grounded in visible page content.';
@@ -179,7 +182,7 @@ export async function generateScanPdfGeminiOcr(
   let response: Awaited<ReturnType<typeof ai.generate>>;
   try {
     response = await ai.generate({
-      model: modelRef(),
+      model: modelRefFor(scanPdfGeminiModelId),
       ...(options.abortSignal ? { abortSignal: options.abortSignal } : {}),
       system: SCAN_PDF_GEMINI_OCR_SYSTEM_PROMPT,
       prompt: [
@@ -212,6 +215,6 @@ export async function generateScanPdfGeminiOcr(
   return {
     output: parseGeminiScanPdfOutput(response),
     usage: GeminiUsageSchema.parse(response.usage ?? {}),
-    model: response.model ?? modelId,
+    model: response.model ?? scanPdfGeminiModelId,
   };
 }

@@ -13,8 +13,7 @@ vi.mock('../../../agents/_shared/genkitClient', () => ({
       return _response;
     },
   },
-  modelRef: () => 'mock-model-ref',
-  modelId: 'gemini-test-model',
+  modelRefFor: (modelId: string) => `mock-model-ref:${modelId}`,
 }));
 
 import {
@@ -58,7 +57,7 @@ describe('generateScanPdfGeminiOcr', () => {
       SCAN_PDF_GEMINI_OCR_PROMPT
     );
     expect(result.output.piiFindings[0]?.maskability).toBe('unmaskable');
-    expect(result.model).toBe('gemini-test-model');
+    expect(result.model).toBe('gemini-3.1-flash-lite');
   });
 
   it('falls back to JSON in response.text after invalid structured output', async () => {

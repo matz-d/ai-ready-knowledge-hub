@@ -6,7 +6,7 @@
  * 結果を job doc に書き戻す。各 claim で attempt token を発行し、complete / fail は
  * token 一致時のみ受理する（stale worker による上書きを防ぐ）。
  */
-import { modelId } from '../../agents/_shared/genkitClient';
+import { location, modelId } from '../../agents/_shared/genkitClient';
 import {
   NoInventoryDocumentsError,
   NoKnowledgeChunksError,
@@ -140,7 +140,9 @@ async function recordExportAudit(
   request: ContextPackageJobRequest,
   result: StrategistOrchestratorResult,
 ): Promise<void> {
-  const region = process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1';
+  const region = location;
+  const dataResidencyLocation =
+    process.env.KNOWLEDGE_HUB_DATA_RESIDENCY_LOCATION ?? 'asia-northeast1';
   await recordAuditEvent({
     tenantId: request.tenantId,
     actor: request.actor,
@@ -154,7 +156,10 @@ async function recordExportAudit(
       timestamp: result.generatedAt,
     }),
     inferenceDestination: { vendor: 'vertex', region, model: modelId },
-    dataResidency: { storage: region, processing: region },
+    dataResidency: {
+      storage: dataResidencyLocation,
+      processing: dataResidencyLocation,
+    },
   });
 }
 

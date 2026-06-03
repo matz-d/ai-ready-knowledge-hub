@@ -223,7 +223,7 @@ export type FirestoreDocument = {
     sourceContentHash: 'abc...',
     aiSafeSchemaVersion: 1,
     completedAt: <Timestamp>,
-    modelId: 'gemini-2.5-flash',
+    modelId: 'gemini-3.5-flash',
   },
   maskerError: null,
 }
