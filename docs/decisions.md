@@ -1612,8 +1612,43 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 ---
 
+## D-P4UX-0: Phase 4-UX 命名・スコープ・分類規則・セキュリティ境界
+
+**日付**: 2026-06-03
+**状態**: 計画確定（実装未着手）。作業分配と実装者向け指示文の正本は [docs/phase-4-ux-direction.md](phase-4-ux-direction.md)。
+
+**背景:** Context Package は「docId を指定すれば安全に生成できる」状態まで到達した（`D-P3-M-PDF-1` 後続）。次は「purpose を入れるだけで候補文書・除外文書・足りない情報・確認質問が整理される」UX へ引き上げる。実務担当者に docId を手入力させすぎない状態を目指す。
+
+**決定:**
+
+1. **命名**: 本 UX フェーズを **Phase 4-UX** と呼ぶ。本ログ既存の「Phase 4」（マルチテナント商用化 / BigQuery write-once audit、行 971・1164・1395 ほか）とは**別物**。旧「Phase 4（商用化）」の参照は壊さず温存し、decision ID は `D-P4UX-*` で分離する。
+
+2. **二層構造**: 候補 API（`POST /api/context-package/candidates`）は **metadata-only の「助言レイヤ」**とする。本文・chunk・GCS・`aiSafeContent`・LLM を読まない/呼ばない。実際に本文が AI に渡るかの**権威ある判定は既存の生成経路**（`/api/context-package` → `safetyGate` → `applyStrategistInputBudget` → Strategist）が担う。候補段階で `isSafeForContextPackageExport`（`aiSafeContent` 必須）を使うと、`inventoryFirestoreAdapter` が本文を載せないため `ai_safe` 文書を不当に unsafe 化する。候補の safety 判定は `src/agents/masker/upgrade.ts` の `isBlockedForAi` / `needsMaskerEvaluation`（いずれも metadata で判定可能）を使う。
+
+3. **除外の可視性（セキュリティ境界）**: 候補 API は Restricted/blocked 文書の **存在と除外理由（fileName + `reasonLabel`）を UI に見せてよい**。ただし本文 / `aiSafeContent` / `maskedText` は一切返さない。「説明はするが中身は渡さない」を不変条件とする。
+
+4. **古い文書**: `freshness === 'superseded_candidate'` は自動除外せず **`needs_review` 既定**（`reasonCode: 'superseded_or_stale'`、UI 既定 unchecked）。有用な旧版を機械的に落とさず人間判断を残す。
+
+5. **除外理由 taxonomy**: `reasonCode` / `reasonLabel` は `src/agents/strategist/schema.ts` の `ExclusionReasonEnum` / `ExclusionReasonLabels` を再利用し、**新 enum を増やさない**。`include` には除外 taxonomy を付けず、説明が要る場合は別名（`matchReason` / `scoreBreakdown`）で持つ。
+
+6. **LLM 推薦は本フェーズ非対象**: M1 候補ランキングは deterministic（keyword + synonym map + メタデータ加点）のみ。LLM 推薦は次フェーズの別 decision とする。
+
+7. **MVP と Hardening の分離**: Phase 4-UX MVP は候補選択 UX（S1–S7 + docs）で完了とし、`#15`（job GC / stuck-running recovery）/ `#16`（large result GCS offload）/ runbook・監視（S8–S10）は **独立した Production Hardening** として MVP の必須完了条件から外す。
+
+**代替案（却下）:**
+- 今回を正式 Phase 4 とし旧 Phase 4（商用化）を改称 → decisions.md 全参照の更新コストが高く却下。
+- Restricted を件数のみ表示 / 完全非表示 → 「なぜ除外したか説明できる」という製品差別化を弱めるため却下（中身を返さない限り存在＋理由の開示を採用）。
+- superseded を exclude 既定 → 有用な旧版を機械的に落とすため却下。
+
+**撤退条件:** deterministic ランキングの候補精度が実務で不十分（誤 include/exclude が多い）なら、次フェーズで LLM 推薦（決定6の見直し）を別 decision で検討する。
+
+**影響:** 新規 `src/services/candidateSelection/`、新規 `src/app/api/context-package/candidates/route.ts`、`src/app/context-package/`（候補選択 UI / Safety Review / Preview）。既存 `safetyGate` / `applyStrategistInputBudget` / `strategistFlow` / Curator enum / 除外 taxonomy は改変しない。
+
+---
+
 ## 関連ドキュメント
 
+- [docs/phase-4-ux-direction.md](phase-4-ux-direction.md) — Phase 4-UX 作業分配・実装者向け指示文の正本（`D-P4UX-0`）
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
 - [docs/phase-3-d-direction.md](phase-3-d-direction.md) — Phase 3-D CI/CD + IAP 実装方針（正本）
 - [docs/phase-3-e-direction.md](phase-3-e-direction.md) — Phase 3-E Processing Boundary + Cloud DLP Trust Modes 実装方針（正本）
