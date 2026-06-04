@@ -1612,8 +1612,148 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 ---
 
+## D-P4UX-0: Phase 4-UX 命名・スコープ・分類規則・セキュリティ境界
+
+**日付**: 2026-06-03
+**状態**: 計画確定（実装未着手）。作業分配と実装者向け指示文の正本は [docs/phase-4-ux-direction.md](phase-4-ux-direction.md)。
+
+**背景:** Context Package は「docId を指定すれば安全に生成できる」状態まで到達した（`D-P3-M-PDF-1` 後続）。次は「purpose を入れるだけで候補文書・除外文書・足りない情報・確認質問が整理される」UX へ引き上げる。実務担当者に docId を手入力させすぎない状態を目指す。
+
+**決定:**
+
+1. **命名**: 本 UX フェーズを **Phase 4-UX** と呼ぶ。本ログ既存の「Phase 4」（マルチテナント商用化 / BigQuery write-once audit、行 971・1164・1395 ほか）とは**別物**。旧「Phase 4（商用化）」の参照は壊さず温存し、decision ID は `D-P4UX-*` で分離する。
+
+2. **二層構造**: 候補 API（`POST /api/context-package/candidates`）は **metadata-only の「助言レイヤ」**とする。本文・chunk・GCS・`aiSafeContent`・LLM を読まない/呼ばない。実際に本文が AI に渡るかの**権威ある判定は既存の生成経路**（`/api/context-package` → `safetyGate` → `applyStrategistInputBudget` → Strategist）が担う。候補段階で `isSafeForContextPackageExport`（`aiSafeContent` 必須）を使うと、`inventoryFirestoreAdapter` が本文を載せないため `ai_safe` 文書を不当に unsafe 化する。候補の safety 判定は `src/agents/masker/upgrade.ts` の `isBlockedForAi` / `needsMaskerEvaluation`（いずれも metadata で判定可能）を使う。
+
+3. **除外の可視性（セキュリティ境界）**: 候補 API は Restricted/blocked 文書の **存在と除外理由（fileName + `reasonLabel`）を UI に見せてよい**。ただし本文 / `aiSafeContent` / `maskedText` は一切返さない。「説明はするが中身は渡さない」を不変条件とする。
+
+4. **古い文書**: `freshness === 'superseded_candidate'` は自動除外せず **`needs_review` 既定**（`reasonCode: 'superseded_or_stale'`、UI 既定 unchecked）。有用な旧版を機械的に落とさず人間判断を残す。
+
+5. **除外理由 taxonomy**: `reasonCode` / `reasonLabel` は `src/agents/strategist/schema.ts` の `ExclusionReasonEnum` / `ExclusionReasonLabels` を再利用し、**新 enum を増やさない**。`include` には除外 taxonomy を付けず、説明が要る場合は別名（`matchReason` / `scoreBreakdown`）で持つ。
+
+6. **LLM 推薦は本フェーズ非対象**: M1 候補ランキングは deterministic（keyword + synonym map + メタデータ加点）のみ。LLM 推薦は次フェーズの別 decision とする。
+
+7. **MVP と Hardening の分離**: Phase 4-UX MVP は候補選択 UX（S1–S7 + docs）で完了とし、`#15`（job GC / stuck-running recovery）/ `#16`（large result GCS offload）/ runbook・監視（S8–S10）は **独立した Production Hardening** として MVP の必須完了条件から外す。
+
+**代替案（却下）:**
+- 今回を正式 Phase 4 とし旧 Phase 4（商用化）を改称 → decisions.md 全参照の更新コストが高く却下。
+- Restricted を件数のみ表示 / 完全非表示 → 「なぜ除外したか説明できる」という製品差別化を弱めるため却下（中身を返さない限り存在＋理由の開示を採用）。
+- superseded を exclude 既定 → 有用な旧版を機械的に落とすため却下。
+
+**撤退条件:** deterministic ランキングの候補精度が実務で不十分（誤 include/exclude が多い）なら、次フェーズで LLM 推薦（決定6の見直し）を別 decision で検討する。
+
+**影響:** 新規 `src/services/candidateSelection/`、新規 `src/app/api/context-package/candidates/route.ts`、`src/app/context-package/`（候補選択 UI / Safety Review / Preview）。既存 `safetyGate` / `applyStrategistInputBudget` / `strategistFlow` / Curator enum / 除外 taxonomy は改変しない。
+
+---
+
+## D-P4UX-1: `POST /api/context-package/candidates` API 契約確定
+
+**日付**: 2026-06-03
+**状態**: 実装済み（S2 / 2026-06-03）
+
+**背景:** 候補 API は S2 で実装するが、UI（S5/S6/S7）が並行着手できるよう API 契約を先に decisions として固定する。UI 実装者向けの詳細契約（request/response 例・UI 既定動作）は [docs/phase-4-ux-direction.md §候補 API 契約](phase-4-ux-direction.md) を正本とする。
+
+**決定:**
+
+1. **エンドポイント**: `POST /api/context-package/candidates`（新規 `src/app/api/context-package/candidates/route.ts`）。既存 `src/app/api/context-package/route.ts` の作法（`runtime='nodejs'`, `dynamic='force-dynamic'`）を踏襲する。
+
+2. **リクエスト**（Zod 検証）:
+   ```ts
+   { purpose: string(1..2000), inventoryLimit?: number(1..500, default 300), responseLimit?: number(1..100, default 50) }
+   ```
+   - `inventoryLimit`: Firestore から読む件数上限。「最近 100 件しか見ない」問題を避けるため `inventoryLimit`（Firestore 取得）と `responseLimit`（UI 返却）を **2系統に分ける**。
+   - `responseLimit`: score 降順でトリミングした後に UI へ返す件数上限。
+
+3. **レスポンス**（200 OK）:
+   ```ts
+   { candidates: CandidateDoc[], missingHints: string[], inventoryScanned: number }
+   ```
+   本文 / `aiSafeContent` / `maskedText` は一切含めない（`D-P4UX-0` 決定3の不変条件）。
+
+4. **status codes**:
+   | code | body `code` フィールド | 説明 |
+   |---|---|---|
+   | 200 | ― | candidates 返却（空配列も 200） |
+   | 400 | `invalid_request` | JSON パース失敗または Zod 検証失敗 |
+   | 409 | `no_inventory_documents` | Inventory に文書が 0 件 |
+   | 502 | `upstream_failure` | Firestore 読み取り等の upstream 失敗 |
+
+5. **Inventory 取得**: `listInventoryDocumentsFromFirestore(inventoryLimit)`（`src/lib/inventoryFirestoreAdapter.ts`）を使う。route は Firestore を直接叩かず、DI 経由でテストでモック可能にする（`runStrategistOrchestrator` と同じ `deps.listInventoryDocuments` 注入パターン）。
+
+6. **Audit**: M1 では audit を書かない。候補表示は export ではなく「助言」であるため。将来 `document.candidate_preview` を別 decision で検討する。
+
+**代替案:**
+- `GET /api/context-package/candidates?purpose=...`: URL に purpose を含めるとアクセスログに残る可能性があるため POST を採用。
+- MVP で `showSuperseded` 等のフィルタを追加: 将来拡張として設計上は許容するが M1 では持たない（`superseded_candidate` は S1 が常に `needs_review` で返す）。
+
+**撤退条件:** `inventoryLimit=300` でレスポンスが実務上遅すぎる（3秒超）場合、Firestore インデックス追加または `inventoryLimit` デフォルト値を調整する（精度との トレードオフを別 decision に記録する）。
+
+**影響:** 新規 `src/app/api/context-package/candidates/route.ts`、`src/app/api/context-package/candidates/__tests__/`。
+
+---
+
+## D-P4UX-2: `src/services/candidateSelection/` コアモジュール設計確定
+
+**日付**: 2026-06-03
+**状態**: 実装済み（S1 / 2026-06-03）
+
+**背景:** S1 の候補ランキング & 分類は `inventory` / `masker/upgrade` / `strategist/schema` / `budget` を横断する純関数群として設計する。実装前に再利用境界と synonym map の初期エントリを decisions として固定する。
+
+**決定:**
+
+1. **モジュール位置**: `src/services/candidateSelection/`（新規）。既存 `src/services/strategistOrchestrator/` と同列。
+
+2. **ファイル構成**:
+   | ファイル | 責務 |
+   |---|---|
+   | `types.ts` | `CandidateDoc`, `CandidateRecommendation`, `CandidateSelectionResult` 型の正本 |
+   | `classify.ts` | 分類優先順ロジック（`classifyDocument()`） |
+   | `ranking.ts` | purpose ↔ document スコアリング（`scoreDocument()`） |
+   | `synonyms.ts` | 日英 synonym map |
+   | `missingHints.ts` | `generateMissingHints()` |
+   | `index.ts` | `selectCandidates(purpose, docs)` エントリポイント |
+   | `__tests__/` | 代表 fixture 単体テスト（Firestore / HTTP 不要） |
+
+3. **分類優先順**（`classifyDocument()` の正本ルール）:
+   1. `isBlockedForAi(doc)` → `exclude` / `reasonCode: 'restricted_sensitivity'`
+   2. `needsMaskerEvaluation(doc) || doc.maskingPending === true` → `needs_review` / `'masking_required_unavailable'`
+   3. `doc.freshness === 'superseded_candidate'` → `needs_review` / `'superseded_or_stale'`（UI 既定 unchecked）
+   4. `doc.status ∈ {curated, ai_safe}` かつ上記非該当かつ `score >= SCORE_THRESHOLD` → `include`
+   5. それ以外（処理中 status 等）→ `needs_review` / `'human_confirmation_required'`
+   - `reasonCode` / `reasonLabel` は `ExclusionReasonEnum` / `ExclusionReasonLabels` を再利用し、**新 enum を増やさない**（`D-P4UX-0` 決定5）。
+
+4. **ランキング（deterministic）**:
+   - purpose をスペース / 句読点でトークン分割し、`fileName` / `businessDomain` / `documentType` への synonym 正規化後の重なりでベーススコアを算出する。
+   - `isAuthoritativeCandidate === true` で加点。
+   - `freshness === 'current'` で加点。
+   - 参考実装: `src/services/strategistOrchestrator/budget.ts` の purpose 関連度ソート。
+
+5. **Synonym map 初期エントリ**（`synonyms.ts` の正本。拡張時は本 decisions に追記してから実装する）:
+   ```
+   invoice / billing / 請求 / 料金 → 料金管理
+   onboarding / 研修 / 教育        → 教育・研修
+   payroll / 給与                  → 給与計算
+   contract / 契約                 → 契約管理
+   ```
+   実装は `Record<string, string>` のフラットマップ（lowercase 正規化後に参照）。
+
+6. **missingHints の範囲**: 「purpose が示す businessDomain に `freshness === 'current'` かつ `isAuthoritativeCandidate === true` の文書が 0 件」程度の簡易版に固定する。LLM 推薦・高度なヒントは次フェーズ。
+
+7. **テスト戦略**: `pnpm test src/services/candidateSelection` で4分類と missingHints 生成を代表 fixture で検証する。Firestore / HTTP 依存なし。
+
+**代替案:**
+- LLM / embeddings によるセマンティックランキング → 本フェーズ非対象（`D-P4UX-0` 確定6）。次フェーズで別 decision。
+- synonym なし（keyword 一致のみ）→ 英語 purpose で日本語 enum 文書が 0 件になる実務問題を避けるため採用しない。
+
+**撤退条件:** synonym map の手動管理が実務で破綻（ドメイン語彙の網羅が困難）した場合、次フェーズで embedding ベース類似度に切り替える（別 decision）。
+
+**影響:** 新規 `src/services/candidateSelection/`（上記7ファイル）。既存 `src/agents/` / `src/lib/` / `src/services/strategistOrchestrator/` は改変しない。
+
+---
+
 ## 関連ドキュメント
 
+- [docs/phase-4-ux-direction.md](phase-4-ux-direction.md) — Phase 4-UX 作業分配・実装者向け指示文の正本（`D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2`）
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
 - [docs/phase-3-d-direction.md](phase-3-d-direction.md) — Phase 3-D CI/CD + IAP 実装方針（正本）
 - [docs/phase-3-e-direction.md](phase-3-e-direction.md) — Phase 3-E Processing Boundary + Cloud DLP Trust Modes 実装方針（正本）

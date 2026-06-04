@@ -192,6 +192,98 @@ gcloud tasks queues update "$QUEUE_ID" \
   --max-retry-duration=1800s
 ```
 
+### 2.1 Firestore TTL（terminal job retention）
+
+`context_package_jobs` の terminal (`succeeded` / `failed` / `cancelled`) には
+`expiresAt` が書かれ、既定で **14 日後**に削除される。Firestore 側で TTL を有効化する。
+
+```bash
+gcloud firestore fields ttls update expiresAt \
+  --project="$PROJECT_ID" \
+  --collection-group=context_package_jobs \
+  --enable-ttl
+```
+
+確認:
+
+```bash
+gcloud firestore fields ttls list \
+  --project="$PROJECT_ID" \
+  --format='table(name,state)' |
+  rg 'collectionGroups/context_package_jobs/fields/expiresAt'
+```
+
+### 2.2 stale-running recovery sweeper（Cloud Scheduler）
+
+Cloud Tasks の retry 枯渇後に `running` が残留するケースを回収するため、
+`POST /api/context-package/jobs/sweep` を定期実行する。回収条件は:
+
+- status = `running`
+- `leaseExpiresAt` が期限切れ
+- `updatedAt` から queue `max-retry-duration`（既定 1800s）以上経過
+
+作成例（15 分ごと）:
+
+```bash
+export SWEEP_JOB_ID="context-package-job-sweeper"
+export BASE_URL="$(gcloud run services describe ai-ready-knowledge-hub --region="$REGION" --format='value(status.url)')"
+export IAP_PROGRAMMATIC_CLIENT_ID="YOUR_CLIENT_ID.apps.googleusercontent.com"
+export JOB_TOKEN_SECRET="context-package-job-token"
+export WORKER_SA="context-package-worker@${PROJECT_ID}.iam.gserviceaccount.com"
+export JOB_TOKEN="$(gcloud secrets versions access latest --project="$PROJECT_ID" --secret="$JOB_TOKEN_SECRET")"
+
+gcloud scheduler jobs create http "$SWEEP_JOB_ID" \
+  --project="$PROJECT_ID" \
+  --location="$REGION" \
+  --schedule="*/15 * * * *" \
+  --uri="${BASE_URL}/api/context-package/jobs/sweep" \
+  --http-method=POST \
+  --oidc-service-account-email="$WORKER_SA" \
+  --oidc-token-audience="$IAP_PROGRAMMATIC_CLIENT_ID" \
+  --headers="Content-Type=application/json,X-Context-Package-Job-Token=${JOB_TOKEN}" \
+  --message-body='{"limit":200}'
+```
+
+> `X-Context-Package-Job-Token` は worker と同じ shared token。token rotation 後は
+> Scheduler job も `gcloud scheduler jobs update http ... --headers=...` で更新する。
+> sweeper route を含む revision が production に出る前に作成した場合は、HTTP 405 を
+> 15 分ごとに出さないよう `gcloud scheduler jobs pause "$SWEEP_JOB_ID" ...` で止め、
+> deploy 後に `gcloud scheduler jobs resume "$SWEEP_JOB_ID" ...` してから手動 run で確認する。
+
+### 2.3 offload result object cleanup（GCS lifecycle）
+
+`MAX_INLINE_RESULT_BYTES` 超過時の Context Package job result は
+`gs://${KNOWLEDGE_HUB_BUCKET}/context-package/job-results/` 配下へ保存される。
+job doc の Firestore TTL（14日）と揃えるため、同 prefix に lifecycle delete を設定する。
+
+```bash
+export KNOWLEDGE_HUB_BUCKET="ai-ready-knowledge-hub-uploads"
+
+cat > /tmp/context-package-job-results-lifecycle.json <<'JSON'
+{
+  "rule": [
+    {
+      "action": { "type": "Delete" },
+      "condition": {
+        "age": 14,
+        "matchesPrefix": ["context-package/job-results/"]
+      }
+    }
+  ]
+}
+JSON
+
+gcloud storage buckets update "gs://${KNOWLEDGE_HUB_BUCKET}" \
+  --lifecycle-file=/tmp/context-package-job-results-lifecycle.json
+```
+
+確認:
+
+```bash
+gcloud storage buckets describe "gs://${KNOWLEDGE_HUB_BUCKET}" \
+  --format='yaml(lifecycle_config.rule)'
+```
+
 ### 3. Service accounts と IAM
 
 | 主体 | 役割 | 付与する権限（例） |
@@ -314,6 +406,65 @@ IAP audience 付き service-to-service token を発行するため、active `gcl
 `invoice billing masked only` を使う。これにより `202 → polling → result 200` に加え、
 masked chunk 採用と raw PII 不在も同じ smoke で確認できる。
 
+#### 8.1 Preflight（事故防止）
+
+smoke の前に、deploy された revision と queue / Scheduler / Secret / feature flag の
+整合を見る。ここで失敗した場合は production smoke を始めない。
+
+```bash
+set -euo pipefail
+
+PROJECT_ID="ai-ready-knowledge-hub"
+REGION="asia-northeast1"
+SERVICE="ai-ready-knowledge-hub"
+QUEUE_ID="context-package-jobs"
+SWEEP_JOB_ID="context-package-job-sweeper"
+REPO="matz-d/ai-ready-knowledge-hub"
+
+gcloud config set project "$PROJECT_ID"
+
+gcloud run services describe "$SERVICE" \
+  --project="$PROJECT_ID" \
+  --region="$REGION" \
+  --format='table(status.latestReadyRevisionName,status.url,spec.template.spec.serviceAccountName)'
+
+gcloud tasks queues describe "$QUEUE_ID" \
+  --project="$PROJECT_ID" \
+  --location="$REGION" \
+  --format='yaml(state,retryConfig.maxAttempts,retryConfig.maxRetryDuration)'
+
+gcloud scheduler jobs describe "$SWEEP_JOB_ID" \
+  --project="$PROJECT_ID" \
+  --location="$REGION" \
+  --format='yaml(state,schedule,httpTarget.uri)'
+
+gcloud secrets describe context-package-job-token \
+  --project="$PROJECT_ID" \
+  --format='value(name)' >/dev/null
+
+gh variable get NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED --repo "$REPO"
+gh variable get CONTEXT_PACKAGE_TASKS_QUEUE --repo "$REPO"
+gh variable get CONTEXT_PACKAGE_WORKER_BASE_URL --repo "$REPO"
+gh variable get CONTEXT_PACKAGE_WORKER_SA_EMAIL --repo "$REPO"
+gh variable get CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE --repo "$REPO" >/dev/null
+
+gcloud tasks list \
+  --queue="$QUEUE_ID" \
+  --location="$REGION" \
+  --project="$PROJECT_ID" \
+  --format='value(name)'
+```
+
+期待値:
+
+- Cloud Run service account は `aiknh-runner@...`。
+- queue は `RUNNING`、`maxRetryDuration` は **1800s 以上**。
+- Scheduler は `ENABLED`、URI は `/api/context-package/jobs/sweep`。
+- `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED` は `true`。
+- smoke 開始前の queue pending task は空、または既知の処理中 task のみ。
+
+#### 8.2 Service-to-service smoke
+
 ```bash
 set -euo pipefail
 
@@ -409,6 +560,8 @@ rg -q '\[REDACTED:' <<<"${MARKDOWN}"
 rg -q 'Confidential \(AI-safe via masking\)' <<<"${MARKDOWN}"
 ```
 
+#### 8.3 Post-smoke cleanup / health check
+
 `trap` cleanup 後、binding と queue が空であることを確認する。
 
 ```bash
@@ -433,6 +586,180 @@ gcloud tasks list \
 - project / Worker SA の Token Creator `bindings` は空。
 - queue pending task は空。
 - production の `CONTEXT_PACKAGE_JOB_TOKEN` は Secret Manager 参照のまま。smoke で値を読み出し・変更しない。
+
+直近の worker / sweeper / enqueue ログも確認する。
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision"
+   resource.labels.service_name="ai-ready-knowledge-hub"
+   ("[context-package-job]" OR "[context-package] enqueue" OR "job_queue_unavailable")' \
+  --project=ai-ready-knowledge-hub \
+  --freshness=2h \
+  --limit=50 \
+  --format='table(timestamp,severity,textPayload,jsonPayload.message)'
+```
+
+#### 8.4 Monitoring / alert
+
+S10 の最低限の監視は次の3本。通知先 channel は Console で作るか、
+`gcloud alpha monitoring channels create` で作成し、以下の
+`NOTIFICATION_CHANNEL` に `projects/.../notificationChannels/...` を入れる。
+
+1. **Cloud Run job 系エラー**: worker crash / enqueue failure / sweeper failure。
+2. **stale recovery 発生**: sweeper が `recovered > 0` を返したら調査対象。
+3. **Cloud Tasks backlog**: queue depth が 30 分残る場合は worker / IAP / token / Vertex を確認。
+
+まず log-based metrics を作る。
+
+```bash
+PROJECT_ID="ai-ready-knowledge-hub"
+SERVICE="ai-ready-knowledge-hub"
+
+gcloud logging metrics create context_package_job_errors \
+  --project="$PROJECT_ID" \
+  --description="Context Package async worker/enqueue/sweeper errors" \
+  --log-filter='resource.type="cloud_run_revision"
+resource.labels.service_name="ai-ready-knowledge-hub"
+severity>=ERROR
+("[context-package-job]" OR "[context-package] enqueue failed" OR "job_queue_unavailable")'
+
+gcloud logging metrics create context_package_stale_recoveries \
+  --project="$PROJECT_ID" \
+  --description="Stale running Context Package jobs recovered by sweeper" \
+  --log-filter='resource.type="cloud_run_revision"
+resource.labels.service_name="ai-ready-knowledge-hub"
+"[context-package-job] sweeper completed"
+textPayload=~"recovered: [1-9]"'
+```
+
+次に alert policy を作る。`NOTIFICATION_CHANNEL` が未準備なら
+`notificationChannels` 行を削って作成し、後で Console から通知先を追加してよい。
+
+```bash
+PROJECT_ID="ai-ready-knowledge-hub"
+QUEUE_ID="context-package-jobs"
+REGION="asia-northeast1"
+NOTIFICATION_CHANNEL="projects/${PROJECT_ID}/notificationChannels/REPLACE_ME"
+
+cat > /tmp/context-package-job-errors-policy.json <<JSON
+{
+  "displayName": "Context Package async job errors",
+  "combiner": "OR",
+  "enabled": true,
+  "notificationChannels": ["${NOTIFICATION_CHANNEL}"],
+  "conditions": [
+    {
+      "displayName": "job/enqueue/sweeper error log count > 0",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/context_package_job_errors\" AND resource.type=\"cloud_run_revision\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
+        "duration": "300s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ],
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "1800s" }
+}
+JSON
+
+cat > /tmp/context-package-stale-recovery-policy.json <<JSON
+{
+  "displayName": "Context Package stale running jobs recovered",
+  "combiner": "OR",
+  "enabled": true,
+  "notificationChannels": ["${NOTIFICATION_CHANNEL}"],
+  "conditions": [
+    {
+      "displayName": "sweeper recovered at least one stale job",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/context_package_stale_recoveries\" AND resource.type=\"cloud_run_revision\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
+        "duration": "300s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ],
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "1800s" }
+}
+JSON
+
+cat > /tmp/context-package-queue-backlog-policy.json <<JSON
+{
+  "displayName": "Context Package Cloud Tasks backlog",
+  "combiner": "OR",
+  "enabled": true,
+  "notificationChannels": ["${NOTIFICATION_CHANNEL}"],
+  "conditions": [
+    {
+      "displayName": "queue depth remains above zero for 30 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\"cloudtasks.googleapis.com/queue/depth\" AND resource.type=\"cloud_tasks_queue\" AND resource.labels.project_id=\"${PROJECT_ID}\" AND resource.labels.location=\"${REGION}\" AND resource.labels.queue_id=\"${QUEUE_ID}\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
+        "duration": "1800s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_MEAN"
+          }
+        ],
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "3600s" }
+}
+JSON
+
+gcloud alpha monitoring policies create \
+  --project="$PROJECT_ID" \
+  --policy-from-file=/tmp/context-package-job-errors-policy.json
+
+gcloud alpha monitoring policies create \
+  --project="$PROJECT_ID" \
+  --policy-from-file=/tmp/context-package-stale-recovery-policy.json
+
+gcloud alpha monitoring policies create \
+  --project="$PROJECT_ID" \
+  --policy-from-file=/tmp/context-package-queue-backlog-policy.json
+```
+
+作成後の確認:
+
+```bash
+gcloud alpha monitoring policies list \
+  --project=ai-ready-knowledge-hub \
+  --filter='displayName:"Context Package"' \
+  --format='table(name,displayName,enabled)'
+```
+
+#### 8.5 Incident triage
+
+| 症状 | 最初に見るもの | 典型原因 |
+|---|---|---|
+| UI が 503 `job_queue_unavailable` | GitHub Variables / Cloud Run env / deploy revision | `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true` なのに queue env 未配線 |
+| job が `queued` のまま | Cloud Tasks queue depth / task dispatch logs | queue paused、Runtime SA の `cloudtasks.enqueuer` 不足 |
+| worker `/run` が 401/403 | Cloud Run logs / IAP settings / token secret | IAP programmatic client allowlist 漏れ、Worker SA の IAP accessor 不足、shared token mismatch |
+| `running` が残る | `leaseExpiresAt`、Cloud Tasks retry window、sweeper logs | worker crash 後の retry 枯渇。sweeper で `failed` 回収されること |
+| result route が 500 | `resultRef.objectPath` と GCS object / Runtime SA storage IAM | GCS offload object missing、bucket IAM 不足 |
+| queue backlog alert | Cloud Tasks queue + Cloud Run revision logs | Vertex latency、IAP/token failure、worker 5xx retry loop |
 
 ---
 

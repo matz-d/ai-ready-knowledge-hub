@@ -25,6 +25,26 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
+const CANDIDATES_FIXTURE = {
+  candidates: [
+    {
+      docId: 'doc-1',
+      fileName: 'テスト文書.csv',
+      documentType: '表',
+      businessDomain: '給与計算',
+      sensitivity: 'Internal',
+      freshness: 'current',
+      isAuthoritativeCandidate: true,
+      status: 'curated',
+      score: 0.9,
+      recommendation: 'include',
+      matchReason: 'テスト',
+    },
+  ],
+  missingHints: [],
+  inventoryScanned: 1,
+};
+
 const RESULT_FIXTURE = {
   purpose: 'テスト用途',
   generatedAt: '2026-06-02T00:00:00.000Z',
@@ -55,10 +75,12 @@ async function loadForm(asyncEnabled: boolean) {
   return (await import('../ContextPackageForm')).ContextPackageForm;
 }
 
-function submit() {
+async function fetchCandidatesAndSubmit() {
   fireEvent.change(screen.getByLabelText('Purpose（目的）'), {
     target: { value: 'テスト用途' },
   });
+  fireEvent.click(screen.getByRole('button', { name: '候補を表示' }));
+  await flush();
   fireEvent.click(screen.getByRole('button', { name: /Context Package を生成/ }));
 }
 
@@ -78,6 +100,9 @@ describe('ContextPackageForm async polling', () => {
     let statusCalls = 0;
     const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/context-package/candidates') {
+        return Promise.resolve(jsonResponse(200, CANDIDATES_FIXTURE));
+      }
       if (url === '/api/context-package') {
         return Promise.resolve(
           jsonResponse(202, {
@@ -107,29 +132,24 @@ describe('ContextPackageForm async polling', () => {
 
     const ContextPackageForm = await loadForm(true);
     render(<ContextPackageForm />);
-    submit();
+    await fetchCandidatesAndSubmit();
 
-    // POST を解決して polling 開始（最初の setTimeout 待ちへ）。
     await flush();
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/context-package',
       expect.objectContaining({ method: 'POST' }),
     );
-    // auto を送っていること。
     const postBody = JSON.parse(
-      (fetchMock.mock.calls[0][1] as RequestInit).body as string,
+      (fetchMock.mock.calls.find((c) => c[0] === '/api/context-package')![1] as RequestInit)
+        .body as string,
     );
     expect(postBody.mode).toBe('auto');
+    expect(postBody.docIds).toEqual(['doc-1']);
     expect(screen.getByRole('status')).toBeTruthy();
     expect(
       (screen.getByLabelText('Purpose（目的）') as HTMLTextAreaElement).disabled,
     ).toBe(true);
-    expect(
-      (screen.getByLabelText('対象 Doc IDs（任意）') as HTMLTextAreaElement)
-        .disabled,
-    ).toBe(true);
 
-    // 1回目 status = running、2回目 = succeeded → result fetch。
     await advance(3000);
     await advance(3000);
     await flush();
@@ -141,21 +161,30 @@ describe('ContextPackageForm async polling', () => {
   });
 
   it('async 無効時（既定）: mode を送らず同期 200 を表示する', async () => {
-    const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
-      Promise.resolve(jsonResponse(200, RESULT_FIXTURE)),
-    );
+    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/context-package/candidates') {
+        return Promise.resolve(jsonResponse(200, CANDIDATES_FIXTURE));
+      }
+      if (url === '/api/context-package') {
+        return Promise.resolve(jsonResponse(200, RESULT_FIXTURE));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     const ContextPackageForm = await loadForm(false);
     render(<ContextPackageForm />);
-    submit();
+    await fetchCandidatesAndSubmit();
 
     await flush();
 
     const postBody = JSON.parse(
-      (fetchMock.mock.calls[0][1] as RequestInit).body as string,
+      (fetchMock.mock.calls.find((c) => c[0] === '/api/context-package')![1] as RequestInit)
+        .body as string,
     );
     expect(postBody.mode).toBeUndefined();
+    expect(postBody.docIds).toEqual(['doc-1']);
     expect(screen.getByText('Markdown preview')).toBeTruthy();
   });
 });
