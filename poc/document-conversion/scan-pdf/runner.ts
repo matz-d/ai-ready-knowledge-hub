@@ -115,12 +115,16 @@ function readPriceEnv(name: string): number | null {
 }
 
 function defaultInputUsdPer1M(model: string): number | null {
+  if (model.includes('gemini-3.5-flash')) return 1.5;
+  if (model.includes('gemini-3.1-flash-lite')) return 0.25;
   if (model.includes('gemini-2.5-flash-lite')) return 0.1;
   if (model.includes('gemini-2.5-flash')) return 0.3;
   return null;
 }
 
 function defaultOutputUsdPer1M(model: string): number | null {
+  if (model.includes('gemini-3.5-flash')) return 9;
+  if (model.includes('gemini-3.1-flash-lite')) return 1.5;
   if (model.includes('gemini-2.5-flash-lite')) return 0.4;
   if (model.includes('gemini-2.5-flash')) return 2.5;
   return null;

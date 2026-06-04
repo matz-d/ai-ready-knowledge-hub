@@ -45,8 +45,11 @@ Phase 3-E のデモ説明では、標準 profile は **`cloud-managed`** です�
 
    ```dotenv
    GOOGLE_CLOUD_PROJECT=your-project-id
-   GOOGLE_CLOUD_LOCATION=asia-northeast1
+   GOOGLE_CLOUD_LOCATION=global
    KNOWLEDGE_HUB_BUCKET=your-bucket-name
+   KNOWLEDGE_HUB_DATA_RESIDENCY_LOCATION=asia-northeast1
+   GEMINI_MODEL=gemini-3.5-flash
+   SCAN_PDF_GEMINI_MODEL=gemini-3.1-flash-lite
    # Optional: MASKER_PROVIDER=cloud-dlp
    ```
 
@@ -316,6 +319,34 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 # GEMINI_MODEL is optional
 GEMINI_MODEL=gemini-...
 ```
+
+### Gemini 3.x migration smoke
+
+現行のハッカソン default は `global + gemini-3.5-flash`。2026-06-03 の実測では、このプロジェクトから `asia-northeast1` の Gemini 3.x は 404 になり、`global` では scan-pdf PoC が通った。OCR は cost / throughput 優先で `SCAN_PDF_GEMINI_MODEL=gemini-3.1-flash-lite` を使う。
+
+```bash
+export GOOGLE_CLOUD_LOCATION=global
+export GEMINI_MODEL=gemini-3.5-flash
+export SCAN_PDF_GEMINI_MODEL=gemini-3.1-flash-lite
+pnpm test:e2e:live
+```
+
+低コスト / OCR 比較:
+
+```bash
+export GOOGLE_CLOUD_LOCATION=global
+export SCAN_PDF_GEMINI_MODEL=gemini-3.1-flash-lite
+pnpm poc:conversion:scan-pdf sample-data/document-conversion/scan-pdf/synthetic-invoice-with-pii-scan.pdf
+```
+
+確認観点:
+
+- Curator / Masker / Strategist の structured output が Zod 検証を通る
+- scan-pdf OCR が non-empty pages と `piiFindings` を返す
+- AuditEvent の `inferenceDestination.model` に試験モデルが残る
+- sensitive-document demo では Google Cloud / Vertex AI の managed boundary を信頼する説明に寄せる。Cloud Run / GCS / Firestore は東京、Gemini 3.x 推論は `global` endpoint
+
+詳細は [Gemini Model Migration Notes](gemini-model-migration.md) を参照。
 
 ADC を使う場合:
 

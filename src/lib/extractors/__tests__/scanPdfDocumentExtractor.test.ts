@@ -54,8 +54,7 @@ vi.mock('../../../agents/_shared/genkitClient', () => ({
       return _mockResponse;
     },
   },
-  modelRef: () => 'mock-model-ref',
-  modelId: 'gemini-test-model',
+  modelRefFor: (modelId: string) => `mock-model-ref:${modelId}`,
   location: 'asia-test-1',
 }));
 
@@ -199,7 +198,7 @@ describe('extractScanPdfFromBuffer — success', () => {
     });
     expect(conversion.converterId).toBe('gemini-vertex-ocr');
     expect(conversion.calledVertex).toBe(true);
-    expect(conversion.model).toBe('gemini-test-model');
+    expect(conversion.model).toBe('gemini-3.1-flash-lite');
     expect(conversion.region).toBe('asia-test-1');
     expect(conversion.piiFindings).toEqual(piiFindings);
   });

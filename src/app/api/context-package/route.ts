@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { modelId } from '../../../agents/_shared/genkitClient';
+import { location, modelId } from '../../../agents/_shared/genkitClient';
 import {
   buildContextPackageResponsePayload,
   contextPackageAuditTarget,
@@ -87,7 +87,11 @@ function unresolvedDocIdsResponse(e: UnresolvedDocIdsError): {
 }
 
 function defaultCloudRegion(): string {
-  return process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1';
+  return location;
+}
+
+function defaultDataResidencyLocation(): string {
+  return process.env.KNOWLEDGE_HUB_DATA_RESIDENCY_LOCATION ?? 'asia-northeast1';
 }
 
 export async function POST(request: Request) {
@@ -134,6 +138,7 @@ export async function POST(request: Request) {
 
     try {
       const region = defaultCloudRegion();
+      const dataResidencyLocation = defaultDataResidencyLocation();
       await recordAuditEvent({
         tenantId,
         actor,
@@ -152,8 +157,8 @@ export async function POST(request: Request) {
           model: modelId,
         },
         dataResidency: {
-          storage: region,
-          processing: region,
+          storage: dataResidencyLocation,
+          processing: dataResidencyLocation,
         },
       });
     } catch (auditErr) {

@@ -765,5 +765,6 @@ gcloud alpha monitoring policies list \
 
 ## Notes
 
-- 本リポジトリでは Vertex AI 利用時のリージョンは `asia-northeast1` 固定。
-- `gemini-api` skill の一般推奨 `global` は、明示要件があるためこのプロジェクトでは採用しない。
+- Cloud Run / Artifact Registry / GCS / Firestore の主リージョンは引き続き `asia-northeast1`。
+- Gemini 3.x のハッカソン本線は `GOOGLE_CLOUD_LOCATION=global` を使う。2026-06-03 時点で、このプロジェクトでは `global` のみ `gemini-3.5-flash` / `gemini-3.1-flash-lite` が疎通済み。
+- AuditEvent の `dataResidency` は `KNOWLEDGE_HUB_DATA_RESIDENCY_LOCATION`（未指定時 `asia-northeast1`）で記録する。

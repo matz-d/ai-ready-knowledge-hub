@@ -335,12 +335,14 @@ describe('POST /api/context-package', () => {
         }),
         inferenceDestination: {
           vendor: 'vertex',
-          region: process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1',
-          model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+          region: process.env.GOOGLE_CLOUD_LOCATION ?? 'global',
+          model: process.env.GEMINI_MODEL ?? 'gemini-3.5-flash',
         },
         dataResidency: {
-          storage: process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1',
-          processing: process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1',
+          storage:
+            process.env.KNOWLEDGE_HUB_DATA_RESIDENCY_LOCATION ?? 'asia-northeast1',
+          processing:
+            process.env.KNOWLEDGE_HUB_DATA_RESIDENCY_LOCATION ?? 'asia-northeast1',
         },
         target: {
           docId: 'doc-1',

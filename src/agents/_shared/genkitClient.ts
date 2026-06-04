@@ -9,7 +9,7 @@ import type { ZodType } from 'zod';
  * - ローカル / scripts/ 実行では `.env.local` から読む（ロードは scripts 側責務）
  */
 
-export const location = process.env.GOOGLE_CLOUD_LOCATION ?? 'asia-northeast1';
+export const location = process.env.GOOGLE_CLOUD_LOCATION ?? 'global';
 const projectId = process.env.GOOGLE_CLOUD_PROJECT;
 
 if (!projectId && process.env.NODE_ENV !== 'production') {
@@ -18,7 +18,7 @@ if (!projectId && process.env.NODE_ENV !== 'production') {
   );
 }
 
-export const modelId = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
+export const modelId = process.env.GEMINI_MODEL ?? 'gemini-3.5-flash';
 
 export const ai = genkit({
   plugins: [
@@ -32,6 +32,10 @@ export const ai = genkit({
 
 export function modelRef() {
   return vertexAI.model(modelId);
+}
+
+export function modelRefFor(targetModelId: string) {
+  return vertexAI.model(targetModelId);
 }
 
 /**
