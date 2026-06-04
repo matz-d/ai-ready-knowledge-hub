@@ -39,6 +39,12 @@ AI-Ready Knowledge Hub の各エージェント (Curator / Masker / Strategist /
 | `accounting-office/料金表_2026.csv` | 現行料金表。Internal、鮮度=現行 |
 | `accounting-office/古い料金表_2023.csv` | 旧版料金表。Curator 鮮度判定で「旧版候補」フラグが立つ想定 |
 
+### candidate-selection（Phase 4-UX S4）
+
+| ファイル | 想定挙動 |
+|---|---|
+| `candidate-selection/accounting-office-inventory.fixture.json` | metadata-only の synthetic Inventory（10 件）。`src/services/candidateSelection/__tests__/golden.test.ts` がランキング・分類の golden snapshot 回帰に使用。本文・PII なし。 |
+
 ## 注意
 
 - 個人情報の演出度合い (氏名・住所・金額・日付の具体性) は Masker の挙動を見せるための調整であり、実在の情報ではありません

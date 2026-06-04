@@ -25,10 +25,15 @@ import { PROCESSING_PROFILE_PRESETS } from '../processingProfile';
 import {
   claimContextPackageJob,
   completeContextPackageJob,
+  completeContextPackageJobWithResultRef,
   failContextPackageJob,
   getContextPackageJob,
   releaseContextPackageJobLease,
 } from './firestoreAdapter';
+import {
+  deleteContextPackageJobResult,
+  writeContextPackageJobResult,
+} from './resultStorage';
 import type {
   ContextPackageJobError,
   ContextPackageJobProgress,
@@ -196,32 +201,43 @@ export async function runContextPackageJob(
     const progress = progressFromResult(result);
 
     const byteSize = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+    let completed: boolean;
+    let offloadedResultRef:
+      | Awaited<ReturnType<typeof writeContextPackageJobResult>>
+      | undefined;
     if (byteSize > MAX_INLINE_RESULT_BYTES) {
-      return persistBusinessFailure(
+      offloadedResultRef = await writeContextPackageJobResult({
+        tenantId: request.tenantId,
+        jobId,
+        payload,
+      });
+      completed = await completeContextPackageJobWithResultRef(
         jobId,
         attemptToken,
-        {
-          code: 'result_too_large',
-          message:
-            `生成結果が Firestore の保存上限を超えました（${byteSize} bytes）。` +
-            'docIds や limit で対象を絞って再実行してください。',
-          details: { byteSize, maxBytes: MAX_INLINE_RESULT_BYTES },
-        },
+        offloadedResultRef,
+        progress,
+      );
+    } else {
+      completed = await completeContextPackageJob(
+        jobId,
+        attemptToken,
+        payload,
         progress,
       );
     }
-
-    const completed = await completeContextPackageJob(
-      jobId,
-      attemptToken,
-      payload,
-      progress,
-    );
     if (!completed) {
       console.error(
         '[context-package-job] complete rejected (stale attempt or status drift)',
         { jobId },
       );
+      if (offloadedResultRef) {
+        await deleteContextPackageJobResult(offloadedResultRef).catch((deleteError) => {
+          console.error(
+            '[context-package-job] cleanup offloaded result after rejected complete failed',
+            { jobId, deleteError },
+          );
+        });
+      }
       return { outcome: 'skipped', reason: 'active_lease' };
     }
 

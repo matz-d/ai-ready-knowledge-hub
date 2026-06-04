@@ -274,6 +274,13 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 - `Full AI-Ready Sources` には、必要な本文だけが入り、raw の個人情報や restricted 本文が混ざっていない
 - 最後に「これを NotebookLM / Gemini / RAG に渡す。AI本体ではなく、その前に情報を整えるところが価値」と締める
 
+### production async smoke
+
+Cloud Run + IAP + Cloud Tasks worker + result route までの本番非同期経路は
+[setup-gcp.md §8](setup-gcp.md#8-context-package-非同期-production-smoke) を正本にする。
+デモ前の運用確認では、同節の preflight → service-to-service smoke → post-smoke cleanup
+→ Monitoring / alert 確認の順で実施する。
+
 ## 8. E2E test policy
 
 E2E は 2 層に分けます。

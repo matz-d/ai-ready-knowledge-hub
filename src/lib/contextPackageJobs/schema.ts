@@ -67,17 +67,32 @@ export type ContextPackageJobError = {
  */
 export type ContextPackageJobResult = Record<string, unknown>;
 
+/** oversized payload を GCS へ退避したときの参照情報。 */
+export type ContextPackageJobResultRef = {
+  storage: 'gcs';
+  bucket: string;
+  objectPath: string;
+  contentType: 'application/json';
+  byteSize: number;
+};
+
 export type ContextPackageJob = {
   jobId: string;
   status: ContextPackageJobStatus;
   request: ContextPackageJobRequest;
   progress?: ContextPackageJobProgress;
   result?: ContextPackageJobResult;
+  resultRef?: ContextPackageJobResultRef;
   error?: ContextPackageJobError;
   createdAt: string;
   updatedAt: string;
   startedAt?: string;
   finishedAt?: string;
+  /**
+   * terminal job の retention 期限（Firestore TTL 用）。
+   * `succeeded` / `failed` / `cancelled` への遷移時に設定される。
+   */
+  expiresAt?: string;
   /**
    * `running` job の lease 期限（ISO）。worker が claim した時点で `now + lease` を
    * 書き込む。worker がクラッシュ / 予期せぬ例外で lease を解放しないまま落ちても、
@@ -98,6 +113,10 @@ export type ClaimContextPackageJobResult =
 /** worker が claim 時に確保する lease の長さ（ms）。20 秒ゲート無しの非同期生成が
  *  現実的に収まる余裕を見て 15 分。期限切れ running は再 claim 可能になる。 */
 export const CONTEXT_PACKAGE_JOB_LEASE_MS = 15 * 60 * 1000;
+/** Cloud Tasks queue の max-retry-duration（setup-gcp.md と整合）。 */
+export const CONTEXT_PACKAGE_JOB_MAX_RETRY_DURATION_MS = 30 * 60 * 1000;
+/** terminal job を保持する期間（日）。Firestore TTL で削除する。 */
+export const CONTEXT_PACKAGE_JOB_TERMINAL_RETENTION_DAYS = 14;
 
 /**
  * Firestore 読み出し後の最小バリデーション。Timestamp は adapter 側で ISO 文字列へ

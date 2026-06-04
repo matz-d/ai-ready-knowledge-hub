@@ -93,14 +93,20 @@ vi.mock('../../firestore', () => ({
 }));
 
 import {
+  cancelContextPackageJob,
   claimContextPackageJob,
   completeContextPackageJob,
+  completeContextPackageJobWithResultRef,
   createContextPackageJob,
   failContextPackageJob,
   getContextPackageJob,
+  recoverStaleRunningContextPackageJob,
   releaseContextPackageJobLease,
 } from '../firestoreAdapter';
-import { CONTEXT_PACKAGE_JOBS_COLLECTION } from '../schema';
+import {
+  CONTEXT_PACKAGE_JOBS_COLLECTION,
+  CONTEXT_PACKAGE_JOB_MAX_RETRY_DURATION_MS,
+} from '../schema';
 
 const REQUEST = {
   purpose: 'テスト用途',
@@ -217,7 +223,40 @@ describe('contextPackageJobs firestoreAdapter', () => {
     expect(stored?.status).toBe('succeeded');
     expect(stored?.result).toMatchObject({ markdown: '# ok' });
     expect(stored?.leaseExpiresAt).toBeUndefined();
+    expect(stored?.expiresAt).toBeTruthy();
     expect(fakeDb.store.get(jobPath(job.jobId))?.attemptToken).toBeUndefined();
+  });
+
+  it('completeWithResultRef は succeeded + resultRef を書き込み inline result を消す', async () => {
+    const job = await createContextPackageJob(REQUEST);
+    await claimContextPackageJob(job.jobId);
+    const token = storedAttemptToken(job.jobId);
+
+    const ok = await completeContextPackageJobWithResultRef(
+      job.jobId,
+      token,
+      {
+        storage: 'gcs',
+        bucket: 'test-bucket',
+        objectPath: `context-package/job-results/${REQUEST.tenantId}/${job.jobId}.json`,
+        contentType: 'application/json',
+        byteSize: 1234,
+      },
+      { sourceDocumentsReviewed: 2, safeChunks: 2, budgetDroppedChunks: 0 },
+    );
+
+    expect(ok).toBe(true);
+    const stored = await getContextPackageJob(job.jobId);
+    expect(stored?.status).toBe('succeeded');
+    expect(stored?.result).toBeUndefined();
+    expect(stored?.resultRef).toEqual({
+      storage: 'gcs',
+      bucket: 'test-bucket',
+      objectPath: `context-package/job-results/${REQUEST.tenantId}/${job.jobId}.json`,
+      contentType: 'application/json',
+      byteSize: 1234,
+    });
+    expect(stored?.expiresAt).toBeTruthy();
   });
 
   it('fail は running + attemptToken 一致時のみ failed にする', async () => {
@@ -238,6 +277,7 @@ describe('contextPackageJobs firestoreAdapter', () => {
       code: 'no_inventory_documents',
       message: 'none',
     });
+    expect(stored?.expiresAt).toBeTruthy();
   });
 
   it('queued のまま fail できる（enqueue 失敗経路、attemptToken 不要）', async () => {
@@ -349,6 +389,101 @@ describe('contextPackageJobs firestoreAdapter', () => {
       await releaseContextPackageJobLease(job.jobId, 'wrong-token'),
     ).toBe(false);
     expect(fakeDb.store.get(jobPath(job.jobId))?.leaseExpiresAt).toBeTruthy();
+  });
+
+  it('cancel は queued を cancelled に遷移し lease/token をクリアする', async () => {
+    const job = await createContextPackageJob(REQUEST);
+
+    const cancelled = await cancelContextPackageJob(job.jobId);
+    expect(cancelled).toEqual({ cancelled: true, previousStatus: 'queued' });
+
+    const stored = await getContextPackageJob(job.jobId);
+    expect(stored?.status).toBe('cancelled');
+    expect(stored?.expiresAt).toBeTruthy();
+    expect(stored?.leaseExpiresAt).toBeUndefined();
+    expect(fakeDb.store.get(jobPath(job.jobId))?.attemptToken).toBeUndefined();
+  });
+
+  it('cancel は running も cancelled にできる（in-flight 結果は後続拒否）', async () => {
+    const job = await createContextPackageJob(REQUEST);
+    const claim = await claimContextPackageJob(job.jobId);
+    expect(claim.claimed).toBe(true);
+
+    const cancelled = await cancelContextPackageJob(job.jobId);
+    expect(cancelled).toEqual({ cancelled: true, previousStatus: 'running' });
+
+    const stored = await getContextPackageJob(job.jobId);
+    expect(stored?.status).toBe('cancelled');
+    expect(stored?.error?.details).toMatchObject({
+      reason: 'cancelled_by_request',
+    });
+  });
+
+  it('cancel は terminal job を already_terminal で拒否する', async () => {
+    const job = await createContextPackageJob(REQUEST);
+    const claim = await claimContextPackageJob(job.jobId);
+    expect(claim.claimed).toBe(true);
+    if (!claim.claimed) throw new Error('expected claim');
+    await completeContextPackageJob(job.jobId, claim.attemptToken, { ok: true });
+
+    expect(await cancelContextPackageJob(job.jobId)).toEqual({
+      cancelled: false,
+      reason: 'already_terminal',
+    });
+  });
+
+  it('stale recovery は lease切れ + retry窓超過の running を failed 回収する', async () => {
+    const job = await createContextPackageJob(REQUEST);
+    const claim = await claimContextPackageJob(job.jobId);
+    expect(claim.claimed).toBe(true);
+
+    const oldUpdatedAt = new Date(
+      Date.now() - CONTEXT_PACKAGE_JOB_MAX_RETRY_DURATION_MS - 1_000,
+    ).toISOString();
+    fakeDb.store.set(jobPath(job.jobId), {
+      ...fakeDb.store.get(jobPath(job.jobId))!,
+      leaseExpiresAt: new Date(Date.now() - 1_000).toISOString(),
+      updatedAt: oldUpdatedAt,
+    });
+
+    const recovered = await recoverStaleRunningContextPackageJob(job.jobId);
+    expect(recovered).toEqual({ recovered: true });
+
+    const stored = await getContextPackageJob(job.jobId);
+    expect(stored?.status).toBe('failed');
+    expect(stored?.error?.details).toMatchObject({
+      reason: 'stale_running_recovery',
+    });
+    expect(stored?.expiresAt).toBeTruthy();
+  });
+
+  it('stale recovery は retry窓内の running を回収しない', async () => {
+    const job = await createContextPackageJob(REQUEST);
+    const claim = await claimContextPackageJob(job.jobId);
+    expect(claim.claimed).toBe(true);
+
+    fakeDb.store.set(jobPath(job.jobId), {
+      ...fakeDb.store.get(jobPath(job.jobId))!,
+      leaseExpiresAt: new Date(Date.now() - 1_000).toISOString(),
+      updatedAt: new Date(Date.now() - 1_000).toISOString(),
+    });
+
+    expect(await recoverStaleRunningContextPackageJob(job.jobId)).toEqual({
+      recovered: false,
+      reason: 'within_retry_window',
+    });
+    expect((await getContextPackageJob(job.jobId))?.status).toBe('running');
+  });
+
+  it('stale recovery は lease 有効中なら回収しない', async () => {
+    const job = await createContextPackageJob(REQUEST);
+    await claimContextPackageJob(job.jobId);
+
+    expect(await recoverStaleRunningContextPackageJob(job.jobId)).toEqual({
+      recovered: false,
+      reason: 'lease_active',
+    });
+    expect((await getContextPackageJob(job.jobId))?.status).toBe('running');
   });
 
   it('getContextPackageJob は存在しない場合 null', async () => {
