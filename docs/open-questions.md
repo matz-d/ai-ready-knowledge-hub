@@ -30,7 +30,7 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
   - `GET /api/context-package/jobs/:jobId`（status / progress / error）
   - `GET /api/context-package/jobs/:jobId/result`（完了後 payload。同期レスポンスと同型）
 - **worker 実行**（`runJob.ts`）は orchestrator を `enforceSyncBudget:false` で実行（pre-LLM budget は引き続き有効、20 秒ゲートのみ外す）。成功時は同期経路と同型の `document.export` 監査も記録。
-- **result 保存**は当面 job doc に inline（`ContextPackageJobResult`）。Firestore 1MB 上限に対し `MAX_INLINE_RESULT_BYTES = 900_000` でサイズガードし、超過時は `result_too_large` で fail（GCS offload は後続）。
+- **result 保存**は当初 job doc に inline（`ContextPackageJobResult`）。Firestore 1MB 上限に対する後続として、2026-06-03 に GCS offload を実装済み（下記 R10 後続参照）。
 - **必要な環境変数（worker 経路）**: `GOOGLE_CLOUD_PROJECT` / `CONTEXT_PACKAGE_TASKS_LOCATION`（既定 `GOOGLE_CLOUD_LOCATION`）/ `CONTEXT_PACKAGE_TASKS_QUEUE` / `CONTEXT_PACKAGE_WORKER_BASE_URL` / `CONTEXT_PACKAGE_WORKER_SA_EMAIL` / `CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE`（IAP programmatic access 用 OAuth client ID）/ `CONTEXT_PACKAGE_JOB_TOKEN`（Secret Manager → Cloud Run env）。未設定時は enqueue が **503 `job_queue_unavailable`** で「同期で絞るか queue 設定を確認」を促す。配線手順の正本は [docs/setup-gcp.md](setup-gcp.md) §Context Package 非同期。
 
 **UI polling（実装済み 2026-06-02、同 PR）**
@@ -56,10 +56,12 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
   - `MAX_INLINE_RESULT_BYTES` 超過時は job result を `context-package/job-results/{tenant}/{job}.json` へ保存し、job doc は `resultRef` を保持する（inline `result` は保持しない）。
   - `GET /api/context-package/jobs/:jobId/result` は同一 tenant 認可を維持したまま、inline / GCS-backed の両経路で payload を返す。
   - 保存先オブジェクトは prefix lifecycle（14日）で自動削除する運用に統一。
+  - **GitHub issue は open のまま**。close 条件は production で GCS offload smoke、result route 認可、tenant isolation、lifecycle 設定を証跡化すること。
 - ~~**job GC / cancel**~~ — **実装済み（2026-06-03）**。追跡: [#15](https://github.com/matz-d/ai-ready-knowledge-hub/issues/15)
   - terminal job（`succeeded` / `failed` / `cancelled`）に `expiresAt` を付与し、Firestore TTL で retention（既定 14 日）後に自動削除する。
   - `DELETE /api/context-package/jobs/:jobId` を追加し、同一 tenant の `queued` / `running` job を `cancelled` へ遷移可能にした（`succeeded` / `failed` は 409）。
   - `POST /api/context-package/jobs/sweep` を追加し、lease 期限切れかつ Cloud Tasks retry 窓（既定 1800s）を超えて残留した `running` job を `failed` へ回収する。
+  - **GitHub issue は open のまま**。close 条件は production で sweeper route を含む revision を deploy 済みにし、Scheduler resume、manual run、stale recovery の証跡を残すこと。
 
 ---
 
@@ -157,7 +159,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 - Phase 3-C-5 バグ修正 6 件（malformed doc skip、txt/md chunk 生成、upload 後 auto-chunk、Docs route 分岐、Docs error mapping、backfill usage）
 - CodeRabbit review: 5 件 apply / 11 件 skip（[docs/decisions.md D-P3-C](decisions.md) に根拠記録）
 
-**次フェーズ（2026-05-21 現在）:**
+**次フェーズ（2026-06-08 現在）:**
 
 | 候補 | 内容 | 優先度 |
 |---|---|---|
@@ -166,8 +168,10 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | ~~Phase 3-H / H-2~~ | ~~Document Conversion PoC + subtype 1 薄い本線統合 + Eval 育成ループ~~ | **完了** (2026-05-20) |
 | ~~Phase 3-H-3 subtype 2~~ | ~~slide-pdf 本線統合 + `inferenceDestination` + live smoke~~ | **完了** (2026-05-20, PR #3) |
 | ~~Phase 3-H-3 subtype 3 (M6)~~ | ~~scan-pdf 本線統合 + OCR fail-closed + `unmaskablePiiFindings` warn~~ | **完了** (2026-05-21, live smoke DoD YES) |
-| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | 提出・デモ向け |
 | ~~Masker 本線統合（PDF 経路）~~ | ~~`requires_masking` PDF の chunk 化と Context Package 接続~~ | **完了**（2026-05-29、`D-P3-M-PDF-1` / `feat/masker-pdf-mainline`） |
+| ~~Phase 4-UX MVP~~ | ~~purpose-driven candidate selection + Safety Review + Preview~~ | **実装済み**（2026-06-03、production 手動通し待ち） |
+| Production Hardening close-out | #15 job GC / stale recovery、#16 result GCS offload の production smoke と issue close | **最優先** |
+| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | Production Hardening close-out 後 |
 | **Ingest: standalone images** | `image/jpeg` / `image/png` 等を upload ソースとして追加（scan-pdf とは別。写真・図面・スクショ単体） | 情報源拡張（下記 §Ingest 起票） |
 | **Ingest: Drive folder bulk** | SA 共有フォルダ配下のファイル列挙 → バッチ import（URL 1 本ずつからの脱却） | 情報源拡張（下記 §Ingest 起票） |
 | **Ingest: local directory batch** | ローカルディレクトリ walk または複数ファイル一括投入（CLI / UI） | 情報源拡張（下記 §Ingest 起票） |
@@ -175,7 +179,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | Phase 3-H `office-native` | `.pptx` / `.docx` 原本の conversion subtype 4 | Phase 3-H 優先 4・時間があれば |
 | Phase 3-G | `cloud-sanitized-ingress` prototype | 高セキュリティ顧客向け後続 |
 
-**次のアクション**: Phase 3-F（デモ polish）と Ingest 拡張（画像単体・Drive/ローカル一括・Drive 同期）の優先を product 判断。**Masker PDF 本線の dev tenant live smoke 証跡は完了**（2026-05-29、[phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）。Context Package の pre-LLM budget / strict docIds / scan-pdf `imageText` page evidence は実装済み（`D-P3-M-PDF-1` 後続）。scan-pdf 公開拡大は **`unmaskablePiiFindings` 閾値再評価**を別 decision で扱う（`D-P3-H-7 Q4` 後続）。**情報源の幅**を伸ばす候補は下記 §Ingest 拡張に起票済み — 着手前に decision エントリを足す。
+**次のアクション**: Production Hardening close-out を先に行う。#15/#16 はコード実装済みだが GitHub issue は open のため、production で sweeper resume + manual run、GCS offload result route、tenant isolation、TTL/lifecycle を smoke して証跡を残し close 判断する。その後、Phase 4-UX のブラウザ手動通し、Phase 3-F（デモ polish）、Ingest 拡張（画像単体・Drive/ローカル一括・Drive 同期）の product 判断へ進む。scan-pdf 公開拡大は **`unmaskablePiiFindings` 閾値再評価**を別 decision で扱う（`D-P3-H-7 Q4` 後続）。
 
 ### Ingest 拡張（起票 2026-05-21）
 

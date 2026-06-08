@@ -16,9 +16,9 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 
 ---
 
-## 現在のステータス (2026-05-29)
+## 現在のステータス (2026-06-08)
 
-**フェーズ**: Phase 3-H-3 **完了**（subtype 1 `official-doc-pdf`、subtype 2 `slide-pdf`、subtype 3 `scan-pdf` の本線統合 + Conversion Eval CI + dev tenant live smoke）。PDF 3 subtype は Firestore feature flag で tenant 限定 gating 済み。scan-pdf（M6）は Gemini Vertex OCR、`document.convert` の `inferenceDestination` / `unmaskablePiiFindings`、OCR pre-flight fail-closed、CI health gate、dev tenant `m-grow-ai.com` live smoke（[証跡](docs/phase-3-h-3-scan-pdf-live-smoke.md)）まで完了。**Masker 本線統合（PDF 経路）** 実装完了（`D-P3-M-PDF-1`、`requires_masking` PDF を `ai_safe`/`restricted` 終端まで処理。per-chunk マスクは逐次、post-`ai_safe` 失敗時は GCS/Firestore ロールバック）。次は **Phase 3-F**（デモ polish）と **Masker PDF の dev tenant live smoke 証跡** / `unmaskablePiiFindings` 閾値再評価 / scan-pdf 公開範囲拡大（`D-P3-H-7 Q4`、別 decision）。
+**フェーズ**: Phase 4-UX MVP **実装済み**。purpose 入力から候補文書を metadata-only で提示し、include / exclude / needs_review、Safety Review、生成前 Preview を経て Context Package を生成する導線まで到達した。Phase 3-H-3 の PDF 3 subtype 本線統合、Masker PDF 本線、Context Package 非同期 job 化も完了済み。次は **Production Hardening の実機検証と issue close**（#15 job GC / stuck-running recovery、#16 large result GCS offload）と、Phase 4-UX のブラウザ手動通し、Ingest 拡張の product 判断。
 
 ### 完了済み
 
@@ -52,8 +52,10 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 - **Phase 3-H-2 (official-doc-pdf 本線 + Eval 育成)**: `pdf-conversion-subtype-1` flag、`pdfDocumentExtractor`、`document.convert` AuditEvent、Conversion Eval health/heuristic/golden CI（`.github/workflows/conversion-eval.yml`）。2026-05-20 完了。正本は `docs/phase-3-h-2-direction.md`。
 - **Phase 3-H-3 subtype 2 (slide-pdf 本線)**: `pdf-conversion-subtype-2` flag、`slidePdfDocumentExtractor`、Vertex 成功時 `inferenceDestination` 必須、slide 専用 heuristic / golden、live smoke 証跡 `docs/phase-3-h-3-slide-pdf-live-smoke.md`（2026-05-20、PR #3）。
 - **Phase 3-H-3 subtype 3 / M6 (scan-pdf 本線)**: `pdf-conversion-subtype-3` flag（**`m-grow-ai.com` のみ**）、`scanPdfDocumentExtractor`（Gemini OCR、timeout 60s / 入力 5 MiB、pre-flight fail-closed）、`unmaskablePiiFindings` 記録、scan-pdf golden sidecar、CI health gate 必須化、live smoke 証跡 `docs/phase-3-h-3-scan-pdf-live-smoke.md`（2026-05-21）。DoD 正本は `docs/phase-3-h-3-direction.md` §8.3。
+- **Phase 4-UX MVP (purpose-driven candidate selection)**: `src/services/candidateSelection/` の deterministic ranking / classification、`POST /api/context-package/candidates`、候補選択 UI、Safety Review、Pre-generation Preview を実装。候補 API は metadata-only の助言レイヤで、本文・chunk・GCS・`aiSafeContent`・LLM を読まない。
+- **Context Package Production Hardening**: async job の cancel / stale-running sweeper / terminal TTL と、large result の GCS offload を実装済み。GitHub issue #15/#16 は production 実機 smoke と close 判断待ち。
 
-### コードの位置 (Phase 3-H-3 M6 完了時点)
+### コードの位置 (Phase 4-UX / Production Hardening 時点)
 
 ```
 src/
@@ -66,6 +68,10 @@ src/
     strategist/safetyGate.ts             # 決定論的 PII フィルタ（LLM を呼ばない）
     strategist/types.ts
   services/
+    candidateSelection/
+      selectCandidates.ts                # purpose → candidate docs facade（metadata-only）
+      ranking.ts / classify.ts           # deterministic score + include/exclude/needs_review
+      missingHints.ts / synonyms.ts
     strategistOrchestrator/
       orchestrator.ts                    # Firestore + safety gate + Strategist を繋ぐ service 層
       toContextPackage.ts                # StrategistOrchestratorResult → ContextPackageExportInput + Markdown
@@ -78,6 +84,10 @@ src/
     importedSnapshotOrchestrator.ts      # Sheets / Docs import の副作用順序
     inventory.ts / inventoryFirestoreAdapter.ts
     contextPackageInput.ts / contextPackageFirestoreAdapter.ts
+    contextPackageJobs/
+      enqueuer.ts / runJob.ts            # async Context Package job enqueue / worker
+      firestoreAdapter.ts                # lease, cancel, stale recovery, terminal TTL
+      resultStorage.ts                   # large result GCS offload / cleanup
     documentUploadResponseMapper.ts
     knowledgeChunkSchema.ts / chunkFirestoreAdapter.ts / chunkRegenerator.ts
     columnSensitivityRules.ts
@@ -102,6 +112,9 @@ src/
   app/
     api/
       context-package/route.ts           # POST /api/context-package（同期 Purpose Query）
+      context-package/candidates/route.ts # POST /api/context-package/candidates（候補 API）
+      context-package/jobs/[jobId]/...   # async job status / result / run / cancel
+      context-package/jobs/sweep/route.ts # stale-running recovery sweeper
       documents/route.ts                 # POST /api/documents（upload → auto-chunk）
       documents/[docId]/route.ts         # GET /api/documents/:docId
       import/google-sheets/route.ts      # POST /api/import/google-sheets（Sheets / Docs 振り分け）
@@ -109,7 +122,9 @@ src/
       workspace/freshness/route.ts       # POST /api/workspace/freshness
       curator/route.ts                   # eval/smoke 専用、UI 非使用
     context-package/
-      ContextPackageForm.tsx             # Purpose 入力 → API 呼び出し → 結果表示 + .md DL
+      ContextPackageForm.tsx             # Purpose → candidates → preview → Context Package
+      CandidateSelectionList.tsx / SafetyReviewPanel.tsx / PreGenerationPreviewPanel.tsx
+      candidateSelectionUi.ts / preGenerationPreview.ts
       page.tsx
     documents/[docId]/page.tsx
     import/google-sheets/ImportForm.tsx / page.tsx
@@ -243,6 +258,7 @@ sample-data/
 - **Cloud DLP + Masker で安全化**: 個人名・住所・電話番号などは Cloud DLP で検出し、さらに Masker が「マスク後も特定できそうか」を確認する。安全に変換できるものは AI 参照版へ、危ないものは Context Package 本文から外す。
 - **Context Package に目的が残る**: export は単なる文書束ではなく、「新人スタッフ向け給与計算AIを作る」などの purpose に対して、採用・除外・確認質問をまとめる。後から「この目的なら、この情報をAIに渡してよい」と説明できる。
 - **NotebookLM / Gemini / RAG の前段**: 生成AI本体を作るのではなく、投入前の情報整理と安全確認を担当する。下流AIには、マスク済み本文・除外理由・不足情報が揃った Context Package を渡す。
+- **purpose 起点の候補選択**: Phase 4-UX では docId 手入力を主導線から外し、目的から候補・除外・要確認・足りない情報を先に見せる。候補段階は metadata-only で、実際に本文を AI に渡すかは既存生成経路の safety gate が最終判定する。
 - **`cloud-sanitized-ingress` は将来 profile**: 生データを当社クラウド境界に入れたくない高セキュリティ顧客向けに、顧客側でサニタイズ済み payload だけを送る構成を予約している。Phase 3-E では短く触れるだけで、デモの主役にはしない。
 
 ### Phase 3-E 完了確認 (2026-05-18)
@@ -257,8 +273,10 @@ sample-data/
 
 正本の一覧・Ingest 起票の詳細は [docs/open-questions.md](docs/open-questions.md)（次フェーズ表 + §Ingest 拡張）。
 
-- **Phase 3-F**: PDF 3 subtype を含むデモ polish・動画シナリオ・見栄え調整。
-- **Masker 本線統合（PDF 経路）**: 実装完了（`D-P3-M-PDF-1`、branch `feat/masker-pdf-mainline`）。`requires_masking` PDF を Masker 本線 + masked chunks まで処理（逐次 per-chunk マスク、失敗時ロールバック）。残: **dev tenant live smoke 証跡**・`unmaskablePiiFindings` 閾値再評価・scan-pdf 公開範囲拡大（`D-P3-H-7 Q4`、別 decision）。
+- **Production Hardening 実機検証**: #15 / #16 はコード実装済みだが GitHub issue は open。production revision で sweeper resume + manual run、GCS offload result route、tenant isolation、lifecycle / TTL を smoke して close 判断する。
+- **Phase 4-UX 手動通し**: purpose 入力 → candidates API → Safety Review → Preview acknowledgement → async Context Package 生成をブラウザで確認する。
+- **Phase 3-F**: PDF 3 subtype と Phase 4-UX を含むデモ polish・動画シナリオ・見栄え調整。
+- **scan-pdf 公開拡大の判断**: `unmaskablePiiFindings` 閾値再評価と `D-P3-H-7 Q4` 後続を別 decision で扱う。
 - **Ingest 拡張（起票済み・未着手）**:
   - **standalone images** — PNG/JPEG 等の画像ファイル単体（scan-pdf とは別）
   - **Drive folder bulk** — 共有フォルダ配下のバッチ import

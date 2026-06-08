@@ -1,7 +1,7 @@
 # Phase 4-UX: Purpose-Driven Context Package Selection — 方針 / 作業分配（正本）
 
 **日付**: 2026-06-03
-**状態**: S1–S7（Phase 4-UX MVP 機能）実装済み／S9 / S10 未着手
+**状態**: S1–S7（Phase 4-UX MVP 機能）実装済み。S8/S9/S10 はコード・運用 docs 実装済みだが、GitHub issue #15/#16 は production 実機検証と close 判断待ち。
 **正本ポリシー**: 本フェーズの命名・スコープ・分類規則・セキュリティ境界の決定は [docs/decisions.md](decisions.md) `D-P4UX-0` を正とする。本書は作業分配と実装者向け指示文の正本。製品定義そのものはリポジトリ直下 `CLAUDE.md` を正とする。
 
 > **命名注意**: `docs/decisions.md` 既存の「Phase 4」は *マルチテナント商用化 / BigQuery write-once audit* を指す（行 971, 1164, 1395 ほか）。本フェーズはそれとは別物であり、UX 改善フェーズとして **Phase 4-UX** と呼ぶ。旧「Phase 4（商用化）」の参照は壊さず温存する。
@@ -34,7 +34,7 @@
 
 ### 完了条件
 - **Phase 4-UX MVP**: S1–S7 + S3/S11 docs。`pnpm typecheck && pnpm test && pnpm build` green。purpose 入力だけで候補→選択→Safety→Preview→生成が一巡し、docId 手入力が主導線から外れる。
-- **Production Hardening（MVP と独立・並列可）**: S8（#15）, S9（#16）, S10（runbook/監視）。Codex 実機検証込み。
+- **Production Hardening（MVP と独立・並列可）**: S8（#15）, S9（#16）, S10（runbook/監視）。コードと runbook は入っているが、production revision での sweeper resume / GCS offload / tenant isolation smoke を完了してから issue を閉じる。
 - 関連 live smoke は Codex が証跡化。
 
 ### 既存 docs / code との接続点
@@ -324,19 +324,21 @@ type CandidatesResponse = {
   - 16 unit test green（最重要は「will_send に unsafe が混ざらない」）。`pnpm typecheck` / `pnpm test src/app/context-package`（33）green。
 - **UI への申し送り（Cursor）**: `PreGenerationPreviewPanel.tsx` は上記 projection を `candidates` + 実効 `docIds`（`resolveDocIdsForGeneration`）から計算して表示する（自前の安全判定を書かない）。生成ボタンは S5 の `canGenerateContextPackage(...)` に加えて `!previewRequiresAcknowledgement(preview) || acknowledged` を AND する。S6 SafetyReviewPanel と視覚言語を揃える。本文・aiSafeContent は出さない。
 
-### S8. #15 Job GC / stuck-running recovery（Hardening）
+### S8. #15 Job GC / stuck-running recovery（Hardening）— **実装済み / production 実機検証待ち**
 - **目的**: Cloud Tasks リトライ枯渇後に `running` で詰まる job の GC / 復旧、`cancelled` 配線、terminal job retention。
 - **対象**: `src/lib/contextPackageJobs/`, sweeper/TTL, `docs/`、GH #15
 - **推奨担当AI**: **GitHub Copilot Cloud Agent**（issue 起点で PR まで）→ **Codex** が lease/Cloud Tasks の実機確認
 - **難易度**: 高 / **認証・GCP**: 要（Firestore TTL / Cloud Tasks / lease）/ **依存**: なし（独立）/ **並列**: M1〜M4 と完全並列
 - **注意**: lease の分散システム的正しさを最優先で検証。worker lease 15分 / queue max-retry-duration ≥1800s（`setup-gcp.md` §2）と整合。
+- **実装結果（2026-06-03）**: terminal job TTL、`DELETE /api/context-package/jobs/:jobId` cancel、`POST /api/context-package/jobs/sweep` stale recovery、route / adapter tests を追加済み。GitHub issue [#15](https://github.com/matz-d/ai-ready-knowledge-hub/issues/15) は、production sweeper の resume + manual run + stale recovery smoke 証跡を残してから close する。
 
-### S9. #16 Large result GCS offload（Hardening）
+### S9. #16 Large result GCS offload（Hardening）— **実装済み / production 実機検証待ち**
 - **目的**: `MAX_INLINE_RESULT_BYTES` 超 result を GCS に退避し job doc に `resultRef`。
 - **対象**: `src/lib/contextPackageJobs/`, result route, GH #16
 - **推奨担当AI**: **GitHub Copilot Cloud Agent** → **Codex** が GCS / 認可境界の実機確認
 - **難易度**: 高 / **認証・GCP**: 要（GCS / 認可）/ **依存**: なし（S8 と同ファイル群＝直列推奨）/ **並列**: M1〜M4 と並列
 - **注意**: tenant isolation と result-route 認可は不変。
+- **実装結果（2026-06-03）**: `MAX_INLINE_RESULT_BYTES` 超過 result を GCS `context-package/job-results/{tenant}/{job}.json` へ退避し、job doc は `resultRef` を保持する。inline / GCS-backed result route と cleanup tests を追加済み。GitHub issue [#16](https://github.com/matz-d/ai-ready-knowledge-hub/issues/16) は、production GCS offload / result route 認可 / tenant isolation smoke 証跡を残してから close する。
 
 ### S10. Smoke runbook 定着 + monitoring/alert（Hardening）
 - **目的**: production async smoke runbook を運用に乗せ、Secret/IAP/Cloud Tasks 事故防止チェックと監視/アラートを整える。
