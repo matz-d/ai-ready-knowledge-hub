@@ -327,6 +327,72 @@ project / Worker SA の Token Creator binding が空であることを再確認�
 [Context Package budget / strict `docIds` re-smoke](#context-package-budget--strict-docids-re-smoke2026-06-02)
 を正本証跡とする。
 
+### Production hardening smoke（2026-06-08 JST）
+
+Phase 4-UX hardening follow-up として、Context Package async job の sweeper /
+GCS offload / tenant isolation を production で確認した。
+
+| Item | Observed |
+| --- | --- |
+| Initial Cloud Run revision | `ai-ready-knowledge-hub-00039-xfs` |
+| Hotfix Cloud Run revision | `ai-ready-knowledge-hub-00040-fr2` |
+| Scheduler | `context-package-job-sweeper` を `PAUSED` → `ENABLED`、manual run 実行 |
+| Sweeper route | Cloud Run log `[context-package-job] sweeper completed` at `2026-06-08T01:32:16Z` |
+| Queue config | `context-package-jobs` `RUNNING`, `maxRetryDuration: 1800s` |
+| Queue after smoke | pending task `0` |
+| Firestore TTL | `context_package_jobs.expiresAt` TTL `ACTIVE` |
+| GCS lifecycle | `context-package/job-results/` prefix, `age: 14` delete |
+
+最初の service-to-service async smoke は job
+`b8bc2d01-3607-4873-a352-666f4a2ce1f5` が `running` のまま 3 分 polling
+上限に達した。Cloud Run log では worker が
+`gemini-3.5-flash` を `asia-northeast1` へ呼び 404 で retry していた。これは
+`docs/gemini-model-migration.md` の「Gemini 3.x は `global`」方針と deploy
+workflow の `GOOGLE_CLOUD_LOCATION=${GCP_REGION}` がずれていたため。
+
+production service の env を一時 hotfix し、`GOOGLE_CLOUD_LOCATION=global` の
+revision `ai-ready-knowledge-hub-00040-fr2` を作成した。その後 fresh smoke job
+`85fea7ac-1ce2-4a81-ac21-eed97c1b14bb` が `POST /api/context-package` HTTP `202`
+→ polling `running` → `succeeded` → result HTTP `200` を完走。markdown は raw
+`SYN-INV-2026-0501` を含まず、`[REDACTED:` と
+`Confidential (AI-safe via masking)` を含むことを確認した。失敗していた
+`b8bc2d01-3607-4873-a352-666f4a2ce1f5` も env hotfix 後の Cloud Tasks retry で
+`succeeded` に復帰した。
+
+#16 large result GCS offload は、production と同じ `resultRef` shape で
+synthetic job `smoke-gcs-offload-20260608014617` を作成して確認した。
+`gs://ai-ready-knowledge-hub-uploads/context-package/job-results/ai-ready-knowledge-hub.iam.gserviceaccount.com/smoke-gcs-offload-20260608014617.json`
+に `950,123` bytes の JSON payload を保存し、GCS object metadata
+`tenantId` / `jobId` を設定。IAP 越し
+`GET /api/context-package/jobs/smoke-gcs-offload-20260608014617/result` は HTTP
+`200` を返し、payload の `offloadSmoke: true`、`filler.length == 950000`、
+`[REDACTED:SMOKE]` を確認した。
+
+tenant isolation は synthetic job `smoke-tenant-isolation-20260608014842`
+（`tenantId: other.example`）で確認した。同じ Worker SA IAP token から result
+route を読むと HTTP `404` / `job_not_found` となり、別 tenant の存在を隠す挙動を
+確認した。
+
+cleanup:
+
+- service-to-service smoke 用に一時付与した project-level
+  `roles/iam.serviceAccountTokenCreator` は毎回削除し、project / Worker SA の
+  Token Creator binding が空であることを確認済み。
+- `context-package-jobs` queue pending task は `0`。
+- 今回作成した smoke job は `expiresAt` を Firestore `timestampValue` として
+  設定済み。既存 real smoke job 2 件（`85fea7ac-...`, `b8bc2d01-...`）は
+  production image 修正前に `expiresAt` が `stringValue` で書かれていたため、
+  手動で `timestampValue` に補正した。
+
+Code follow-up（本 smoke 後の修正）:
+
+- deploy workflow は `GOOGLE_CLOUD_LOCATION=${GCP_REGION}` をやめ、
+  Gemini 3.x 用に `global` を使うよう修正した。GitHub Variable
+  `GOOGLE_CLOUD_LOCATION=global` も設定済み。
+- `src/lib/contextPackageJobs/firestoreAdapter.ts` は terminal job の `expiresAt`
+  を ISO string ではなく Firestore timestamp として保存するよう修正した。TTL は
+  `ACTIVE` だが、string field は TTL 対象にならないため。
+
 ### scan-pdf eval locator / coverage
 
 **Smoke 時点（2026-05-29、本 doc 初版）** の conversion eval レコードは

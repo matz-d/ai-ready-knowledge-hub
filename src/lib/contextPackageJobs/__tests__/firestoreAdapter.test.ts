@@ -224,6 +224,7 @@ describe('contextPackageJobs firestoreAdapter', () => {
     expect(stored?.result).toMatchObject({ markdown: '# ok' });
     expect(stored?.leaseExpiresAt).toBeUndefined();
     expect(stored?.expiresAt).toBeTruthy();
+    expect(fakeDb.store.get(jobPath(job.jobId))?.expiresAt).toBeInstanceOf(Date);
     expect(fakeDb.store.get(jobPath(job.jobId))?.attemptToken).toBeUndefined();
   });
 
@@ -257,6 +258,7 @@ describe('contextPackageJobs firestoreAdapter', () => {
       byteSize: 1234,
     });
     expect(stored?.expiresAt).toBeTruthy();
+    expect(fakeDb.store.get(jobPath(job.jobId))?.expiresAt).toBeInstanceOf(Date);
   });
 
   it('fail は running + attemptToken 一致時のみ failed にする', async () => {
@@ -400,6 +402,7 @@ describe('contextPackageJobs firestoreAdapter', () => {
     const stored = await getContextPackageJob(job.jobId);
     expect(stored?.status).toBe('cancelled');
     expect(stored?.expiresAt).toBeTruthy();
+    expect(fakeDb.store.get(jobPath(job.jobId))?.expiresAt).toBeInstanceOf(Date);
     expect(stored?.leaseExpiresAt).toBeUndefined();
     expect(fakeDb.store.get(jobPath(job.jobId))?.attemptToken).toBeUndefined();
   });
@@ -455,6 +458,7 @@ describe('contextPackageJobs firestoreAdapter', () => {
       reason: 'stale_running_recovery',
     });
     expect(stored?.expiresAt).toBeTruthy();
+    expect(fakeDb.store.get(jobPath(job.jobId))?.expiresAt).toBeInstanceOf(Date);
   });
 
   it('stale recovery は retry窓内の running を回収しない', async () => {
