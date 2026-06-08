@@ -1323,6 +1323,8 @@ async function persistPdfHealthStageEval(args: {
   chunksForEval?: ReturnType<typeof documentIrToKnowledgeChunks>;
 }): Promise<{ evalStatus: AuditConversionEvalStatus }> {
   try {
+    // Eval-only fallback draft: this `documentAiUsePolicy` does not change the
+    // document policy, and `conversion_eval` persists metrics/warnings only.
     const chunks =
       args.chunksForEval ??
       documentIrToKnowledgeChunks({

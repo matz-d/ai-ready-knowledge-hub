@@ -1793,6 +1793,33 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 ---
 
+## D-PROD-3: raw DocumentIR snapshot の unmasked PII retention（2026-06-08、確定）
+
+**日付**: 2026-06-08
+**状態**: 確定・運用設定済み（2026-06-08）。ゲート一覧・現在地・DoD は [docs/production-readiness.md](production-readiness.md) §2 / §6 を参照。
+
+**背景:** GH #10 は「conversion_eval の unmasked retention」として扱われていたが、現コードでは `ConversionEvalResult` は count / rate / warning などのメトリクスのみを保持し、chunk text / snippet / DocumentIR 本文を保存しない。実際の unmasked PII at-rest 面は GCS `raw/{docId}/document-ir/v1.json` の DocumentIR snapshot と、同じ `raw/{docId}/` 配下の元アップロードである。`D-PROD-1` により、scan-pdf OCR で unmaskable PII が見つかった restricted 経路は DocumentIR snapshot / health eval / chunk を生成しない。一方で、`direct` または Masker で `ai_safe` になった文書の raw artifact は再処理・監査用に意図的に生成されるため、無期限保持のままにはしない。
+
+なお `raw/` は再処理・監査専用ではなく、**Context Package 生成時の本文 fallback 源**でもある。`attachContextPackageBodies`（`contextPackageFirestoreAdapter.ts`）は chunk を持たない文書に限り `storagePath`(=`raw/`) から本文を読み（`.xlsx` は raw bytes を markdown 化）、chunk を持つ文書は chunk text を使う。本線では `direct` PDF は ingest 時に chunk を永続化し、`ai_safe` は `masked/{docId}/` の本文を読むため、この Context Package fallback に依存するのは **chunk を持たない `curated`/`direct` 文書（特に `.xlsx`）** に限定される。`masked/` は安全成果物として lifecycle 対象外で保持する。一方、運用 recovery の `regenerateChunksForDoc`（`scripts/regenerateChunks.ts`）は status に関係なく `storagePath` の raw object を読むため、`raw/` lifecycle 後は `ai_safe` / chunk 永続化済み PDF を含む全 status で chunk 再生成が raw object 404 により失敗し得る。
+
+**決定:**
+1. `raw/` 配下の元アップロードと DocumentIR snapshot は、再処理・監査用の短期 artifact として **14日だけ保持**する。
+2. production bucket は GCS lifecycle で `matchesPrefix: ["raw/", "context-package/job-results/"]`、`age: 14` の delete rule を持つ。
+3. `conversion_eval` はメトリクス専用 artifact と位置づけ、生テキスト保持面として扱わない。`persistPdfHealthStageEval` が `chunksForEval` 省略時に `documentAiUsePolicy: 'direct'` を合成するのは eval draft の metadata であり、文書の AI 利用ポリシーを意味しない。
+4. `D-PROD-1` の safety-gate restricted 経路は引き続き IR snapshot / health eval / chunk を生成しない。
+5. 14日を超えた raw object について、次の劣化を **許容する劣化**として扱う。Context Package 生成では、chunkless な `curated`/`direct` 文書（特に `.xlsx`）の本文 fallback が失われ `CONTEXT_PACKAGE_GCS_BODY_UNAVAILABLE` になり得る。この fallback 劣化については、本線 PDF（chunk 永続化済み）と `ai_safe`（`masked/` 参照）は非該当。ただし chunk 再生成 recovery（`regenerateChunksForDoc`）は raw object に依存するため、14日超では `ai_safe` / chunk 永続化済み PDF を含む全 status で失敗し得る。必要時は再アップロードで復旧する。
+
+**代替案:**
+- `raw/` を無期限保持する → 再処理は容易だが、SME 文書の PII-at-rest 最小化に反するため不採用。
+- DocumentIR snapshot のみ削除し元アップロードは保持する → 元文書にも PII が含まれ得るため、GH #10 の安全側解決として不十分。
+- `context-package/job-results/` より短い TTL にする → 追加運用ルールが増えるため、まず既存の 14日 retention と揃える。
+
+**撤退条件:** 再処理・監査の実務要件で 14日を超える raw artifact が必要になった場合は、tenant / document 単位の legal hold または明示的な export vault を別 decision で設計する。通常の `raw/` lifecycle を無期限に戻すことはしない。
+
+**影響:** 運用手順は [docs/setup-gcp.md](setup-gcp.md) の GCS lifecycle を正本にする。`documentIrStorage.ts` は D-PROD-3 を参照し、`uploadOrchestrator.ts` は health eval の合成 chunk が eval 専用であることをコメントで固定する。
+
+---
+
 ## 関連ドキュメント
 
 - [docs/production-readiness.md](production-readiness.md) — ゲート一覧・現在地・DoD の正本（`D-PROD-*` の状態追跡）

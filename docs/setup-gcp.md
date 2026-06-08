@@ -251,23 +251,30 @@ gcloud scheduler jobs create http "$SWEEP_JOB_ID" \
 > 15 分ごとに出さないよう `gcloud scheduler jobs pause "$SWEEP_JOB_ID" ...` で止め、
 > deploy 後に `gcloud scheduler jobs resume "$SWEEP_JOB_ID" ...` してから手動 run で確認する。
 
-### 2.3 offload result object cleanup（GCS lifecycle）
+### 2.3 raw / offload result object cleanup（GCS lifecycle）
 
 `MAX_INLINE_RESULT_BYTES` 超過時の Context Package job result は
 `gs://${KNOWLEDGE_HUB_BUCKET}/context-package/job-results/` 配下へ保存される。
 job doc の Firestore TTL（14日）と揃えるため、同 prefix に lifecycle delete を設定する。
 
+GH #10 / `D-PROD-3` により、unmasked PII at-rest 面である `raw/`（元アップロードと
+`raw/{docId}/document-ir/v1.json`）も同じ 14日 lifecycle delete に含める。
+`conversion_eval` はメトリクス専用で、生テキスト保持面ではない。
+
 ```bash
 export KNOWLEDGE_HUB_BUCKET="ai-ready-knowledge-hub-uploads"
 
-cat > /tmp/context-package-job-results-lifecycle.json <<'JSON'
+cat > /tmp/knowledge-hub-gcs-lifecycle.json <<'JSON'
 {
   "rule": [
     {
       "action": { "type": "Delete" },
       "condition": {
         "age": 14,
-        "matchesPrefix": ["context-package/job-results/"]
+        "matchesPrefix": [
+          "context-package/job-results/",
+          "raw/"
+        ]
       }
     }
   ]
@@ -275,7 +282,7 @@ cat > /tmp/context-package-job-results-lifecycle.json <<'JSON'
 JSON
 
 gcloud storage buckets update "gs://${KNOWLEDGE_HUB_BUCKET}" \
-  --lifecycle-file=/tmp/context-package-job-results-lifecycle.json
+  --lifecycle-file=/tmp/knowledge-hub-gcs-lifecycle.json
 ```
 
 確認:
@@ -284,6 +291,10 @@ gcloud storage buckets update "gs://${KNOWLEDGE_HUB_BUCKET}" \
 gcloud storage buckets describe "gs://${KNOWLEDGE_HUB_BUCKET}" \
   --format='yaml(lifecycle_config.rule)'
 ```
+
+期待値（2026-06-08 `ai-ready-knowledge-hub-uploads` で確認済み）: `age: 14` の Delete rule が
+`matchesPrefix: ["context-package/job-results/", "raw/"]` を持つこと。
+（`--format='value(lifecycle_config.rule[0].condition.matchesPrefix)'` なら `context-package/job-results/;raw/`）
 
 ### 3. Service accounts と IAM
 
