@@ -30,6 +30,7 @@ import {
   type FirestoreMaskerBlock,
   type FirestoreMaskerInvariantInput,
   type SensitivitySource,
+  type RestrictionSource,
 } from './firestoreSchema';
 import {
   deleteMaskedObject,
@@ -117,6 +118,38 @@ export type RestrictedTerminalFirestoreUpdateDraft = {
   sensitivityReason: string | null;
   masker: FirestoreMaskerWriteBlockDraft;
   maskerError: null;
+};
+
+/**
+ * Reason recorded on a document restricted by the OCR unmaskable-PII safety gate
+ * (D-PROD-1). Records the OCR origin explicitly so Safety Review can distinguish
+ * it from a Masker-promoted restriction.
+ */
+export const UNMASKABLE_PII_RESTRICTION_REASON =
+  'unmaskable PII detected by OCR; document restricted before AI-readable terminal flow';
+
+/**
+ * Firestore `update` body for a safety-gate restriction (D-PROD-1). Unlike the
+ * Masker-promoted restriction, no Masker runs: `masker` stays null, the effective
+ * sensitivity provenance remains the Curator's (`sensitivitySource: 'curator'`),
+ * `originalCuratorSensitivity` is null (no Masker upgrade happened), and the OCR
+ * origin is recorded via `restrictionSource: 'safety_gate'` plus the reason.
+ *
+ * A dedicated draft (rather than loosening `RestrictedTerminalFirestoreUpdateDraft`
+ * to a nullable masker) keeps the Masker-promoted path's type strict.
+ */
+export type SafetyGateRestrictedFirestoreUpdateDraft = {
+  status: 'restricted';
+  updatedAt: FirestoreServerTimestamp;
+  aiSafeStoragePath: null;
+  sensitivity: Sensitivity;
+  aiUsePolicy: AiUsePolicy;
+  sensitivitySource: 'curator';
+  originalCuratorSensitivity: null;
+  sensitivityReason: string;
+  masker: null;
+  maskerError: null;
+  restrictionSource: RestrictionSource;
 };
 
 /** Firestore 初回 `set` 用の合成ドキュメント（create 時は serverTimestamp を createdAt/updatedAt に共有）。 */
@@ -230,9 +263,13 @@ export type OrchestrateResult =
       storagePath: string;
       curator: CuratorOutputResult;
       curatorCompletedAt: Date;
-      masker: MaskerSummary;
+      /** Origin of the restriction: Masker-promoted vs a deterministic safety gate (D-PROD-1). */
+      restrictionSource: 'masker' | 'safety_gate';
       sensitivityReason: string;
-      originalCuratorSensitivity: NonNullable<CuratorOutputResult['sensitivity']>;
+      /** Present only for Masker-promoted restrictions. */
+      masker?: MaskerSummary;
+      /** Present only for Masker-promoted restrictions. */
+      originalCuratorSensitivity?: NonNullable<CuratorOutputResult['sensitivity']>;
     };
 
 export class CuratorPhaseError extends Error {
@@ -459,6 +496,7 @@ export async function runCuratorAndMaskerLifecycle(
     storagePath: args.storagePath,
     curator: curatorOutput.result,
     curatorCompletedAt: curatorOutput.completedAt,
+    restrictionSource: 'masker',
     masker: maskerOutcome.summary,
     sensitivityReason: maskerOutcome.sensitivityReason,
     originalCuratorSensitivity: curatorOutput.result.sensitivity,
@@ -807,6 +845,32 @@ export function buildRestrictedFirestoreUpdate(
   };
 }
 
+/**
+ * status='restricted' に倒す Firestore update body を組み立てる（D-PROD-1 安全ゲート版）。
+ * Masker を経ないため masker は null、実効 sensitivity は Curator 由来のまま
+ * （sensitivitySource='curator' / originalCuratorSensitivity=null）、OCR 由来を
+ * restrictionSource='safety_gate' + sensitivityReason で明示する。
+ */
+export function buildSafetyGateRestrictedFirestoreUpdate(args: {
+  sensitivity: Sensitivity;
+  aiUsePolicy: AiUsePolicy;
+  reason: string;
+}): SafetyGateRestrictedFirestoreUpdateDraft {
+  return {
+    status: 'restricted',
+    updatedAt: FieldValue.serverTimestamp(),
+    aiSafeStoragePath: null,
+    sensitivity: args.sensitivity,
+    aiUsePolicy: args.aiUsePolicy,
+    sensitivitySource: 'curator',
+    originalCuratorSensitivity: null,
+    sensitivityReason: args.reason,
+    masker: null,
+    maskerError: null,
+    restrictionSource: 'safety_gate',
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // 失敗記録 / rollback ヘルパー
 // ─────────────────────────────────────────────────────────────────────
@@ -1052,6 +1116,28 @@ async function orchestratePdfPath(args: {
     };
   }
 
+  // D-PROD-1: OCR unmaskable-PII safety gate. When scan-pdf OCR reports PII it
+  // could not mask (unmaskablePiiFindings.count >= 1), the document must not
+  // reach an AI-readable terminal (curated/ai_safe). Restrict it BEFORE the
+  // aiUsePolicy branch so it covers both `direct` (which skips the Masker) and
+  // `requires_masking`. This is distinct from a Masker-promoted restriction: no
+  // Masker runs, masker block stays null, origin = restrictionSource:'safety_gate'.
+  // We deliberately skip the DocumentIR snapshot, health eval, and chunking so no
+  // new artifact persists the unmaskable PII text (cf. GH #10).
+  if ((args.conversion.unmaskablePiiFindingsCount ?? 0) >= 1) {
+    return terminateRestrictedByUnmaskablePii({
+      docRef: args.docRef,
+      docId: args.docId,
+      storagePath: args.storagePath,
+      displayName: args.displayName,
+      contentSha256: args.contentSha256,
+      documentIr: args.documentIr,
+      curatorOutput,
+      auditContext: args.auditContext,
+      conversion: args.conversion,
+    });
+  }
+
   // True once runMaskerPhase has committed status='ai_safe' + aiSafeStoragePath.
   // A later failure (per-chunk masking / chunk persistence) must roll those
   // artifacts back so the failed document keeps the aiSafeStoragePath invariant.
@@ -1204,6 +1290,7 @@ async function orchestratePdfPath(args: {
       storagePath: args.storagePath,
       curator: curatorOutput.result,
       curatorCompletedAt: curatorOutput.completedAt,
+      restrictionSource: 'masker',
       masker: maskerOutcome.summary,
       sensitivityReason: maskerOutcome.sensitivityReason,
       originalCuratorSensitivity: curatorOutput.result.sensitivity,
@@ -1287,6 +1374,79 @@ function toAuditDocumentSourceSubtype(
   throw new Error(
     `document.convert audit requires a PDF sourceSubtype, got ${sourceSubtype}`
   );
+}
+
+/**
+ * D-PROD-1 terminal: restrict a scan-pdf whose OCR found unmaskable PII, before
+ * any AI-readable terminal. Records the `document.convert` audit (carrying
+ * `unmaskablePiiFindings.count`) and commits a safety-gate restricted document.
+ * No Masker runs, no chunks, no DocumentIR snapshot, no health-eval artifact —
+ * so nothing new persists the unmaskable PII text (cf. GH #10).
+ */
+async function terminateRestrictedByUnmaskablePii(args: {
+  docRef: DocumentReference;
+  docId: string;
+  storagePath: string;
+  displayName: string;
+  contentSha256: string;
+  documentIr: DocumentIr;
+  curatorOutput: { result: CuratorOutputResult; completedAt: Date };
+  auditContext?: OrchestrateAuditContext;
+  conversion: PdfConversionAudit;
+}): Promise<OrchestrateResult> {
+  const curator = args.curatorOutput.result;
+  if (curator.sensitivity === null || curator.aiUsePolicy === null) {
+    // A curator terminal always sets these; guard keeps the safety gate honest.
+    throw new Error(
+      'terminateRestrictedByUnmaskablePii requires curator sensitivity and aiUsePolicy'
+    );
+  }
+
+  // Audit the conversion (metadata only; carries unmaskablePiiFindings.count).
+  // evalStatus is 'pass' because the conversion itself succeeded; the restriction
+  // is a separate deterministic safety decision and we intentionally do not run
+  // the health eval (avoids persisting unmaskable PII text — GH #10).
+  await recordDocumentConvertAudit({
+    auditContext: args.auditContext,
+    docId: args.docId,
+    displayName: args.displayName,
+    documentIr: args.documentIr,
+    sensitivity: curator.sensitivity,
+    evalStatus: 'pass',
+    conversion: args.conversion,
+  });
+
+  const update = buildSafetyGateRestrictedFirestoreUpdate({
+    sensitivity: curator.sensitivity,
+    aiUsePolicy: curator.aiUsePolicy,
+    reason: UNMASKABLE_PII_RESTRICTION_REASON,
+  });
+  assertFirestoreInvariants({
+    sourceKind: 'upload',
+    externalSource: null,
+    status: 'restricted',
+    contentSha256: args.contentSha256,
+    aiSafeStoragePath: null,
+    sensitivity: update.sensitivity,
+    aiUsePolicy: update.aiUsePolicy,
+    sensitivitySource: update.sensitivitySource,
+    originalCuratorSensitivity: update.originalCuratorSensitivity,
+    sensitivityReason: update.sensitivityReason,
+    restrictionSource: update.restrictionSource,
+    curator: { aiUsePolicy: curator.aiUsePolicy },
+    masker: null,
+  });
+  await args.docRef.update(update);
+
+  return {
+    kind: 'restricted',
+    docId: args.docId,
+    storagePath: args.storagePath,
+    curator,
+    curatorCompletedAt: args.curatorOutput.completedAt,
+    restrictionSource: 'safety_gate',
+    sensitivityReason: UNMASKABLE_PII_RESTRICTION_REASON,
+  };
 }
 
 async function recordDocumentConvertAudit(args: {

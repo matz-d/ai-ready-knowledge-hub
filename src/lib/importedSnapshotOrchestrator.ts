@@ -457,6 +457,10 @@ function lifecycleResultFromExistingDocument(
       storagePath: document.storagePath,
       curator: curatorResult,
       curatorCompletedAt,
+      // Imported snapshots never run OCR, so any restriction here is Masker-promoted
+      // (the guard above requires a masker block). Safety-gate restrictions
+      // (D-PROD-1) only arise on the scan-pdf upload path.
+      restrictionSource: 'masker',
       masker: maskerSummaryFromDocument(document.masker),
       sensitivityReason: document.sensitivityReason,
       originalCuratorSensitivity: document.originalCuratorSensitivity,

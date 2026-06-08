@@ -192,6 +192,79 @@ describe('adaptFirestoreDocumentToInventory', () => {
     });
   });
 
+  it('keeps safety_gate restricted direct documents without masker', () => {
+    const row = adaptFirestoreDocumentToInventory(
+      'snapshot-id',
+      buildDoc({
+        status: 'restricted',
+        sensitivity: 'Internal',
+        aiUsePolicy: 'direct',
+        sensitivitySource: 'curator',
+        sensitivityReason:
+          'unmaskable PII detected by OCR; document restricted before AI-readable terminal flow',
+        restrictionSource: 'safety_gate',
+        curator: {
+          ...baseCurator,
+          sensitivity: 'Internal',
+          aiUsePolicy: 'direct',
+          rationale: 'AI に直接渡せる社内手順です。',
+        },
+        masker: null,
+      })
+    );
+
+    expect(row).not.toBeNull();
+    expect(row).toEqual(
+      expect.objectContaining({
+        status: 'restricted',
+        sensitivity: 'Internal',
+        aiUsePolicy: 'direct',
+        sensitivitySource: 'curator',
+        sensitivityReason:
+          'unmaskable PII detected by OCR; document restricted before AI-readable terminal flow',
+        restrictionSource: 'safety_gate',
+      })
+    );
+    expect(row?.masker).toBeUndefined();
+    expect(row?.maskerEvaluation).toBeUndefined();
+  });
+
+  it('keeps safety_gate restricted requires_masking documents without masker', () => {
+    const row = adaptFirestoreDocumentToInventory(
+      'snapshot-id',
+      buildDoc({
+        status: 'restricted',
+        sensitivity: 'Confidential',
+        aiUsePolicy: 'requires_masking',
+        sensitivitySource: 'curator',
+        sensitivityReason:
+          'unmaskable PII detected by OCR; document restricted before AI-readable terminal flow',
+        restrictionSource: 'safety_gate',
+        curator: {
+          ...baseCurator,
+          sensitivity: 'Confidential',
+          aiUsePolicy: 'requires_masking',
+        },
+        masker: null,
+      })
+    );
+
+    expect(row).not.toBeNull();
+    expect(row).toEqual(
+      expect.objectContaining({
+        status: 'restricted',
+        sensitivity: 'Confidential',
+        aiUsePolicy: 'requires_masking',
+        sensitivitySource: 'curator',
+        sensitivityReason:
+          'unmaskable PII detected by OCR; document restricted before AI-readable terminal flow',
+        restrictionSource: 'safety_gate',
+      })
+    );
+    expect(row?.masker).toBeUndefined();
+    expect(row?.maskerEvaluation).toBeUndefined();
+  });
+
   it('keeps restricted masker provenance, original curator sensitivity, and reason', () => {
     const row = adaptFirestoreDocumentToInventory(
       'snapshot-id',
@@ -241,6 +314,12 @@ describe('adaptFirestoreDocumentToInventory', () => {
       adaptFirestoreDocumentToInventory(
         'snapshot-id',
         buildDoc({ status: 'ai_safe', masker: null })
+      )
+    ).toBeNull();
+    expect(
+      adaptFirestoreDocumentToInventory(
+        'snapshot-id',
+        buildDoc({ status: 'restricted', masker: null })
       )
     ).toBeNull();
     expect(

@@ -48,9 +48,13 @@ export function documentUploadSuccessBodyFromOrchestrate(args: {
   if (result.kind === 'restricted') {
     return {
       ...base,
-      masker: toSerializableMasker(result.masker),
+      // Masker-promoted restrictions carry a masker block + original sensitivity.
+      // Safety-gate restrictions (D-PROD-1, e.g. OCR unmaskable PII) carry neither.
+      ...(result.masker ? { masker: toSerializableMasker(result.masker) } : {}),
       sensitivityReason: result.sensitivityReason,
-      originalCuratorSensitivity: result.originalCuratorSensitivity,
+      ...(result.originalCuratorSensitivity !== undefined
+        ? { originalCuratorSensitivity: result.originalCuratorSensitivity }
+        : {}),
     };
   }
 
