@@ -858,3 +858,12 @@ gcloud alpha monitoring alerts describe \
 - Cloud Run / Artifact Registry / GCS / Firestore の主リージョンは引き続き `asia-northeast1`。
 - Gemini 3.x のハッカソン本線は `GOOGLE_CLOUD_LOCATION=global` を使う。2026-06-03 時点で、このプロジェクトでは `global` のみ `gemini-3.5-flash` / `gemini-3.1-flash-lite` が疎通済み。
 - AuditEvent の `dataResidency` は `KNOWLEDGE_HUB_DATA_RESIDENCY_LOCATION`（未指定時 `asia-northeast1`）で記録する。
+
+### Gemini 運用監視（`D-OPS-1`）
+
+quota / コスト dashboard は新設しない（[decisions.md — D-OPS-1](decisions.md)）。運用は次で行う:
+
+- **実測制約**: `GOOGLE_CLOUD_LOCATION=global` のみ疎通（`asia-northeast1` は 3.x が 404）。モデル変更時はこのリージョン制約を再確認する。
+- **失敗時の挙動**: scan / slide 変換の Gemini failure は fail-closed（生 PII を新規に残さない）。疎通障害は既存の job error alert（§8.4）で検知する。
+- **コスト確認先**: Cloud Billing / Vertex AI（Model Garden）Monitoring。近年の Gemini は Dynamic Shared Quota 対象が多く、quota 数値監視だけでは見えにくい。
+- **本番 SLA が必要になったら**: Provisioned Throughput を別 decision で検討する（撤退条件は D-OPS-1）。
