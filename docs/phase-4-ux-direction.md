@@ -1,7 +1,7 @@
 # Phase 4-UX: Purpose-Driven Context Package Selection — 方針 / 作業分配（正本）
 
 **日付**: 2026-06-03
-**状態**: S1–S7（Phase 4-UX MVP 機能）実装済み。S8/S9/S10 はコード・運用 docs 実装済みだが、GitHub issue #15/#16 は production 実機検証と close 判断待ち。
+**状態**: S1–S7（Phase 4-UX MVP 機能）実装済み。S8/S9/S10 Production Hardening は production smoke 完了、GitHub issue #15/#16 close 済み。
 **正本ポリシー**: 本フェーズの命名・スコープ・分類規則・セキュリティ境界の決定は [docs/decisions.md](decisions.md) `D-P4UX-0` を正とする。本書は作業分配と実装者向け指示文の正本。製品定義そのものはリポジトリ直下 `CLAUDE.md` を正とする。
 
 > **命名注意**: `docs/decisions.md` 既存の「Phase 4」は *マルチテナント商用化 / BigQuery write-once audit* を指す（行 971, 1164, 1395 ほか）。本フェーズはそれとは別物であり、UX 改善フェーズとして **Phase 4-UX** と呼ぶ。旧「Phase 4（商用化）」の参照は壊さず温存する。
@@ -34,7 +34,7 @@
 
 ### 完了条件
 - **Phase 4-UX MVP**: S1–S7 + S3/S11 docs。`pnpm typecheck && pnpm test && pnpm build` green。purpose 入力だけで候補→選択→Safety→Preview→生成が一巡し、docId 手入力が主導線から外れる。
-- **Production Hardening（MVP と独立・並列可）**: S8（#15）, S9（#16）, S10（runbook/監視）。コードと runbook は入っているが、production revision での sweeper resume / GCS offload / tenant isolation smoke を完了してから issue を閉じる。
+- **Production Hardening（MVP と独立・並列可）**: S8（#15）, S9（#16）, S10（runbook/監視）。production revision `ai-ready-knowledge-hub-00041-2kr` で async job / sweeper / GCS offload / tenant isolation / TTL を確認済み。
 - 関連 live smoke は Codex が証跡化。
 
 ### 既存 docs / code との接続点
@@ -324,21 +324,21 @@ type CandidatesResponse = {
   - 16 unit test green（最重要は「will_send に unsafe が混ざらない」）。`pnpm typecheck` / `pnpm test src/app/context-package`（33）green。
 - **UI への申し送り（Cursor）**: `PreGenerationPreviewPanel.tsx` は上記 projection を `candidates` + 実効 `docIds`（`resolveDocIdsForGeneration`）から計算して表示する（自前の安全判定を書かない）。生成ボタンは S5 の `canGenerateContextPackage(...)` に加えて `!previewRequiresAcknowledgement(preview) || acknowledged` を AND する。S6 SafetyReviewPanel と視覚言語を揃える。本文・aiSafeContent は出さない。
 
-### S8. #15 Job GC / stuck-running recovery（Hardening）— **実装済み / production 実機検証待ち**
+### S8. #15 Job GC / stuck-running recovery（Hardening）— **完了**
 - **目的**: Cloud Tasks リトライ枯渇後に `running` で詰まる job の GC / 復旧、`cancelled` 配線、terminal job retention。
 - **対象**: `src/lib/contextPackageJobs/`, sweeper/TTL, `docs/`、GH #15
 - **推奨担当AI**: **GitHub Copilot Cloud Agent**（issue 起点で PR まで）→ **Codex** が lease/Cloud Tasks の実機確認
 - **難易度**: 高 / **認証・GCP**: 要（Firestore TTL / Cloud Tasks / lease）/ **依存**: なし（独立）/ **並列**: M1〜M4 と完全並列
 - **注意**: lease の分散システム的正しさを最優先で検証。worker lease 15分 / queue max-retry-duration ≥1800s（`setup-gcp.md` §2）と整合。
-- **実装結果（2026-06-03）**: terminal job TTL、`DELETE /api/context-package/jobs/:jobId` cancel、`POST /api/context-package/jobs/sweep` stale recovery、route / adapter tests を追加済み。GitHub issue [#15](https://github.com/matz-d/ai-ready-knowledge-hub/issues/15) は、production sweeper の resume + manual run + stale recovery smoke 証跡を残してから close する。
+- **実装結果（2026-06-03 / 2026-06-08 検証完了）**: terminal job TTL、`DELETE /api/context-package/jobs/:jobId` cancel、`POST /api/context-package/jobs/sweep` stale recovery、route / adapter tests を追加済み。production sweeper resume + manual run、async job retry recovery、`expiresAt.timestampValue`、queue empty、Token Creator cleanup を確認し、GitHub issue [#15](https://github.com/matz-d/ai-ready-knowledge-hub/issues/15) は close 済み。
 
-### S9. #16 Large result GCS offload（Hardening）— **実装済み / production 実機検証待ち**
+### S9. #16 Large result GCS offload（Hardening）— **完了**
 - **目的**: `MAX_INLINE_RESULT_BYTES` 超 result を GCS に退避し job doc に `resultRef`。
 - **対象**: `src/lib/contextPackageJobs/`, result route, GH #16
 - **推奨担当AI**: **GitHub Copilot Cloud Agent** → **Codex** が GCS / 認可境界の実機確認
 - **難易度**: 高 / **認証・GCP**: 要（GCS / 認可）/ **依存**: なし（S8 と同ファイル群＝直列推奨）/ **並列**: M1〜M4 と並列
 - **注意**: tenant isolation と result-route 認可は不変。
-- **実装結果（2026-06-03）**: `MAX_INLINE_RESULT_BYTES` 超過 result を GCS `context-package/job-results/{tenant}/{job}.json` へ退避し、job doc は `resultRef` を保持する。inline / GCS-backed result route と cleanup tests を追加済み。GitHub issue [#16](https://github.com/matz-d/ai-ready-knowledge-hub/issues/16) は、production GCS offload / result route 認可 / tenant isolation smoke 証跡を残してから close する。
+- **実装結果（2026-06-03 / 2026-06-08 検証完了）**: `MAX_INLINE_RESULT_BYTES` 超過 result を GCS `context-package/job-results/{tenant}/{job}.json` へ退避し、job doc は `resultRef` を保持する。inline / GCS-backed result route と cleanup tests を追加済み。production GCS offload / result route 認可 / tenant isolation smoke を確認し、GitHub issue [#16](https://github.com/matz-d/ai-ready-knowledge-hub/issues/16) は close 済み。
 
 ### S10. Smoke runbook 定着 + monitoring/alert（Hardening）
 - **目的**: production async smoke runbook を運用に乗せ、Secret/IAP/Cloud Tasks 事故防止チェックと監視/アラートを整える。
@@ -351,7 +351,7 @@ type CandidatesResponse = {
   - production revision `ai-ready-knowledge-hub-00036-dfb` で service-to-service smoke 完了: job `a5bfcfef-fa29-4c88-94c3-47e897b05ec9` が HTTP 202 → `succeeded` → result HTTP 200、masked content / raw PII 不在を確認。
   - Firestore TTL（`context_package_jobs.expiresAt`）と GCS lifecycle（`context-package/job-results/`, 14日削除）を設定。
   - log-based metrics `context_package_job_errors` / `context_package_stale_recoveries` と alert policies 3本（job errors / stale recoveries / Cloud Tasks backlog）を作成。通知 channel は未設定のため、Console で notificationChannels を追加する。
-  - Cloud Scheduler `context-package-job-sweeper` は作成したが、現 production revision は `/api/context-package/jobs/sweep` が HTTP 405 のため **paused**。sweeper route を含む revision deploy 後に resume + manual run で最終確認する。
+  - **2026-06-08 追補**: Cloud Scheduler `context-package-job-sweeper` は `ENABLED`。manual run で Cloud Run log `[context-package-job] sweeper completed` を確認。production revision `ai-ready-knowledge-hub-00041-2kr` で final async smoke job `5d51117a-6a46-40bd-b981-9bc250a448ba` が HTTP `202` → `succeeded` → result HTTP `200`、`expiresAt.timestampValue`、queue empty、Token Creator cleanup を確認済み。
 - **指示文**: §6 参照。
 
 ### S11. Decision エントリ / direction doc 整備

@@ -56,12 +56,12 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
   - `MAX_INLINE_RESULT_BYTES` 超過時は job result を `context-package/job-results/{tenant}/{job}.json` へ保存し、job doc は `resultRef` を保持する（inline `result` は保持しない）。
   - `GET /api/context-package/jobs/:jobId/result` は同一 tenant 認可を維持したまま、inline / GCS-backed の両経路で payload を返す。
   - 保存先オブジェクトは prefix lifecycle（14日）で自動削除する運用に統一。
-  - **GitHub issue は open のまま**。close 条件は production で GCS offload smoke、result route 認可、tenant isolation、lifecycle 設定を証跡化すること。
+  - **production smoke 完了（2026-06-08）:** GCS-backed result route HTTP `200`、tenant isolation HTTP `404`、lifecycle 設定を確認。GitHub issue #16 は close 済み。
 - ~~**job GC / cancel**~~ — **実装済み（2026-06-03）**。追跡: [#15](https://github.com/matz-d/ai-ready-knowledge-hub/issues/15)
   - terminal job（`succeeded` / `failed` / `cancelled`）に `expiresAt` を付与し、Firestore TTL で retention（既定 14 日）後に自動削除する。
   - `DELETE /api/context-package/jobs/:jobId` を追加し、同一 tenant の `queued` / `running` job を `cancelled` へ遷移可能にした（`succeeded` / `failed` は 409）。
   - `POST /api/context-package/jobs/sweep` を追加し、lease 期限切れかつ Cloud Tasks retry 窓（既定 1800s）を超えて残留した `running` job を `failed` へ回収する。
-  - **GitHub issue は open のまま**。close 条件は production で sweeper route を含む revision を deploy 済みにし、Scheduler resume、manual run、stale recovery の証跡を残すこと。
+  - **production smoke 完了（2026-06-08）:** Scheduler resume + manual run、async job retry recovery、`expiresAt.timestampValue`、queue empty、Token Creator cleanup を確認。GitHub issue #15 は close 済み。
 
 ---
 
@@ -169,9 +169,9 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | ~~Phase 3-H-3 subtype 2~~ | ~~slide-pdf 本線統合 + `inferenceDestination` + live smoke~~ | **完了** (2026-05-20, PR #3) |
 | ~~Phase 3-H-3 subtype 3 (M6)~~ | ~~scan-pdf 本線統合 + OCR fail-closed + `unmaskablePiiFindings` warn~~ | **完了** (2026-05-21, live smoke DoD YES) |
 | ~~Masker 本線統合（PDF 経路）~~ | ~~`requires_masking` PDF の chunk 化と Context Package 接続~~ | **完了**（2026-05-29、`D-P3-M-PDF-1` / `feat/masker-pdf-mainline`） |
-| ~~Phase 4-UX MVP~~ | ~~purpose-driven candidate selection + Safety Review + Preview~~ | **実装済み**（2026-06-03、production 手動通し待ち） |
-| Production Hardening close-out | #15 job GC / stale recovery、#16 result GCS offload の production smoke と issue close | **最優先** |
-| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | Production Hardening close-out 後 |
+| ~~Phase 4-UX MVP~~ | ~~purpose-driven candidate selection + Safety Review + Preview~~ | **実装済み**（2026-06-03、ブラウザ手動通し待ち） |
+| ~~Production Hardening close-out~~ | ~~#15 job GC / stale recovery、#16 result GCS offload の production smoke と issue close~~ | **完了**（2026-06-08、#15/#16 closed） |
+| Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | 次候補 |
 | **Ingest: standalone images** | `image/jpeg` / `image/png` 等を upload ソースとして追加（scan-pdf とは別。写真・図面・スクショ単体） | 情報源拡張（下記 §Ingest 起票） |
 | **Ingest: Drive folder bulk** | SA 共有フォルダ配下のファイル列挙 → バッチ import（URL 1 本ずつからの脱却） | 情報源拡張（下記 §Ingest 起票） |
 | **Ingest: local directory batch** | ローカルディレクトリ walk または複数ファイル一括投入（CLI / UI） | 情報源拡張（下記 §Ingest 起票） |
@@ -179,7 +179,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | Phase 3-H `office-native` | `.pptx` / `.docx` 原本の conversion subtype 4 | Phase 3-H 優先 4・時間があれば |
 | Phase 3-G | `cloud-sanitized-ingress` prototype | 高セキュリティ顧客向け後続 |
 
-**次のアクション**: Production Hardening close-out を先に行う。#15/#16 はコード実装済みだが GitHub issue は open のため、production で sweeper resume + manual run、GCS offload result route、tenant isolation、TTL/lifecycle を smoke して証跡を残し close 判断する。その後、Phase 4-UX のブラウザ手動通し、Phase 3-F（デモ polish）、Ingest 拡張（画像単体・Drive/ローカル一括・Drive 同期）の product 判断へ進む。scan-pdf 公開拡大は **`unmaskablePiiFindings` 閾値再評価**を別 decision で扱う（`D-P3-H-7 Q4` 後続）。
+**次のアクション**: Production Hardening close-out は完了。次は Phase 4-UX のブラウザ手動通し、Phase 3-F（デモ polish）、Ingest 拡張（画像単体・Drive/ローカル一括・Drive 同期）の product 判断へ進む。scan-pdf 公開拡大は **`unmaskablePiiFindings` 閾値再評価**を別 decision で扱う（`D-P3-H-7 Q4` 後続）。
 
 ### Ingest 拡張（起票 2026-05-21）
 

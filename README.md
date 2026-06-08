@@ -18,7 +18,7 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 
 ## 現在のステータス (2026-06-08)
 
-**フェーズ**: Phase 4-UX MVP **実装済み**。purpose 入力から候補文書を metadata-only で提示し、include / exclude / needs_review、Safety Review、生成前 Preview を経て Context Package を生成する導線まで到達した。Phase 3-H-3 の PDF 3 subtype 本線統合、Masker PDF 本線、Context Package 非同期 job 化も完了済み。次は **Production Hardening の実機検証と issue close**（#15 job GC / stuck-running recovery、#16 large result GCS offload）と、Phase 4-UX のブラウザ手動通し、Ingest 拡張の product 判断。
+**フェーズ**: Phase 4-UX MVP **実装済み**。purpose 入力から候補文書を metadata-only で提示し、include / exclude / needs_review、Safety Review、生成前 Preview を経て Context Package を生成する導線まで到達した。Phase 3-H-3 の PDF 3 subtype 本線統合、Masker PDF 本線、Context Package 非同期 job 化、Production Hardening（#15 job GC / stuck-running recovery、#16 large result GCS offload）の production smoke と issue close も完了済み。次は Phase 4-UX のブラウザ手動通し、Phase 3-F デモ polish、Ingest 拡張の product 判断。
 
 ### 完了済み
 
@@ -53,7 +53,7 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 - **Phase 3-H-3 subtype 2 (slide-pdf 本線)**: `pdf-conversion-subtype-2` flag、`slidePdfDocumentExtractor`、Vertex 成功時 `inferenceDestination` 必須、slide 専用 heuristic / golden、live smoke 証跡 `docs/phase-3-h-3-slide-pdf-live-smoke.md`（2026-05-20、PR #3）。
 - **Phase 3-H-3 subtype 3 / M6 (scan-pdf 本線)**: `pdf-conversion-subtype-3` flag（**`m-grow-ai.com` のみ**）、`scanPdfDocumentExtractor`（Gemini OCR、timeout 60s / 入力 5 MiB、pre-flight fail-closed）、`unmaskablePiiFindings` 記録、scan-pdf golden sidecar、CI health gate 必須化、live smoke 証跡 `docs/phase-3-h-3-scan-pdf-live-smoke.md`（2026-05-21）。DoD 正本は `docs/phase-3-h-3-direction.md` §8.3。
 - **Phase 4-UX MVP (purpose-driven candidate selection)**: `src/services/candidateSelection/` の deterministic ranking / classification、`POST /api/context-package/candidates`、候補選択 UI、Safety Review、Pre-generation Preview を実装。候補 API は metadata-only の助言レイヤで、本文・chunk・GCS・`aiSafeContent`・LLM を読まない。
-- **Context Package Production Hardening**: async job の cancel / stale-running sweeper / terminal TTL と、large result の GCS offload を実装済み。GitHub issue #15/#16 は production 実機 smoke と close 判断待ち。
+- **Context Package Production Hardening**: async job の cancel / stale-running sweeper / terminal TTL と、large result の GCS offload を実装し、production smoke 完了。GitHub issue #15/#16 は close 済み。
 
 ### コードの位置 (Phase 4-UX / Production Hardening 時点)
 
@@ -273,7 +273,6 @@ sample-data/
 
 正本の一覧・Ingest 起票の詳細は [docs/open-questions.md](docs/open-questions.md)（次フェーズ表 + §Ingest 拡張）。
 
-- **Production Hardening 実機検証**: #15 / #16 はコード実装済みだが GitHub issue は open。production revision で sweeper resume + manual run、GCS offload result route、tenant isolation、lifecycle / TTL を smoke して close 判断する。
 - **Phase 4-UX 手動通し**: purpose 入力 → candidates API → Safety Review → Preview acknowledgement → async Context Package 生成をブラウザで確認する。
 - **Phase 3-F**: PDF 3 subtype と Phase 4-UX を含むデモ polish・動画シナリオ・見栄え調整。
 - **scan-pdf 公開拡大の判断**: `unmaskablePiiFindings` 閾値再評価と `D-P3-H-7 Q4` 後続を別 decision で扱う。
