@@ -60,6 +60,39 @@ describe('Rule 1: exclude when isBlockedForAi', () => {
     expect(result.recommendation).toBe('exclude');
     expect(result.reasonCode).toBe('restricted_sensitivity');
   });
+
+  it('excludes safety_gate restricted docs with curator requires_masking (not needs_review)', () => {
+    const result = classifyDocument(
+      doc({
+        status: 'restricted',
+        restrictionSource: 'safety_gate',
+        sensitivity: 'Confidential',
+        aiUsePolicy: 'requires_masking',
+        maskerEvaluation: undefined,
+        sensitivitySource: 'curator',
+      }),
+      [],
+      NOW,
+    );
+    expect(result.recommendation).toBe('exclude');
+    expect(result.reasonCode).toBe('restricted_sensitivity');
+  });
+
+  it('excludes safety_gate restricted docs with curator direct policy (not human_confirmation)', () => {
+    const result = classifyDocument(
+      doc({
+        status: 'restricted',
+        restrictionSource: 'safety_gate',
+        sensitivity: 'Confidential',
+        aiUsePolicy: 'direct',
+        sensitivitySource: 'curator',
+      }),
+      [],
+      NOW,
+    );
+    expect(result.recommendation).toBe('exclude');
+    expect(result.reasonCode).toBe('restricted_sensitivity');
+  });
 });
 
 // ---------------------------------------------------------------------------
