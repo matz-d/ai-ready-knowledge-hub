@@ -1753,8 +1753,49 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 ---
 
+## D-PROD-1: マスク不能 PII（unmaskablePiiFindings）の本番 enforce（2026-06-08、確定）
+
+**日付**: 2026-06-08
+**状態**: 確定・実装済み（2026-06-08）。ゲート一覧・現在地・DoD は [docs/production-readiness.md](production-readiness.md) §1 / §6 を参照。
+
+**実装:** `orchestratePdfPath`（`src/lib/uploadOrchestrator.ts`）の curator 直後・aiUsePolicy 分岐前に gate を置き、`count >= 1` で `terminateRestrictedByUnmaskablePii` に倒す（`direct` も `requires_masking` も覆う）。OCR 由来 restricted は Masker を経ないため `masker: null` / `sensitivitySource: 'curator'` / `restrictionSource: 'safety_gate'` / `sensitivityReason: UNMASKABLE_PII_RESTRICTION_REASON` で Masker 由来と区別する。`firestoreSchema.ts` の restricted 不変条件に safety_gate origin を追加（`sensitivitySource` enum は広げない）。IR snapshot / health eval / chunk は生成せず、生 PII を新規 artifact に残さない（GH #10 と整合）。Inventory / Context Package 候補経路では `inventoryFirestoreAdapter.ts` が `restrictionSource:'safety_gate'` の restricted を `masker:null` でも terminal 在庫として保持する。test 5件追加、`pnpm typecheck` / `pnpm test`(777) / `pnpm build` green（2026-06-08）。
+
+**背景:** scan-pdf の Gemini OCR が「検出したがマスクできない PII」を見つけた件数（`unmaskablePiiFindings.count`）は、現在 audit に記録されるのみで文書は通過する（`ai_safe` になり得る）。これは「AI に渡してよいか判断できない文書は exclusion / human confirmation を優先」（[CLAUDE.md](../CLAUDE.md) Safety Invariants）に反する。
+
+**決定:**
+1. `unmaskablePiiFindings.count >= 1` の文書は `status = restricted` で終端する（fail-closed）。
+2. 対象は `unmaskablePiiFindings`（マスク不能と判定されたもの）に限定する。通常の `piiFindings`（検出済みかつマスク可能）は対象外。
+3. `restricted` は削除ではなく在庫に残し、Safety Review / human confirmation で復旧可能とする。過剰除外は人間確認で回復でき、マスク不能 PII を AI に渡すリスクの方が大きいという非対称性に基づく。
+4. 閾値に窓は設けない（N=0、すなわち `>= 1`）。
+
+**代替案:**
+- 許容窓 N>0（誤検出率の実測待ち）→ 根拠データ未取得のため不採用。
+- warn 据え置き + human confirmation キュー → observe 継続だが本番安全ゲートとしては弱く不採用。
+
+**影響:** scan-pdf OCR 経路（`countUnmaskablePiiFromGeminiOcr` / `uploadOrchestrator` の terminal 決定）。`ai_safe` 終端の前段に restricted トリガを追加し、audit とテストを追加する。
+
+---
+
+## D-PROD-2: safety_readiness の enforce stage（2026-06-08、確定）
+
+**日付**: 2026-06-08
+**状態**: 確定（現挙動を正式決定として固定。コード変更なし）。ゲート一覧・現在地・DoD は [docs/production-readiness.md](production-readiness.md) §1 / §6 を参照。
+
+**背景:** `safety_readiness` は eval 軸として `heuristic` / `golden` で blocker（`D-P3-E` §10.6 案B）。実アップロードが通る `health` stage は計測対象外で enforce されない。golden recall は初回 0.05〜0.19 と低く、expected.json チューニング前に health で blocker 化すると誤 fail を量産する。
+
+**決定:**
+1. `health` stage は現状維持（`safety_readiness` は非計測・pass 扱い、軽量 smoke check として維持）。
+2. `safety_readiness` の blocker enforce は `heuristic` 以降に限定する（現コードの挙動）。
+3. 本番アップロード時点の安全制御は `D-PROD-1`（マスク不能 PII の restricted 化）で担保する。
+4. health blocker 昇格は expected.json チューニング後に再評価する（再評価条件は [open-questions.md](open-questions.md)「safety_readiness」）。
+
+**影響:** コード変更なし（現挙動の追認）。`rollupOverallStatus` / `CONVERSION_EVAL_AXES_MEASURED_BY_STAGE` は現状維持。
+
+---
+
 ## 関連ドキュメント
 
+- [docs/production-readiness.md](production-readiness.md) — ゲート一覧・現在地・DoD の正本（`D-PROD-*` の状態追跡）
 - [docs/phase-4-ux-direction.md](phase-4-ux-direction.md) — Phase 4-UX 作業分配・実装者向け指示文の正本（`D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2`）
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
 - [docs/phase-3-d-direction.md](phase-3-d-direction.md) — Phase 3-D CI/CD + IAP 実装方針（正本）

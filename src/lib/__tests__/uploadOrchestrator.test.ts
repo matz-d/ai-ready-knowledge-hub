@@ -136,6 +136,7 @@ import {
   CuratorPhaseError,
   MaskerPhaseError,
   orchestrateUploadProcessing,
+  UNMASKABLE_PII_RESTRICTION_REASON,
 } from '../uploadOrchestrator';
 
 const minimalDocumentIr: DocumentIr = {
@@ -664,6 +665,124 @@ describe('orchestrateUploadProcessing', () => {
           sensitivitySource: 'masker',
         })
       );
+    });
+
+    describe('D-PROD-1 OCR unmaskable-PII safety gate (scan-pdf)', () => {
+      const scanDocumentIr: DocumentIr = {
+        ...minimalDocumentIr,
+        source: { ...minimalDocumentIr.source, sourceSubtype: 'scan-pdf' },
+      };
+      const scanInput = (count: number) => ({
+        ...pdfBaseInput,
+        documentIr: scanDocumentIr,
+        sourceSubtype: 'scan-pdf' as const,
+        auditContext: {
+          tenantId: 'customer.example',
+          actor: {
+            userId: 'alice@customer.example',
+            ipAddress: '203.0.113.10',
+            userAgent: 'vitest',
+          },
+        },
+        conversion: {
+          converterId: 'gemini-vertex-ocr' as const,
+          inferenceDestination: {
+            vendor: 'vertex' as const,
+            region: 'us-central1',
+            model: 'gemini-2.5-pro',
+          },
+          unmaskablePiiFindingsCount: count,
+        },
+      });
+
+      it('restricts a direct scan-pdf (OCR origin) when count >= 1 and writes no AI-readable artifacts', async () => {
+        randomUUIDMock.mockReturnValue('doc-ocr-direct');
+        curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+        const result = await orchestrateUploadProcessing(scanInput(2));
+
+        expect(result).toEqual(
+          expect.objectContaining({
+            kind: 'restricted',
+            restrictionSource: 'safety_gate',
+            sensitivityReason: UNMASKABLE_PII_RESTRICTION_REASON,
+          })
+        );
+        // No Masker, no chunks, no IR snapshot, no health-eval artifact (GH #10).
+        expect(maskerPipelineFlowMock).not.toHaveBeenCalled();
+        expect(documentIrToKnowledgeChunksMock).not.toHaveBeenCalled();
+        expect(replaceChunksForDocumentMock).not.toHaveBeenCalled();
+        expect(writeDocumentIrSnapshotMock).not.toHaveBeenCalled();
+        expect(appendConversionEvalMock).not.toHaveBeenCalled();
+        expect(updateMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            status: 'restricted',
+            aiSafeStoragePath: null,
+            sensitivitySource: 'curator',
+            restrictionSource: 'safety_gate',
+            masker: null,
+            sensitivityReason: UNMASKABLE_PII_RESTRICTION_REASON,
+          })
+        );
+      });
+
+      it('restricts a requires_masking scan-pdf BEFORE the Masker when count >= 1', async () => {
+        randomUUIDMock.mockReturnValue('doc-ocr-mask');
+        curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+
+        const result = await orchestrateUploadProcessing(scanInput(1));
+
+        expect(result).toEqual(
+          expect.objectContaining({
+            kind: 'restricted',
+            restrictionSource: 'safety_gate',
+          })
+        );
+        expect(maskerPipelineFlowMock).not.toHaveBeenCalled();
+        expect(documentIrToKnowledgeChunksMock).not.toHaveBeenCalled();
+      });
+
+      it('does not restrict when count is 0 (normal direct terminal)', async () => {
+        randomUUIDMock.mockReturnValue('doc-ocr-zero');
+        curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+        const result = await orchestrateUploadProcessing(scanInput(0));
+
+        expect(result.kind).toBe('curated');
+        expect(documentIrToKnowledgeChunksMock).toHaveBeenCalled();
+        expect(replaceChunksForDocumentMock).toHaveBeenCalled();
+      });
+
+      it('records the document.convert audit with unmaskablePiiFindings.count on the restricted path', async () => {
+        randomUUIDMock.mockReturnValue('doc-ocr-audit');
+        curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+        await orchestrateUploadProcessing(scanInput(3));
+
+        expect(recordAuditEventMock).toHaveBeenCalledTimes(1);
+        const payload = recordAuditEventMock.mock.calls[0]?.[0] as Record<
+          string,
+          unknown
+        >;
+        expect(payload.conversion).toEqual(
+          expect.objectContaining({ unmaskablePiiFindings: { count: 3 } })
+        );
+      });
+
+      it('labels OCR-origin restriction distinctly from a Masker-promoted one', async () => {
+        randomUUIDMock.mockReturnValue('doc-ocr-distinct');
+        curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+
+        await orchestrateUploadProcessing(scanInput(2));
+
+        const restrictedUpdate = updateMock.mock.calls
+          .map(([payload]) => payload as Record<string, unknown>)
+          .find((payload) => payload?.status === 'restricted');
+        // Masker-promoted restrictions use sensitivitySource:'masker' + a masker block.
+        expect(restrictedUpdate?.restrictionSource).toBe('safety_gate');
+        expect(restrictedUpdate?.sensitivitySource).not.toBe('masker');
+        expect(restrictedUpdate?.masker).toBeNull();
+      });
     });
 
     it('marks failed with maskerError (not conversionError) when masker fails on PDF path', async () => {

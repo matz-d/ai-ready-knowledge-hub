@@ -93,7 +93,11 @@ export function adaptFirestoreDocumentToInventory(
   }
 
   if ((doc.status === 'ai_safe' || doc.status === 'restricted') && doc.masker == null) {
-    return null;
+    const isSafetyGateRestricted =
+      doc.status === 'restricted' && doc.restrictionSource === 'safety_gate';
+    if (!isSafetyGateRestricted) {
+      return null;
+    }
   }
 
   return {
@@ -115,6 +119,9 @@ export function adaptFirestoreDocumentToInventory(
     sensitivitySource: doc.sensitivitySource,
     originalCuratorSensitivity: doc.originalCuratorSensitivity ?? undefined,
     sensitivityReason: doc.sensitivityReason ?? undefined,
+    ...(doc.restrictionSource === 'safety_gate'
+      ? { restrictionSource: 'safety_gate' as const }
+      : {}),
     curator: serializeCuratorBlock(doc.curator),
     masker: doc.masker ? serializeMaskerBlock(doc.masker) : undefined,
     maskerEvaluation: maskerEvaluationFromBlock(doc.masker),

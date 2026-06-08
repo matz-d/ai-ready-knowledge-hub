@@ -34,6 +34,8 @@ export type InventoryDocument = {
   sensitivitySource: 'curator' | 'masker';
   originalCuratorSensitivity?: Sensitivity;
   sensitivityReason?: string;
+  /** Set when restricted by a deterministic safety gate (e.g. OCR unmaskable PII) without Masker. */
+  restrictionSource?: 'safety_gate';
   curator?: SerializableCuratorBlock;
   masker?: SerializableMaskerBlock;
   maskerEvaluation?: ResidualRiskOutputResult;

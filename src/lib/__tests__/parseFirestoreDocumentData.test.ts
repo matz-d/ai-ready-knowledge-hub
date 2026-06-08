@@ -73,6 +73,21 @@ describe('parseFirestoreDocumentData', () => {
     expect(parsed.externalSource).toEqual(nextShape.externalSource);
   });
 
+  it('accepts restrictionSource safety_gate on restricted documents', () => {
+    const parsed = parseFirestoreDocumentData({
+      ...baseRawDocument,
+      status: 'restricted',
+      restrictionSource: 'safety_gate',
+      sensitivityReason:
+        'unmaskable PII detected by OCR; document restricted before AI-readable terminal flow',
+    });
+
+    expect(parsed.restrictionSource).toBe('safety_gate');
+    expect(parsed.sensitivityReason).toBe(
+      'unmaskable PII detected by OCR; document restricted before AI-readable terminal flow'
+    );
+  });
+
   it('accepts google docs externalSource union values', () => {
     const docsShape = {
       ...baseRawDocument,

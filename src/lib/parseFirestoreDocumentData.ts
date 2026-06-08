@@ -114,6 +114,7 @@ const firestoreDocumentDataSchema = z
     sensitivitySource: z.enum(['curator', 'masker']).nullable(),
     originalCuratorSensitivity: SensitivityEnum.nullable(),
     sensitivityReason: z.string().nullable(),
+    restrictionSource: z.enum(['safety_gate']).nullable().optional(),
     curator: z.union([z.null(), firestoreCuratorBlockSchema]),
     curatorError: z.union([z.null(), firestoreErrorBlockSchema]),
     masker: z.union([z.null(), firestoreMaskerBlockSchema]),

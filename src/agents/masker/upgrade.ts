@@ -59,6 +59,12 @@ export function needsMaskerEvaluation(document: {
   return document.maskerEvaluation === undefined;
 }
 
-export function isBlockedForAi(document: MaskerUpgradeFields): boolean {
-  return document.sensitivity === 'Restricted' || document.aiUsePolicy === 'blocked';
+export function isBlockedForAi(
+  document: MaskerUpgradeFields & { status?: string }
+): boolean {
+  return (
+    document.status === 'restricted' ||
+    document.sensitivity === 'Restricted' ||
+    document.aiUsePolicy === 'blocked'
+  );
 }

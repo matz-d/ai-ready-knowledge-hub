@@ -22,6 +22,15 @@ export type FirestoreDocumentStatus =
 
 export type SensitivitySource = 'curator' | 'masker';
 
+/**
+ * Why a document terminated at status='restricted' WITHOUT running the Masker.
+ * `safety_gate`: a deterministic safety gate (e.g. OCR unmaskable PII, D-PROD-1)
+ * forced the restriction before any AI-readable terminal. Masker-promoted
+ * restrictions do NOT set this — they are identified by the masker block plus
+ * sensitivitySource='masker'.
+ */
+export type RestrictionSource = 'safety_gate';
+
 export type FirestoreCuratorBlock = {
   documentType: DocumentType;
   businessDomain: BusinessDomain;
@@ -114,6 +123,13 @@ export type FirestoreDocument = {
   sensitivitySource: SensitivitySource | null;
   originalCuratorSensitivity: Sensitivity | null;
   sensitivityReason: string | null;
+  /**
+   * Origin of a safety-gate restriction (D-PROD-1). Set to `'safety_gate'` when
+   * the document was restricted by a deterministic safety gate (e.g. OCR
+   * unmaskable PII) without running the Masker. Null/absent for Masker-promoted
+   * restrictions and all non-restricted statuses.
+   */
+  restrictionSource?: RestrictionSource | null;
 
   /**
    * PDF M1 flag: set to `true` when aiUsePolicy='requires_masking' and the
@@ -171,6 +187,7 @@ export type FirestoreDocumentInvariantInput = Pick<
   | 'sensitivitySource'
   | 'originalCuratorSensitivity'
   | 'sensitivityReason'
+  | 'restrictionSource'
 > & {
   curator: FirestoreCuratorInvariantInput;
   masker: FirestoreMaskerInvariantInput;
@@ -281,13 +298,20 @@ export function validateFirestoreDocumentInvariants(
     });
   }
 
+  // ai_safe always requires a masker block. restricted normally does too, but a
+  // safety-gate restriction (e.g. OCR unmaskable PII, D-PROD-1) terminates at
+  // restricted WITHOUT running the Masker, so masker is null in that origin.
+  const isSafetyGateRestriction =
+    doc.status === 'restricted' && doc.restrictionSource === 'safety_gate';
   if (
-    (doc.status === 'ai_safe' || doc.status === 'restricted') &&
+    (doc.status === 'ai_safe' ||
+      (doc.status === 'restricted' && !isSafetyGateRestriction)) &&
     doc.masker === null
   ) {
     violations.push({
       path: 'masker',
-      message: 'masker block is required when status is ai_safe or restricted.',
+      message:
+        'masker block is required when status is ai_safe, or restricted unless restrictionSource is safety_gate.',
     });
   }
 
@@ -332,16 +356,22 @@ export function validateFirestoreDocumentInvariants(
     });
   }
 
-  if (
-    doc.status === 'restricted' &&
-    (doc.masker?.decision !== 'restricted_promoted' ||
-      doc.sensitivitySource !== 'masker')
-  ) {
-    violations.push({
-      path: 'status',
-      message:
-        'status restricted requires masker.decision restricted_promoted and sensitivitySource masker.',
-    });
+  if (doc.status === 'restricted') {
+    // Two valid restricted origins (D-PROD-1):
+    //  - Masker-promoted: masker.decision restricted_promoted + sensitivitySource masker.
+    //  - Safety-gate (e.g. OCR unmaskable PII): restrictionSource safety_gate, no masker.
+    const maskerOrigin =
+      doc.masker?.decision === 'restricted_promoted' &&
+      doc.sensitivitySource === 'masker';
+    const safetyGateOrigin =
+      doc.restrictionSource === 'safety_gate' && doc.masker == null;
+    if (!maskerOrigin && !safetyGateOrigin) {
+      violations.push({
+        path: 'status',
+        message:
+          'status restricted requires either masker.decision restricted_promoted with sensitivitySource masker, or restrictionSource safety_gate with no masker block.',
+      });
+    }
   }
 
   if (
