@@ -1820,6 +1820,54 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 ---
 
+## D-DLV-1: Context Package export の出力粒度（2026-06-09、確定）
+
+**日付**: 2026-06-09
+**状態**: 確定。ゲート追跡は [docs/operate-deliver-readiness.md](operate-deliver-readiness.md) §B / §C-1。
+
+**決定:** MVP の正本 export は **単一 Markdown**。NotebookLM / Gemini / RAG へ渡す最小単位を Context Package 1個として保つ。source 分割は引用品質または source-level retrieval の課題が **実証された場合** に追加する（投機的に作らない）。
+
+**根拠:**
+- 現行 export（`exportContextPackage.ts`）は CLAUDE.md の4分類（使える/除外/足りない/確認）+ `Instructions for Downstream AI` を構造化済みで、「Context Package」という単位の意味が既に強い。
+- NotebookLM は Markdown file を source として扱え、1 source は最大 500,000 words / 200MB。MVP の単一 `.md` は形式上十分通る（[NotebookLM Help](https://support.google.com/notebooklm/answer/16215270)）。
+- source 分割は manifest / 除外理由 / Missing / Questions / Full Sources の分割設計コストを増やす。後でやるなら `package.md + sources/*.md` の zip export が自然。
+
+**fast-follow 条件:** §B の E2E delivery 検証で NotebookLM の引用品質が単一 `.md` で実際に弱いと分かった場合に source 分割（zip）を追加する。
+
+---
+
+## D-DLV-2: 成果物 handoff の幅（2026-06-09、確定）
+
+**日付**: 2026-06-09
+**状態**: 確定・実装済み（2026-06-09）。ゲート追跡は [docs/operate-deliver-readiness.md](operate-deliver-readiness.md) §B / §C-3。
+
+**決定:** handoff は **download + copy-to-clipboard** の2導線。NotebookLM / Gemini への **直接連携（OAuth/API）はスコープ外**。
+
+**根拠:**
+- 直接連携は OAuth・権限・利用規約・UI 変動を巻き込み、「前段プラットフォーム」の位置づけから外れやすい。
+- copy-to-clipboard は実装が小さく、Gemini に貼る / RAG prompt に貼る / エディタで確認する、の全導線に効く。デモ動画でも「生成 → コピー → 貼り付け」が伝わりやすい。
+
+**実装:** `ContextPackageForm.tsx` に `Markdown をコピー` / `Markdown をダウンロード` ボタン。コピー成功時のみ `コピーしました`、Clipboard API 不可時は `コピーできません`（`copyMarkdownToClipboard` は throw せず boolean を返す）。
+
+---
+
+## D-OPS-1: Gemini API 運用監視の範囲（2026-06-09、確定）
+
+**日付**: 2026-06-09
+**状態**: 確定。ゲート追跡は [docs/operate-deliver-readiness.md](operate-deliver-readiness.md) §A / §C-2。
+
+**決定:** quota / コスト dashboard は **新設しない**。runbook 注記 + 既存 job error alert で運用する。
+
+**根拠:**
+- 近年の Gemini 系は Dynamic Shared Quota 対象が多く、従来の quota 数値監視だけでは見えにくい。Google は usage 監視に Model Garden Monitoring dashboard、安定スループットに Provisioned Throughput を案内（[Vertex AI quotas](https://cloud.google.com/vertex-ai/generative-ai/docs/quotas) / [FAQ](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/faq)）。
+- 本プロジェクトの実リスクは「dashboard が無い」ことより、`GOOGLE_CLOUD_LOCATION=global` 制約・モデル availability・fail-closed 時の手順。提出では dashboard 新設より runbook 記述の方が説明力が高い。
+
+**runbook へ最小記述:** ① `GOOGLE_CLOUD_LOCATION=global` は実測制約（`asia-northeast1` は 3.x が 404） ② Gemini failure は scan/slide 変換で fail-closed ③ コスト確認先は Billing / Vertex AI monitoring ④ 本番 SLA が必要になれば Provisioned Throughput を検討。
+
+**撤退条件:** 本番 SLA / 課金上限の実需が出たら Model Garden Monitoring + Provisioned Throughput を別 decision で設計する。
+
+---
+
 ## 関連ドキュメント
 
 - [docs/production-readiness.md](production-readiness.md) — ゲート一覧・現在地・DoD の正本（`D-PROD-*` の状態追跡）

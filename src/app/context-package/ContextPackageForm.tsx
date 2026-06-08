@@ -130,6 +130,20 @@ function downloadMarkdown(markdown: string, purpose: string) {
   setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
+/**
+ * Copies the package markdown to the clipboard for direct paste into
+ * NotebookLM / Gemini / RAG prompts. Returns false (rather than throwing) when
+ * the Clipboard API is unavailable or denied, so the caller can show fallback UI.
+ */
+async function copyMarkdownToClipboard(markdown: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(markdown);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function ContextPackageForm() {
   const [purpose, setPurpose] = useState('');
   const [docIdsRaw, setDocIdsRaw] = useState('');
@@ -149,6 +163,9 @@ export function ContextPackageForm() {
   const [jobStatus, setJobStatus] = useState<JobLifecycleStatus | null>(null);
   const [jobNote, setJobNote] = useState<string | null>(null);
   const [previewAcknowledged, setPreviewAcknowledged] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>(
+    'idle'
+  );
 
   const activeJobRef = useRef<string | null>(null);
 
@@ -823,9 +840,24 @@ export function ContextPackageForm() {
             <button
               type="button"
               className="cp-download-btn"
+              onClick={async () => {
+                const ok = await copyMarkdownToClipboard(result.markdown);
+                setCopyState(ok ? 'copied' : 'error');
+                window.setTimeout(() => setCopyState('idle'), 2000);
+              }}
+            >
+              {copyState === 'copied'
+                ? 'コピーしました'
+                : copyState === 'error'
+                  ? 'コピーできません'
+                  : 'Markdown をコピー'}
+            </button>
+            <button
+              type="button"
+              className="cp-download-btn"
               onClick={() => downloadMarkdown(result.markdown, result.purpose)}
             >
-              .md をダウンロード
+              Markdown をダウンロード
             </button>
           </div>
         </div>
