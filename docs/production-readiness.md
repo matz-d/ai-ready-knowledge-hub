@@ -59,7 +59,7 @@
 |---|---|---|---|---|
 | log-based metrics（`context_package_job_errors` / `_stale_recoveries`） | ✅ | 作成済み | — | `setup-gcp.md §8` |
 | alert policies 3本（job errors / stale recoveries / Cloud Tasks backlog） | ✅ | 作成済み | — | `setup-gcp.md §8` |
-| **通知 channel（`notificationChannels`）** | 🔲 | 未設定。アラートは発報先がない状態 | Console で notification channel を追加し alert policy に紐付け | `setup-gcp.md §8`（`NOTIFICATION_CHANNEL`） |
+| **通知 channel（`notificationChannels`）** | ✅ | **2026-06-08**: channel configured / policies attached。email channel `projects/ai-ready-knowledge-hub/notificationChannels/10853988392687424315`（`AI Ready Knowledge Hub ops alerts`, type `email`, `enabled: true`）を作成し alert policy 3本に `notificationChannels` 紐付け済み。`gcloud describe` では `verificationStatus` 出力なし（`UNVERIFIED` ではない）。delivery test は未実施（Console の Send test notification で別途確認予定） | 将来は Google Group / ops alias へ差し替え | `setup-gcp.md §8.4` |
 | Cloud Scheduler `context-package-job-sweeper` | ✅ | `ENABLED`、manual run でログ確認済み | — | `setup-gcp.md §8` |
 
 ---
@@ -109,7 +109,7 @@
 | **グループ1 安全ゲート** | §1 `D-PROD-1` / `D-PROD-2`（✅ 確定・実装済み） | 完了 |
 | **グループ2 整合性 cleanup** | §2（#10/#11）, GH #9, #4 | 低リスク・土台固め |
 | **グループ3 アーキ判断** | §2 `ai_safe_version`, §7 残る判断 | コードでなく決定 |
-| 運用の残 | §4 通知 channel | 短時間で閉じる |
+| 運用の残 | — | §4 通知 channel は 2026-06-08 に閉じた |
 
 ---
 
