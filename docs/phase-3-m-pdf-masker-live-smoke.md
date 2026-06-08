@@ -393,6 +393,26 @@ Code follow-up（本 smoke 後の修正）:
   を ISO string ではなく Firestore timestamp として保存するよう修正した。TTL は
   `ACTIVE` だが、string field は TTL 対象にならないため。
 
+PR #21 merge 後の最終確認:
+
+| Item | Observed |
+| --- | --- |
+| GitHub Actions run | `27111676343` success |
+| Cloud Run revision | `ai-ready-knowledge-hub-00041-2kr` |
+| Deploy env | `GOOGLE_CLOUD_LOCATION=global` |
+| Final job ID | `5d51117a-6a46-40bd-b981-9bc250a448ba` |
+| Initial request | `POST /api/context-package` → HTTP `202` |
+| Polling | `running` → `succeeded` |
+| Result request | `GET /api/context-package/jobs/:jobId/result` → HTTP `200` |
+| Terminal TTL field | `expiresAt.timestampValue = 2026-06-22T02:00:04.271Z` |
+| Queue after final smoke | pending task `0` |
+| Token Creator cleanup | project / Worker SA とも binding 空 |
+
+final smoke の markdown は raw `SYN-INV-2026-0501` を含まず、`[REDACTED:` と
+`Confidential (AI-safe via masking)` を含むことを確認した。これにより #15
+（job GC / stale recovery）と #16（large result GCS offload）はどちらも production
+証跡付きで close 済み。
+
 ### scan-pdf eval locator / coverage
 
 **Smoke 時点（2026-05-29、本 doc 初版）** の conversion eval レコードは

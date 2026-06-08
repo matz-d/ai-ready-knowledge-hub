@@ -1608,14 +1608,16 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 **Context Package 非同期 job 本番配線 / live smoke（2026-06-02）:** 同期生成 `33.716634292s` の実測を受け、`202 Accepted` + Firestore job + Cloud Tasks worker を本番配線した。revision `ai-ready-knowledge-hub-00033-vrw` で、IAP audience 付き Worker SA token による job `8ce6a64b-54a5-4368-b7b6-866406c3d308` が HTTP `202` in `1.295306353s` → polling `queued/running/succeeded` → result HTTP `200` を完走。Cloud Tasks worker `/run` は HTTP `200` in `19.652927793s`、result fetch まで約 `22.5s`。初回応答は同期 smoke 比で `32.421s`、約 `96%` 短縮した。生成時間自体ではなく、UI 待機ブロック解消、retry、lease、冪等性を主目的とする。Cloud Tasks queue、Worker SA、IAP accessor、IAP programmatic OAuth client allowlist、Secret Manager、GitHub Variables、UI build-arg flag を配線済み。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md) と [docs/open-questions.md R10](open-questions.md)。
 
-**残る見直し候補:** UI の docIds 導線（Inventory からの選択 UX）、`unmaskablePiiFindings` 閾値再評価（Masker 本線接続後、`D-P3-H-7 Q2` 後続）、非同期 job result の GCS offload、job GC / cancel。
+**Production Hardening close-out（2026-06-08）:** `#15` job GC / stuck-running recovery と `#16` large result GCS offload は production smoke 完了。revision `ai-ready-knowledge-hub-00041-2kr` で async job `5d51117a-6a46-40bd-b981-9bc250a448ba` が HTTP `202` → `succeeded` → result HTTP `200` を完走し、terminal job `expiresAt.timestampValue`、queue empty、Token Creator cleanup を確認。GCS-backed result route と tenant isolation も synthetic smoke で確認済み。GitHub issue #15/#16 は close 済み。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
+
+**残る見直し候補:** UI の docIds 導線（Inventory からの選択 UX）、`unmaskablePiiFindings` 閾値再評価（Masker 本線接続後、`D-P3-H-7 Q2` 後続）。
 
 ---
 
 ## D-P4UX-0: Phase 4-UX 命名・スコープ・分類規則・セキュリティ境界
 
 **日付**: 2026-06-03
-**状態**: 計画確定（実装未着手）。作業分配と実装者向け指示文の正本は [docs/phase-4-ux-direction.md](phase-4-ux-direction.md)。
+**状態**: 採用（Phase 4-UX MVP 実装済み、Production Hardening close-out 完了）。作業分配と実装者向け指示文の正本は [docs/phase-4-ux-direction.md](phase-4-ux-direction.md)。
 
 **背景:** Context Package は「docId を指定すれば安全に生成できる」状態まで到達した（`D-P3-M-PDF-1` 後続）。次は「purpose を入れるだけで候補文書・除外文書・足りない情報・確認質問が整理される」UX へ引き上げる。実務担当者に docId を手入力させすぎない状態を目指す。
 
