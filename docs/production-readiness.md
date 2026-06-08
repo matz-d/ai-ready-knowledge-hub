@@ -33,9 +33,9 @@
 
 | 項目 | 状態 | 現在地 | 残/判断 | 正本 |
 |---|---|---|---|---|
-| `context_package_jobs.expiresAt` Firestore TTL | ✅ | 設定・`expiresAt.timestampValue` 実機確認済み | — | `setup-gcp.md §8` |
-| GCS `context-package/job-results/` lifecycle（14日削除） | ✅ | 設定済み | — | `setup-gcp.md §8` |
-| **conversion_eval の unmasked IR / 派生 chunk text 保持** | 🔲 | `requires_masking` PDF が本線化した今、eval 成果物に生 PII テキストが残らないかのセキュリティ判断が未完 | retention/セキュリティ判断を decision に記録 | GH #10 |
+| `context_package_jobs.expiresAt` Firestore TTL | ✅ | 設定・`expiresAt.timestampValue` 実機確認済み | — | `setup-gcp.md §2.1` |
+| GCS `context-package/job-results/` lifecycle（14日削除） | ✅ | 設定済み | — | `setup-gcp.md §2.3` |
+| **raw DocumentIR / 元アップロードの unmasked PII retention（GH #10）** | ✅ | **決定済（`D-PROD-3`）**: `conversion_eval` はメトリクス専用で生 text を保持しない。PII at-rest 面は GCS `raw/` と再フレーミングし、14日 lifecycle delete を設定済み | 完了 | `D-PROD-3`, `setup-gcp.md §2.3`, `documentIrStorage.ts`, `uploadOrchestrator.ts` |
 | `ai_safe_version` の保存位置 | 🔲 | サブコレクション vs metadata+別本文 が未決 | 保存位置を確定 | `firestore-schema.md`, open-questions |
 | legacy `maskingPending` の扱い | 🔲 | 動作は本線化（park しない）。schema/docs コメントが旧挙動を現行と誤読させ得る | コメントを「歴史的挙動」と明示 | GH #11 |
 
@@ -76,7 +76,7 @@
 
 ## 6. 本番化ゲートとして確定した決定
 
-`D-PROD-1` / `D-PROD-2` は **2026-06-08 に確定済み**。決定内容・閾値・採用理由の正本は [decisions.md](decisions.md) の各条目。本書はゲート状態と実装の現在地を記録する。
+`D-PROD-1` / `D-PROD-2` / `D-PROD-3` は **2026-06-08 に確定済み**。決定内容・閾値・採用理由の正本は [decisions.md](decisions.md) の各条目。本書はゲート状態と実装の現在地を記録する。
 
 ### 決定1: `unmaskablePiiFindings` の enforce 閾値（`D-PROD-1`）
 
@@ -90,13 +90,18 @@
 - **根拠・再評価条件**: [decisions.md — D-PROD-2](decisions.md)
 - **実装状態**: ✅ コード変更なし（現コードが既にこの挙動。現挙動を正式決定として固定）。
 
+### 決定3: raw DocumentIR snapshot / 元アップロードの retention（`D-PROD-3`）
+
+- **決定**: GH #10 の実体を GCS `raw/` の PII-at-rest として扱い、元アップロードと `raw/{docId}/document-ir/v1.json` を 14日 lifecycle delete にする。`conversion_eval` はメトリクス専用で生 text を保持しない。
+- **根拠・撤退条件**: [decisions.md — D-PROD-3](decisions.md)
+- **実装状態**: ✅ GCS bucket lifecycle に `raw/` と `context-package/job-results/` の 14日 delete rule を設定済み（2026-06-08）。コードコメントで D-PROD-3 と eval-only fallback を明記。
+
 ---
 
 ## 7. 残る判断
 
 本番ゲートのうち **未決** のもの。決定後は `D-PROD-*` または既存 decision ID として [decisions.md](decisions.md) に記録する。
 
-- conversion_eval の unmasked text 保持ポリシー（GH #10）
 - `ai_safe_version` の保存位置（firestore-schema）
 - Cloud DLP 本番適用範囲（`D-P3-E`）
 
@@ -107,7 +112,7 @@
 | グループ | 本書の対応行 | 性質 |
 |---|---|---|
 | **グループ1 安全ゲート** | §1 `D-PROD-1` / `D-PROD-2`（✅ 確定・実装済み） | 完了 |
-| **グループ2 整合性 cleanup** | §2（#10/#11）, GH #9, #4 | 低リスク・土台固め |
+| **グループ2 整合性 cleanup** | §2（#10 は `D-PROD-3` で完了。#11）, GH #9, #4 | 低リスク・土台固め |
 | **グループ3 アーキ判断** | §2 `ai_safe_version`, §7 残る判断 | コードでなく決定 |
 | 運用の残 | — | §4 通知 channel は 2026-06-08 に閉じた |
 

@@ -2,6 +2,7 @@
  * GCS adapter for DocumentIR snapshots — Phase 3-H-2 M1.
  * Authoritative path: `raw/{docId}/document-ir/v1.json`
  * Design rationale: docs/decisions.md D-P3-H-4 (Q2).
+ * Retention policy: docs/decisions.md D-PROD-3.
  *
  * Rationale for GCS over Firestore:
  *   - DocumentIR JSON can exceed Firestore's 1 MiB document limit for large PDFs.
@@ -49,6 +50,9 @@ export type WriteDocumentIrSnapshotOptions = {
  * in the caller is caught at the source rather than silently written to GCS.
  *
  * Returns the GCS object path (`raw/{docId}/document-ir/v1.json`).
+ * The object may contain unmasked extracted text for reprocessing, so the
+ * production bucket lifecycle must delete `raw/` objects after the D-PROD-3
+ * retention window.
  */
 export async function writeDocumentIrSnapshot(
   options: WriteDocumentIrSnapshotOptions
