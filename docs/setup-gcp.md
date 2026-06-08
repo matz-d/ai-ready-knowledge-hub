@@ -748,7 +748,85 @@ gcloud alpha monitoring policies create \
 gcloud alpha monitoring policies list \
   --project=ai-ready-knowledge-hub \
   --filter='displayName:"Context Package"' \
-  --format='table(name,displayName,enabled)'
+  --format='table(name,displayName,enabled,notificationChannels)'
+```
+
+**Notification channel（2026-06-08 設定）**
+
+email notification channel を作成し、上記 alert policy 3本に紐付け済み（channel configured / policies attached）。初期 ops alert 先は個人メール（将来 Google Group / ops alias へ差し替え予定）。docs にはメールアドレスを記載しない。
+
+| 項目 | 値 |
+|---|---|
+| resource name | `projects/ai-ready-knowledge-hub/notificationChannels/10853988392687424315` |
+| displayName | `AI Ready Knowledge Hub ops alerts` |
+| type | `email` |
+| enabled | `true` |
+| verificationStatus | API 出力なし（`gcloud describe` で `UNVERIFIED` は出ない） |
+| delivery test | 2026-06-08 confirmed by synthetic `context_package_job_errors` alert. Test run `alert-email-delivery-sustained-20260608T081523Z` opened alert `projects/ai-ready-knowledge-hub/alerts/0.o8szm1c7od96` at `2026-06-08T08:24:21Z`; notification email received at 17:24 JST |
+| userLabels | `app=ai_ready_knowledge_hub`, `scope=context_package` |
+
+紐付け済み alert policy:
+
+| displayName | resource name |
+|---|---|
+| Context Package async job errors | `projects/ai-ready-knowledge-hub/alertPolicies/17352164707903499112` |
+| Context Package stale running jobs recovered | `projects/ai-ready-knowledge-hub/alertPolicies/17352164707903497386` |
+| Context Package Cloud Tasks backlog | `projects/ai-ready-knowledge-hub/alertPolicies/16564441262000196314` |
+
+channel 未作成の場合は次で作成し、既存 policy には `--add-notification-channels` で追加する（duplicate policy を作らない）。
+
+```bash
+PROJECT_ID="ai-ready-knowledge-hub"
+ALERT_EMAIL="USER_PROVIDED_EMAIL"
+NOTIFICATION_CHANNEL="projects/${PROJECT_ID}/notificationChannels/REPLACE_AFTER_CREATE"
+
+gcloud alpha monitoring channels create \
+  --project="$PROJECT_ID" \
+  --display-name="AI Ready Knowledge Hub ops alerts" \
+  --description="Primary notification channel for Context Package production alerts" \
+  --type=email \
+  --channel-labels=email_address="$ALERT_EMAIL" \
+  --user-labels=app=ai_ready_knowledge_hub,scope=context_package
+
+# 既存 policy へ追加（例）
+JOB_ERRORS_POLICY=$(gcloud alpha monitoring policies list \
+  --project="$PROJECT_ID" \
+  --filter='displayName="Context Package async job errors"' \
+  --format='value(name)')
+
+gcloud alpha monitoring policies update "$JOB_ERRORS_POLICY" \
+  --project="$PROJECT_ID" \
+  --add-notification-channels="$NOTIFICATION_CHANNEL"
+```
+
+確認:
+
+```bash
+NOTIFICATION_CHANNEL="projects/ai-ready-knowledge-hub/notificationChannels/10853988392687424315"
+
+gcloud alpha monitoring channels describe "$NOTIFICATION_CHANNEL" \
+  --project=ai-ready-knowledge-hub \
+  --format='yaml(name,displayName,type,enabled,verificationStatus)'
+
+gcloud alpha monitoring policies list \
+  --project=ai-ready-knowledge-hub \
+  --filter='displayName:"Context Package"' \
+  --format='table(name,displayName,enabled,notificationChannels)'
+```
+
+Delivery test evidence（2026-06-08）:
+
+```bash
+# Synthetic test log path; does not indicate a real production job failure.
+gcloud logging read \
+  'resource.type="cloud_run_revision" resource.labels.service_name="ai-ready-knowledge-hub" "alert-email-delivery-sustained-20260608T081523Z"' \
+  --project=ai-ready-knowledge-hub \
+  --format='table(timestamp,severity,textPayload)'
+
+gcloud alpha monitoring alerts describe \
+  projects/ai-ready-knowledge-hub/alerts/0.o8szm1c7od96 \
+  --project=ai-ready-knowledge-hub \
+  --format='yaml(name,state,openTime,policy,metric,resource)'
 ```
 
 #### 8.5 Incident triage
