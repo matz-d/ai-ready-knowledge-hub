@@ -59,7 +59,7 @@
 |---|---|---|---|---|
 | log-based metrics（`context_package_job_errors` / `_stale_recoveries`） | ✅ | 作成済み | — | `setup-gcp.md §8` |
 | alert policies 3本（job errors / stale recoveries / Cloud Tasks backlog） | ✅ | 作成済み | — | `setup-gcp.md §8` |
-| **通知 channel（`notificationChannels`）** | ✅ | **2026-06-08**: channel configured / policies attached。email channel `projects/ai-ready-knowledge-hub/notificationChannels/10853988392687424315`（`AI Ready Knowledge Hub ops alerts`, type `email`, `enabled: true`）を作成し alert policy 3本に `notificationChannels` 紐付け済み。`gcloud describe` では `verificationStatus` 出力なし（`UNVERIFIED` ではない）。delivery test は未実施（Console の Send test notification で別途確認予定） | 将来は Google Group / ops alias へ差し替え | `setup-gcp.md §8.4` |
+| **通知 channel（`notificationChannels`）** | ✅ | **2026-06-08**: channel configured / policies attached。email channel `projects/ai-ready-knowledge-hub/notificationChannels/10853988392687424315`（`AI Ready Knowledge Hub ops alerts`, type `email`, `enabled: true`）を作成し alert policy 3本に `notificationChannels` 紐付け済み。`gcloud describe` では `verificationStatus` 出力なし（`UNVERIFIED` ではない）。synthetic alert `alert-email-delivery-sustained-20260608T081523Z` で delivery test 受信確認済み（alert `0.o8szm1c7od96`, 17:24 JST） | 将来は Google Group / ops alias へ差し替え | `setup-gcp.md §8.4` |
 | Cloud Scheduler `context-package-job-sweeper` | ✅ | `ENABLED`、manual run でログ確認済み | — | `setup-gcp.md §8` |
 
 ---

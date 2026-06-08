@@ -762,7 +762,7 @@ email notification channel を作成し、上記 alert policy 3本に紐付け�
 | type | `email` |
 | enabled | `true` |
 | verificationStatus | API 出力なし（`gcloud describe` で `UNVERIFIED` は出ない） |
-| delivery test | 未実施。Console **Monitoring → Alerting → Notification channels** の **Send test notification** で別途確認予定。届かない場合は迷惑メールと `alerting-noreply@google.com` を確認 |
+| delivery test | 2026-06-08 confirmed by synthetic `context_package_job_errors` alert. Test run `alert-email-delivery-sustained-20260608T081523Z` opened alert `projects/ai-ready-knowledge-hub/alerts/0.o8szm1c7od96` at `2026-06-08T08:24:21Z`; notification email received at 17:24 JST |
 | userLabels | `app=ai_ready_knowledge_hub`, `scope=context_package` |
 
 紐付け済み alert policy:
@@ -812,6 +812,21 @@ gcloud alpha monitoring policies list \
   --project=ai-ready-knowledge-hub \
   --filter='displayName:"Context Package"' \
   --format='table(name,displayName,enabled,notificationChannels)'
+```
+
+Delivery test evidence（2026-06-08）:
+
+```bash
+# Synthetic test log path; does not indicate a real production job failure.
+gcloud logging read \
+  'resource.type="cloud_run_revision" resource.labels.service_name="ai-ready-knowledge-hub" "alert-email-delivery-sustained-20260608T081523Z"' \
+  --project=ai-ready-knowledge-hub \
+  --format='table(timestamp,severity,textPayload)'
+
+gcloud alpha monitoring alerts describe \
+  projects/ai-ready-knowledge-hub/alerts/0.o8szm1c7od96 \
+  --project=ai-ready-knowledge-hub \
+  --format='yaml(name,state,openTime,policy,metric,resource)'
 ```
 
 #### 8.5 Incident triage
