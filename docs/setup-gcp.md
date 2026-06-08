@@ -132,6 +132,7 @@ IAP 保護済み。許可ユーザ `makoto@m-grow-ai.com` のみアクセス可�
 | `DEPLOY_SERVICE_ACCOUNT` | `github-deployer@ai-ready-knowledge-hub.iam.gserviceaccount.com` |
 | `RUNTIME_SERVICE_ACCOUNT` | `aiknh-runner@ai-ready-knowledge-hub.iam.gserviceaccount.com` |
 | `KNOWLEDGE_HUB_BUCKET` | `ai-ready-knowledge-hub-uploads` |
+| `GOOGLE_CLOUD_LOCATION` | `global`（Gemini 3.x inference 用。Cloud Run / GCS / Firestore の `GCP_REGION` とは分ける） |
 | `IAP_JWT_AUDIENCE` | `/projects/127729019743/locations/asia-northeast1/services/ai-ready-knowledge-hub` |
 | `CONTEXT_PACKAGE_TASKS_LOCATION` | （任意）未設定時は `GCP_REGION` と同値 |
 | `CONTEXT_PACKAGE_TASKS_QUEUE` | 例: `context-package-jobs` |

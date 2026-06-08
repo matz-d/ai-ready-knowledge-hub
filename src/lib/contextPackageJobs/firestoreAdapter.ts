@@ -42,10 +42,10 @@ function jobRef(jobId: string) {
   return jobCollection().doc(jobId);
 }
 
-function terminalExpiresAtIso(nowMs: number = Date.now()): string {
+function terminalExpiresAt(nowMs: number = Date.now()): Date {
   return new Date(
     nowMs + CONTEXT_PACKAGE_JOB_TERMINAL_RETENTION_DAYS * DAY_MS,
-  ).toISOString();
+  );
 }
 
 /** queued job を新規作成し、生成された jobId を含むスナップショットを返す。 */
@@ -246,7 +246,7 @@ export async function completeContextPackageJob(
       ...(progress ? { progress } : {}),
       attemptToken: FieldValue.delete(),
       leaseExpiresAt: FieldValue.delete(),
-      expiresAt: terminalExpiresAtIso(),
+      expiresAt: terminalExpiresAt(),
       finishedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -279,7 +279,7 @@ export async function completeContextPackageJobWithResultRef(
       ...(progress ? { progress } : {}),
       attemptToken: FieldValue.delete(),
       leaseExpiresAt: FieldValue.delete(),
-      expiresAt: terminalExpiresAtIso(),
+      expiresAt: terminalExpiresAt(),
       finishedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -326,7 +326,7 @@ export async function failContextPackageJob(
       ...(progress ? { progress } : {}),
       attemptToken: FieldValue.delete(),
       leaseExpiresAt: FieldValue.delete(),
-      expiresAt: terminalExpiresAtIso(),
+      expiresAt: terminalExpiresAt(),
       finishedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -377,7 +377,7 @@ export async function cancelContextPackageJob(
       } satisfies ContextPackageJobError,
       attemptToken: FieldValue.delete(),
       leaseExpiresAt: FieldValue.delete(),
-      expiresAt: terminalExpiresAtIso(),
+      expiresAt: terminalExpiresAt(),
       finishedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -436,7 +436,7 @@ export async function recoverStaleRunningContextPackageJob(
       } satisfies ContextPackageJobError,
       attemptToken: FieldValue.delete(),
       leaseExpiresAt: FieldValue.delete(),
-      expiresAt: terminalExpiresAtIso(nowMs),
+      expiresAt: terminalExpiresAt(nowMs),
       finishedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });

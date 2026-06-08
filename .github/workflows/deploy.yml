@@ -63,6 +63,7 @@ jobs:
       RUNTIME_SERVICE_ACCOUNT: ${{ vars.RUNTIME_SERVICE_ACCOUNT }}
       KNOWLEDGE_HUB_BUCKET: ${{ vars.KNOWLEDGE_HUB_BUCKET }}
       KNOWLEDGE_HUB_TENANT_ID: ${{ vars.KNOWLEDGE_HUB_TENANT_ID }}
+      GOOGLE_CLOUD_LOCATION: ${{ vars.GOOGLE_CLOUD_LOCATION }}
       IAP_JWT_AUDIENCE: ${{ vars.IAP_JWT_AUDIENCE }}
       CONTEXT_PACKAGE_TASKS_LOCATION: ${{ vars.CONTEXT_PACKAGE_TASKS_LOCATION }}
       CONTEXT_PACKAGE_TASKS_QUEUE: ${{ vars.CONTEXT_PACKAGE_TASKS_QUEUE }}
@@ -119,6 +120,12 @@ jobs:
             echo "Context Package async UI enabled at image build (NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true)"
           fi
 
+          gemini_location="${GOOGLE_CLOUD_LOCATION:-global}"
+          if [[ "${gemini_location}" != "global" ]]; then
+            echo "GOOGLE_CLOUD_LOCATION must remain global for Gemini 3.x, got ${gemini_location}" >&2
+            exit 1
+          fi
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
@@ -167,7 +174,7 @@ jobs:
           ENV_VARS=(
             "AUTH_MODE=iap"
             "GOOGLE_CLOUD_PROJECT=${GCP_PROJECT_ID}"
-            "GOOGLE_CLOUD_LOCATION=${GCP_REGION}"
+            "GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-global}"
             "KNOWLEDGE_HUB_BUCKET=${KNOWLEDGE_HUB_BUCKET}"
             "IAP_JWT_AUDIENCE=${IAP_JWT_AUDIENCE}"
             "MASKER_PROVIDER=simple-rule"
