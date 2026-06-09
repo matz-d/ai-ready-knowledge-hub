@@ -1834,6 +1834,20 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 **fast-follow 条件:** §B の E2E delivery 検証で NotebookLM の引用品質が単一 `.md` で実際に弱いと分かった場合に source 分割（zip）を追加する。
 
+### 追補（2026-06-09、fast-follow 発火・実装）
+
+**実証:** accounting-office 1ケースの E2E 検証（[delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md)）で、単一 `.md` を NotebookLM の1ソースとして投入したところ、本文（`# Full AI-Ready Sources` の料金表）がソースに**存在するのに** grounding されず、「料金は記載なし、料金表_2026.csv を直接確認せよ」と回答（Q1 FAIL）。NotebookLM の自動ソースガイドが本 `.md` を「コンテキストパッケージの**構成案**」と解釈し、manifest（メタ層）を強く、付録的な本文層を弱く見たことが原因。生 `料金表_2026.csv` を独立ソースとして足すと即 33,000円 を正答 → 原因は**メタ層と本文層を1ファイルに混在させた frame**と確定。
+
+**追加決定:** 単一 `.md` は正本として維持しつつ、**source 分割 bundle を secondary export として採用**する。実装は純関数 `exportContextPackageSourceBundle()`（`src/lib/exportContextPackage.ts`）:
+- included 各文書 = 個別 source ファイル（本文のみ、native 形式。masked 文書は ai_safe 本文）。
+- メタ層 = `00-CONTEXT-PACKAGE-GUIDE.md` 1枚（manifest / Instructions / 4分類）。本文は載せない。
+- excluded / restricted / pending masking は **source file を作らず** guide に名前+理由のみ。安全性は「guide の指示遵守」ではなく **exclusion by absence**（除外本文が source 群に物理的に不在）で担保。
+- guide に「Included source filenames are provided as separate sources. Use those source files for factual answers.」を明示。
+
+**検証結果:** bundle（guide + 生ソース5）を NotebookLM に投入し質問バッテリー **5/5 PASS**（33,000 / 220,000 / missing 認識 / questions 認識 / excluded 参照不可）。ユニットテスト 6件（`exportContextPackageSourceBundle.test.ts`）。
+
+**残（段階2）:** アプリ UI に bundle の zip ダウンロード導線を追加（client zip は `fflate` 候補）。Gemini / RAG 向け取り込み手順は同型で追補。
+
 ---
 
 ## D-DLV-2: 成果物 handoff の幅（2026-06-09、確定）

@@ -46,10 +46,10 @@
 | included/excluded の理由・sensitivity を提示 | ✅ | included は Reason / Source type / Sensitivity、excluded は Reason / Status を逐文書で出力 | — | `exportContextPackage.ts` |
 | restricted / human-review を「人間が確認すべき」として明示（沈黙除外しない） | ✅ | `humanReviewDocuments` を `Excluded` に `Restricted / human review only` で合流 | — | `preGenerationPreview.ts` |
 | 成果物の取得（.md ダウンロード） | ✅ | `ContextPackageForm` の「.md をダウンロード」（Blob → `context-package_{slug}.md`） | — | `ContextPackageForm.tsx` |
-| **渡し先別の取り込み手順（NotebookLM / Gemini / RAG）** | 🔲 | UI は「NotebookLM・Gemini・RAG に渡せる」と謳うが、**渡し先別の具体的な取り込み手順や注意が未提供** | E2E 検証（下行）で実投入手順を確立し、最小ガイドに転記 | 本書 |
-| **出力粒度: 単一 .md vs source 分割** | ✅ | **決定済（`D-DLV-1`）**: MVP 正本は単一 Markdown（NotebookLM は md source 可・1 source 最大 500k words）。source 分割は E2E で引用品質が弱いと実証された場合の fast-follow | — | `D-DLV-1` |
+| **渡し先別の取り込み手順（NotebookLM / Gemini / RAG）** | ✅ | NotebookLM の取り込み手順を E2E で確立: **単一 .md をチャットに貼らず、source 分割 bundle の全ファイルを source 追加**。経緯と手順は [delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md) | Gemini/RAG 手順は同型で追補可 | `delivery-e2e/` |
+| **出力粒度: 単一 .md vs source 分割** | ✅ | **D-DLV-1 fast-follow 発火・実装済（2026-06-09）**: E2E で単一 .md は NotebookLM が本文を grounding できず FAIL → `exportContextPackageSourceBundle()` で source 分割 bundle を追加し PASS。単一 .md は維持しつつ bundle を secondary export に | UI zip 導線は段階2 | `D-DLV-1`, `exportContextPackage.ts` |
 | **ダウンロード以外の handoff（clipboard / 直接連携）** | ✅ | **決定済・実装済（`D-DLV-2`, 2026-06-09）**: download + copy-to-clipboard の2導線。直接 API 連携はスコープ外。`Markdown をコピー`/`コピーしました`/`コピーできません` | — | `D-DLV-2`, `ContextPackageForm.tsx` |
-| **エンドツーエンドの delivery 検証（実 NotebookLM/Gemini 投入）** | 🔲 | 生成・ダウンロードまでは smoke 済みだが、**実際に NotebookLM/Gemini に投入して期待通り使える**ことの証跡が無い | 1ケースで実投入し、デモ証跡として記録（提出インパクト大） | 本書 |
+| **エンドツーエンドの delivery 検証（実 NotebookLM/Gemini 投入）** | ✅ | accounting-office 1ケースを実 NotebookLM に投入し質問バッテリー5問すべて PASS（included のみ使用 / excluded 不使用 / missing・questions 認識）。証跡は [delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md) | Gemini でも余力で確認 | `delivery-e2e/` |
 
 ---
 
@@ -61,7 +61,7 @@
 2. **Gemini 運用監視（A）** → `D-OPS-1`: dashboard 新設せず **runbook 注記 + 既存 alert**。
 3. **handoff の幅（B）** → `D-DLV-2`: **download + copy、直接連携なし**（copy 実装済み）。
 
-**提出前の決定打**: §B の **E2E delivery 検証**（現行 `.md` を実 NotebookLM/Gemini に投入し、included のみ使用 / excluded 不使用 / missing・questions 認識 を確認）。手順は §E を参照。
+**提出前の決定打**: §B の **E2E delivery 検証** → **2026-06-09 達成**。実 NotebookLM で 5/5 PASS。過程で単一 .md の grounding 失敗を発見し、`D-DLV-1` の fast-follow（source 分割 bundle）を実装して合格。証跡は [delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md)。
 
 ---
 
@@ -71,30 +71,34 @@
 
 **とどける** が成立と言えるのは、B の ✅ 群（4分類の構造化出力 / 下流指示 / 正直なカバレッジ開示 / 理由・sensitivity 提示 / human-review 明示 / .md 取得）を満たすこと。**これも達成済み**。残るのは渡し先体験（渡し先別ガイド・出力粒度・handoff 幅・E2E 検証）で、ここが**ハッカソン提出のデモ価値に最も効く伸びしろ**。
 
-> 結論: まわす/とどける とも **コア DoD は通過済み**。次の限界効用は、C の3判断を決めてから **とどける の E2E 検証（実 NotebookLM/Gemini 投入の証跡）** を作ることにある。
+> 結論: まわす/とどける とも **コア DoD は通過済み**。**とどける の E2E 検証も 2026-06-09 達成**（実 NotebookLM 5/5 PASS、source 分割 bundle を fast-follow 実装）。残る限界効用は、段階2 の UI zip 導線（bundle の app 内ダウンロード）と Gemini/RAG 取り込み手順の追補。
 
 ---
 
 ## E. とどける E2E delivery 検証 runbook（提出デモ証跡）
 
-**目的:** 生成した Context Package（単一 `.md`, `D-DLV-1`）を実際の NotebookLM / Gemini に投入し、4分類どおりに振る舞うことを1ケースで証跡化する。これが「とどける」軸の決定打。
+**状態:** 2026-06-09 実施・合格。本節は**確立した手順**として残す。実施結果は [delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md)。
+
+**目的:** 生成した Context Package を実際の NotebookLM / Gemini に投入し、4分類どおりに振る舞うことを1ケースで証跡化する。
 
 **前提:** sample-data の synthetic / masked fixture のみ使用（実顧客データ・PII は投入しない）。
 
-**手順:**
-1. アプリで purpose を1つ決めて Context Package を生成 → `Markdown をコピー` または `Markdown をダウンロード`。
-2. **NotebookLM**: 新規 notebook に `.md` を source として追加（または copy 本文を貼り付け）。
-3. 目的に沿う質問を投げ、次の4点を確認・スクショ:
-   - **使える**: `Included Documents` / `Full AI-Ready Sources` の内容で回答が構成される。
-   - **除外**: `Excluded Documents` の内容を回答に使わない（`Instructions for Downstream AI` の "Do not use excluded documents" が効く）。
-   - **足りない**: `Missing Knowledge` に該当する問いには「不足」を認識し、勝手に補完しない。
-   - **確認**: `Questions for Human Owner` を人間確認事項として提示できる。
-4. **Gemini**: 同じ `.md` を貼り付け、同じ4点を確認（copy 導線の動作確認も兼ねる）。
-5. budget truncation が出たケースがあれば、`Budget Truncation` 警告が下流で「カバレッジ不完全」として伝わるかも確認（任意）。
+**⚠️ 重要な学び（必ず守る渡し方）:** **単一 `.md` を NotebookLM の1ソースとして投入しないこと。** NotebookLM が manifest（メタ層）を強く、付録的な本文層（`Full AI-Ready Sources`）を弱く見て「構成案」と誤読し、本文を grounding できず FAIL する（実証済み）。**source 分割 bundle を使う。**
 
-**合格条件:** 4点すべてが少なくとも NotebookLM で確認でき、スクショ/メモを提出素材として残す。単一 `.md` で引用品質が明確に弱い場合のみ `D-DLV-1` の fast-follow（source 分割 zip）を起票する。
+**手順（NotebookLM、確立版）:**
+1. Context Package を生成し、**source 分割 bundle** を得る（純関数 `exportContextPackageSourceBundle()`。検証では `pnpm tsx scripts/buildDeliveryE2ePackage.ts` が `docs/delivery-e2e/sources/<case>/` に出力）。
+2. **新規 notebook**に bundle の**全ファイル**（`00-CONTEXT-PACKAGE-GUIDE.md` + included 生ソース）を source 追加。単一 .md や手動追加ファイルは混ぜない。
+3. 質問バッテリーを投げ、次の4点を確認・スクショ:
+   - **使える**: included 生ソース（例: `料金表_2026.csv`）の値で回答が構成される。
+   - **除外**: excluded 文書の内容を使わない（bundle に **source file が存在しない** ＝ exclusion by absence）。
+   - **足りない**: guide の `Missing Knowledge` に該当する問いには「不足」を認識し、勝手に補完しない。
+   - **確認**: guide の `Questions for Human Owner` を人間確認事項として提示できる。
+4. **Gemini**（任意）: 同じ bundle をファイル添付し、同じ4点を確認。
+5. budget truncation が出たケースがあれば、guide の `Budget Truncation` 警告が「カバレッジ不完全」として伝わるかも確認（任意）。
 
-**記録先:** 検証結果（合否・スクショ参照・気づき）は `docs/` のフェーズ/検証ログに残し、本書 §B の該当行を ✅ に更新する。
+**合格条件:** 4点すべてが少なくとも NotebookLM で確認でき、スクショ/メモを提出素材として残す。
+
+**記録先:** 検証結果は `docs/delivery-e2e/` の検証ログに残し、本書 §B の該当行を ✅ にする（2026-06-09 実施済み）。
 
 ---
 
