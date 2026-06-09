@@ -22,34 +22,39 @@ If required information is missing, ask the human owner.
 
 ## Included Source Files
 
-- 料金表_2026.csv
+- Source file: `料金表_2026.csv`
+  - Original document: `料金表_2026.csv`
   - Reason: 現行料金表（current）。料金問い合わせの権威ソース
   - Source type: 表
   - Sensitivity: Internal
-- 給与計算チェックリスト.md
+- Source file: `給与計算チェックリスト.md`
+  - Original document: `給与計算チェックリスト.md`
   - Reason: 一般情報。給与計算手続きの参照可ドキュメント
   - Source type: チェックリスト
   - Sensitivity: Internal
-- 就業規則テンプレート.md
+- Source file: `就業規則テンプレート.md`
+  - Original document: `就業規則テンプレート.md`
   - Reason: 汎用テンプレ。就業規則の一般説明に参照可
   - Source type: テンプレート
   - Sensitivity: Internal
-- 年末調整_案内文.txt
+- Source file: `年末調整_案内文.txt`
+  - Original document: `年末調整_案内文.txt`
   - Reason: 年末調整手続きの一般案内。AI 参照可
   - Source type: 案内文
   - Sensitivity: Internal
-- 顧客対応メモ_匿名化.txt
+- Source file: `顧客対応メモ_匿名化.txt`
+  - Original document: `顧客対応メモ_匿名化.txt`
   - Reason: Confidential だが Masker で placeholder 化済みの AI-safe 版
   - Source type: メモ
   - Sensitivity: Confidential (AI-safe via masking)
 
 ### File list
 
-- 料金表_2026.csv
-- 給与計算チェックリスト.md
-- 就業規則テンプレート.md
-- 年末調整_案内文.txt
-- 顧客対応メモ_匿名化.txt
+- `料金表_2026.csv`
+- `給与計算チェックリスト.md`
+- `就業規則テンプレート.md`
+- `年末調整_案内文.txt`
+- `顧客対応メモ_匿名化.txt`
 
 ## Excluded Documents (NOT provided as sources)
 

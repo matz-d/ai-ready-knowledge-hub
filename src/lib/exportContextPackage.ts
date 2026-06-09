@@ -4,6 +4,7 @@ import type {
   DocumentType,
   Sensitivity,
 } from '../agents/curator/schema';
+import { sanitizeOriginalFileName } from './documents';
 
 export type IncludedContextDocument = {
   fileName: string;
@@ -64,6 +65,53 @@ const downstreamInstructions = [
 const truncationInstruction =
   'This package is INCOMPLETE: some safe content was dropped to fit the model input budget (see "Budget Truncation"). Treat coverage as partial and re-run with a narrower docIds scope for full coverage.';
 
+type ExportRenderModel = {
+  humanReviewDocuments: ExcludedContextDocument[];
+  allExcludedDocuments: ExcludedContextDocument[];
+  truncatedDocuments: BudgetTruncatedDocument[];
+  droppedChunks: number;
+  isTruncated: boolean;
+  manifestTruncationLine: string;
+};
+
+function buildExportRenderModel(
+  input: ContextPackageExportInput
+): ExportRenderModel {
+  const humanReviewDocuments = input.humanReviewDocuments ?? [];
+  const allExcludedDocuments = [
+    ...input.excludedDocuments,
+    ...humanReviewDocuments.map((document) => ({
+      ...document,
+      status: document.status ?? 'Restricted / human review only',
+    })),
+  ];
+
+  const truncatedDocuments = input.budgetTruncatedDocuments ?? [];
+  const droppedChunks = totalDroppedChunks(truncatedDocuments);
+  const isTruncated = droppedChunks > 0;
+  const manifestTruncationLine = isTruncated
+    ? `\n- ⚠️ Budget truncation: ${droppedChunks} safe chunk(s) across ${truncatedDocuments.length} document(s) were dropped to fit the model input budget — coverage is INCOMPLETE`
+    : '';
+
+  return {
+    humanReviewDocuments,
+    allExcludedDocuments,
+    truncatedDocuments,
+    droppedChunks,
+    isTruncated,
+    manifestTruncationLine,
+  };
+}
+
+function instructionsWithTruncation(
+  baseInstructions: string[],
+  model: Pick<ExportRenderModel, 'isTruncated'>
+): string[] {
+  return model.isTruncated
+    ? [...baseInstructions, truncationInstruction]
+    : baseInstructions;
+}
+
 function totalDroppedChunks(documents: BudgetTruncatedDocument[]): number {
   return documents.reduce((sum, doc) => sum + doc.droppedChunks, 0);
 }
@@ -111,7 +159,9 @@ function numberedList(items: string[]): string {
   return items.map((item, index) => `${index + 1}. ${item}`).join('\n');
 }
 
-function sensitivityForDisplay(document: IncludedContextDocument): string {
+function sensitivityForDisplay(
+  document: Pick<IncludedContextDocument, 'sensitivity' | 'aiSafeViaMasking'>
+): string {
   return document.aiSafeViaMasking
     ? `${document.sensitivity} (AI-safe via masking)`
     : document.sensitivity;
@@ -165,25 +215,11 @@ ${document.aiSafeContent.trim()}
 export function exportContextPackageMarkdown(
   input: ContextPackageExportInput
 ): string {
-  const humanReviewDocuments = input.humanReviewDocuments ?? [];
-  const allExcludedDocuments = [
-    ...input.excludedDocuments,
-    ...humanReviewDocuments.map((document) => ({
-      ...document,
-      status: document.status ?? 'Restricted / human review only',
-    })),
-  ];
-
-  const truncatedDocuments = input.budgetTruncatedDocuments ?? [];
-  const droppedChunks = totalDroppedChunks(truncatedDocuments);
-  const isTruncated = droppedChunks > 0;
-
-  const manifestTruncationLine = isTruncated
-    ? `\n- ⚠️ Budget truncation: ${droppedChunks} safe chunk(s) across ${truncatedDocuments.length} document(s) were dropped to fit the model input budget — coverage is INCOMPLETE`
-    : '';
-  const instructions = isTruncated
-    ? [...downstreamInstructions, truncationInstruction]
-    : downstreamInstructions;
+  const render = buildExportRenderModel(input);
+  const instructions = instructionsWithTruncation(
+    downstreamInstructions,
+    render
+  );
 
   return `# AI-Ready Context Package
 
@@ -194,7 +230,7 @@ export function exportContextPackageMarkdown(
 - Source documents reviewed: ${input.sourceDocumentsReviewed}
 - Included documents: ${input.includedDocuments.length}
 - Excluded documents: ${input.excludedDocuments.length}
-- Human review required: ${humanReviewDocuments.length}${manifestTruncationLine}
+- Human review required: ${render.humanReviewDocuments.length}${render.manifestTruncationLine}
 
 ## Instructions for Downstream AI
 
@@ -206,11 +242,11 @@ ${includedDocumentsMarkdown(input.includedDocuments)}
 
 ## Excluded Documents
 
-${excludedDocumentsMarkdown(allExcludedDocuments)}
+${excludedDocumentsMarkdown(render.allExcludedDocuments)}
 
 ## Budget Truncation (Incomplete Coverage)
 
-${budgetTruncationMarkdown(truncatedDocuments)}
+${budgetTruncationMarkdown(render.truncatedDocuments)}
 
 ## Missing Knowledge
 
@@ -243,6 +279,8 @@ export type ContextPackageSourceRole = 'guide' | 'included-source';
 export type ContextPackageSourceFile = {
   /** bundle 内のファイル名（NotebookLM に渡す source 名）。bundle 内で一意。 */
   fileName: string;
+  /** 元文書の表示名。fileName は sanitize/dedupe 後の実 source 名。 */
+  originalFileName?: string;
   content: string;
   /** ダウンロード/添付時の MIME。NotebookLM が native 形式で扱えるようにする。 */
   contentType: string;
@@ -272,6 +310,32 @@ function contentTypeForFileName(fileName: string): string {
   return 'text/plain';
 }
 
+const WINDOWS_RESERVED_FILE_NAMES =
+  /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+
+/**
+ * Source bundle file names become real filesystem paths and future zip entries.
+ * They must therefore be stricter than inert markdown display names.
+ */
+function sanitizeSourceBundleFileName(fileName: string): string {
+  const sanitized = sanitizeOriginalFileName(fileName)
+    .replace(/[<>:"|?*\x00-\x1F]/g, '_')
+    .replace(/\.\.+/g, '.')
+    .replace(/^\.+/, '')
+    .replace(/[. ]+$/g, '')
+    .trim();
+  const safe = sanitized || 'source.txt';
+  return WINDOWS_RESERVED_FILE_NAMES.test(safe) ? `_${safe}` : safe;
+}
+
+function oneLine(value: string): string {
+  return value.replace(/[\r\n\0]+/g, ' ').trim();
+}
+
+function inlineCode(value: string): string {
+  return `\`${oneLine(value).replace(/`/g, "'") || '(empty)'}\``;
+}
+
 function fileNameWithIndex(fileName: string, index: number): string {
   const dot = fileName.lastIndexOf('.');
   if (dot <= 0) {
@@ -282,18 +346,45 @@ function fileNameWithIndex(fileName: string, index: number): string {
 
 /** bundle 内でファイル名衝突（同名 included 文書）を避ける。 */
 function dedupeFileName(fileName: string, used: Set<string>): string {
-  if (!used.has(fileName)) {
-    used.add(fileName);
-    return fileName;
+  const safeFileName = sanitizeSourceBundleFileName(fileName);
+  if (!used.has(safeFileName)) {
+    used.add(safeFileName);
+    return safeFileName;
   }
   let index = 2;
-  let candidate = fileNameWithIndex(fileName, index);
+  let candidate = fileNameWithIndex(safeFileName, index);
   while (used.has(candidate)) {
     index += 1;
-    candidate = fileNameWithIndex(fileName, index);
+    candidate = fileNameWithIndex(safeFileName, index);
   }
   used.add(candidate);
   return candidate;
+}
+
+type IncludedSourceGuideEntry = Pick<
+  IncludedContextDocument,
+  'reason' | 'sourceType' | 'sensitivity' | 'aiSafeViaMasking'
+> & {
+  originalFileName: string;
+  sourceFileName: string;
+};
+
+function includedSourceGuideMarkdown(
+  entries: IncludedSourceGuideEntry[]
+): string {
+  if (entries.length === 0) {
+    return '- None';
+  }
+
+  return entries
+    .map(
+      (entry) => `- Source file: ${inlineCode(entry.sourceFileName)}
+  - Original document: ${inlineCode(entry.originalFileName)}
+  - Reason: ${oneLine(entry.reason)}
+  - Source type: ${entry.sourceType}
+  - Sensitivity: ${sensitivityForDisplay(entry)}`
+    )
+    .join('\n');
 }
 
 /**
@@ -302,31 +393,20 @@ function dedupeFileName(fileName: string, used: Set<string>): string {
  */
 function buildSourceBundleGuideMarkdown(
   input: ContextPackageExportInput,
-  includedSourceFileNames: string[]
+  includedSources: IncludedSourceGuideEntry[]
 ): string {
-  const humanReviewDocuments = input.humanReviewDocuments ?? [];
-  const allExcludedDocuments = [
-    ...input.excludedDocuments,
-    ...humanReviewDocuments.map((document) => ({
-      ...document,
-      status: document.status ?? 'Restricted / human review only',
-    })),
-  ];
-
-  const truncatedDocuments = input.budgetTruncatedDocuments ?? [];
-  const droppedChunks = totalDroppedChunks(truncatedDocuments);
-  const isTruncated = droppedChunks > 0;
-  const manifestTruncationLine = isTruncated
-    ? `\n- ⚠️ Budget truncation: ${droppedChunks} safe chunk(s) across ${truncatedDocuments.length} document(s) were dropped to fit the model input budget — coverage is INCOMPLETE`
-    : '';
-  const instructions = isTruncated
-    ? [...sourceBundleInstructions, truncationInstruction]
-    : sourceBundleInstructions;
+  const render = buildExportRenderModel(input);
+  const instructions = instructionsWithTruncation(
+    sourceBundleInstructions,
+    render
+  );
 
   const includedSourceList =
-    includedSourceFileNames.length === 0
+    includedSources.length === 0
       ? '- None'
-      : includedSourceFileNames.map((name) => `- ${name}`).join('\n');
+      : includedSources
+          .map((entry) => `- ${inlineCode(entry.sourceFileName)}`)
+          .join('\n');
 
   return `# AI-Ready Context Package — Guide
 
@@ -341,7 +421,7 @@ listed below — use those source files for factual answers.
 - Source documents reviewed: ${input.sourceDocumentsReviewed}
 - Included documents: ${input.includedDocuments.length}
 - Excluded documents: ${input.excludedDocuments.length}
-- Human review required: ${humanReviewDocuments.length}${manifestTruncationLine}
+- Human review required: ${render.humanReviewDocuments.length}${render.manifestTruncationLine}
 
 ## Instructions for Downstream AI
 
@@ -349,7 +429,7 @@ ${instructions.join('\n')}
 
 ## Included Source Files
 
-${includedDocumentsMarkdown(input.includedDocuments)}
+${includedSourceGuideMarkdown(includedSources)}
 
 ### File list
 
@@ -357,11 +437,11 @@ ${includedSourceList}
 
 ## Excluded Documents (NOT provided as sources)
 
-${excludedDocumentsMarkdown(allExcludedDocuments)}
+${excludedDocumentsMarkdown(render.allExcludedDocuments)}
 
 ## Budget Truncation (Incomplete Coverage)
 
-${budgetTruncationMarkdown(truncatedDocuments)}
+${budgetTruncationMarkdown(render.truncatedDocuments)}
 
 ## Missing Knowledge
 
@@ -389,6 +469,7 @@ export function exportContextPackageSourceBundle(
       const fileName = dedupeFileName(document.fileName, used);
       return {
         fileName,
+        originalFileName: document.fileName,
         content: document.aiSafeContent,
         contentType: contentTypeForFileName(fileName),
         role: 'included-source' as const,
@@ -400,7 +481,11 @@ export function exportContextPackageSourceBundle(
     fileName: CONTEXT_PACKAGE_GUIDE_FILE_NAME,
     content: buildSourceBundleGuideMarkdown(
       input,
-      includedFiles.map((file) => file.fileName)
+      input.includedDocuments.map((document, index) => ({
+        ...document,
+        originalFileName: document.fileName,
+        sourceFileName: includedFiles[index]?.fileName ?? document.fileName,
+      }))
     ),
     contentType: 'text/markdown',
     role: 'guide',

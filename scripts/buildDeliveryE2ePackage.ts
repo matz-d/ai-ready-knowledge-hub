@@ -16,7 +16,7 @@
  * 実行: pnpm tsx scripts/buildDeliveryE2ePackage.ts
  * 出力: docs/delivery-e2e/2026-06-09-accounting-office.md
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -134,6 +134,7 @@ console.error(
 
 // source 分割 bundle: included 各文書を個別 source、メタ層は guide 1枚。
 const bundle = exportContextPackageSourceBundle(input);
+rmSync(BUNDLE_DIR, { recursive: true, force: true });
 mkdirSync(BUNDLE_DIR, { recursive: true });
 for (const file of bundle.files) {
   writeFileSync(join(BUNDLE_DIR, file.fileName), file.content, 'utf-8');

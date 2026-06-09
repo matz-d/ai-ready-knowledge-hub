@@ -126,4 +126,114 @@ describe('exportContextPackageSourceBundle', () => {
       'memo-2.txt',
     ]);
   });
+
+  it('sanitizes source file names before they become filesystem or zip paths', () => {
+    const input = baseInput({
+      includedDocuments: [
+        {
+          fileName: '../顧客/evil:name?.csv',
+          reason: 'path-like name',
+          sourceType: '表',
+          sensitivity: 'Internal',
+          aiSafeContent: 'safe body',
+        },
+        {
+          fileName: 'CON.txt',
+          reason: 'windows reserved name',
+          sourceType: 'メモ',
+          sensitivity: 'Internal',
+          aiSafeContent: 'reserved',
+        },
+      ],
+    });
+
+    const { files } = exportContextPackageSourceBundle(input);
+    const names = files.map((f) => f.fileName);
+    const guide = files[0].content;
+
+    expect(names).toEqual([
+      CONTEXT_PACKAGE_GUIDE_FILE_NAME,
+      '_顧客_evil_name_.csv',
+      '_CON.txt',
+    ]);
+    for (const name of names) {
+      expect(name).not.toMatch(/[\\/]/);
+      expect(name).not.toContain('..');
+      expect(name).not.toMatch(/[<>:"|?*\x00-\x1F]/);
+    }
+    expect(guide).toContain('- Source file: `_顧客_evil_name_.csv`');
+    expect(guide).toContain('- Original document: `../顧客/evil:name?.csv`');
+  });
+
+  it('dedupes after sanitization and preserves original file names for audit', () => {
+    const input = baseInput({
+      includedDocuments: [
+        {
+          fileName: 'dir/memo.txt',
+          reason: 'first',
+          sourceType: 'メモ',
+          sensitivity: 'Internal',
+          aiSafeContent: 'A',
+        },
+        {
+          fileName: 'dir\\memo.txt',
+          reason: 'second',
+          sourceType: 'メモ',
+          sensitivity: 'Internal',
+          aiSafeContent: 'B',
+        },
+      ],
+    });
+
+    const { files } = exportContextPackageSourceBundle(input);
+    expect(files.map((f) => f.fileName)).toEqual([
+      CONTEXT_PACKAGE_GUIDE_FILE_NAME,
+      'dir_memo.txt',
+      'dir_memo-2.txt',
+    ]);
+    expect(files[1]).toEqual(
+      expect.objectContaining({
+        fileName: 'dir_memo.txt',
+        originalFileName: 'dir/memo.txt',
+      })
+    );
+    expect(files[2]).toEqual(
+      expect.objectContaining({
+        fileName: 'dir_memo-2.txt',
+        originalFileName: 'dir\\memo.txt',
+      })
+    );
+  });
+
+  it('maps rich guide metadata to the actual sanitized/deduped source file names', () => {
+    const input = baseInput({
+      includedDocuments: [
+        {
+          fileName: 'memo.txt',
+          reason: 'first reason',
+          sourceType: 'メモ',
+          sensitivity: 'Internal',
+          aiSafeContent: 'A',
+        },
+        {
+          fileName: 'memo.txt',
+          reason: 'second reason',
+          sourceType: 'メモ',
+          sensitivity: 'Confidential',
+          aiSafeViaMasking: true,
+          aiSafeContent: 'B',
+        },
+      ],
+    });
+
+    const guide = exportContextPackageSourceBundle(input).files[0].content;
+
+    expect(guide).toContain('- Source file: `memo.txt`');
+    expect(guide).toContain('- Source file: `memo-2.txt`');
+    expect(guide).toContain('- Reason: first reason');
+    expect(guide).toContain('- Reason: second reason');
+    expect(guide).toContain(
+      '- Sensitivity: Confidential (AI-safe via masking)'
+    );
+  });
 });
