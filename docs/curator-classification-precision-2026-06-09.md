@@ -56,6 +56,13 @@ under-masking（漏れ）は fail-closed 安全ゲートで守られるが、**o
 ## 留保と残作業
 
 - 0/20 は「皆無」の証明ではない（片側95%上限 ≈ 14%）。重要度が上がれば N を増やして上限を締める。
-- **本番に誤レコード d2e75082 が1件残存**（公開テンプレが blocked のまま＝Context Package を劣化させ得る）。
-  再 curate（現行モデルで Public に是正）または重複削除を推奨。**prod データ変更のため要承認**。
 - 第2トラック（変換精度）は未着手。既存 `src/eval/conversion/` + `.expected.json` で公開文書を測れる。
+
+## 是正（2026-06-09 実施）
+
+本番の誤レコード `d2e75082`（公開テンプレが Restricted/blocked のまま）を **`scripts/recurateDocument.ts` で現行 curator により再分類して是正**した。
+
+- 再 curate 結果: **Public / direct**（「未記入テンプレートで実データを含まない」と正しく判定）。
+- 書き込み後の状態: `status=curated / sensitivity=Public / aiUsePolicy=direct / sensitivitySource=curator / masker=null`（direct 文書の canonical 状態に正規化）。検証済み。
+- これで同一文書の2レコードがともに Public/direct となり、公開テンプレが Context Package から不当に除外される状態は解消。
+- スクリプトは dry-run 既定・`--apply` 明示時のみ書き込み、再 curate が direct でない場合は中断する安全設計。再利用可能な remediation ツールとして残す。
