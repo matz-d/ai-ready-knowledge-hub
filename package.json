@@ -33,7 +33,8 @@
     "context:demo:live": "tsx scripts/runContextPackageDemo.ts --live",
     "context:demo:w1": "tsx scripts/runContextPackageDemo.ts --w1",
     "strategist": "tsx scripts/runStrategist.ts",
-    "curator:ui": "genkit start -- tsx scripts/runCurator.ts"
+    "curator:ui": "genkit start -- tsx scripts/runCurator.ts",
+    "eval:curator:classification": "tsx scripts/runCuratorClassificationEval.ts"
   },
   "dependencies": {
     "@genkit-ai/google-genai": "^1.33.0",
