@@ -227,3 +227,185 @@ ${numberedList(input.questionsForHumanOwner)}
 ${fullSourcesMarkdown(input.includedDocuments)}
 `;
 }
+
+// --- Source bundle export (D-DLV-1 fast-follow) -----------------------------
+//
+// 単一 .md は manifest（メタ層）と本文（Full AI-Ready Sources）を1ファイルに
+// 混在させるため、NotebookLM が後半本文を一次データとして拾えず「構成案」と
+// 誤読する failure mode が E2E 検証で実証された（docs/delivery-e2e/）。
+// その対策として、included 各文書を「個別の source ファイル（本文のみ）」に分け、
+// 4分類のメタ層は guide ファイル1枚に閉じ込める。
+// 安全性は「guide の指示を守らせること」ではなく、excluded/restricted/pending を
+// source 群に物理的に出力しないこと（exclusion by absence）で担保する。
+
+export type ContextPackageSourceRole = 'guide' | 'included-source';
+
+export type ContextPackageSourceFile = {
+  /** bundle 内のファイル名（NotebookLM に渡す source 名）。bundle 内で一意。 */
+  fileName: string;
+  content: string;
+  /** ダウンロード/添付時の MIME。NotebookLM が native 形式で扱えるようにする。 */
+  contentType: string;
+  role: ContextPackageSourceRole;
+};
+
+export type ContextPackageSourceBundle = {
+  files: ContextPackageSourceFile[];
+};
+
+export const CONTEXT_PACKAGE_GUIDE_FILE_NAME = '00-CONTEXT-PACKAGE-GUIDE.md';
+
+/** guide の Instructions 節。本文層を別 source に置いたことを明示する。 */
+const sourceBundleInstructions = [
+  'Included source filenames are provided as separate sources. Use those source files for factual answers.',
+  'Do not use excluded documents — they are intentionally NOT provided as source files.',
+  'Do not infer missing operational rules.',
+  'If required information is missing, ask the human owner.',
+];
+
+function contentTypeForFileName(fileName: string): string {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.md')) return 'text/markdown';
+  if (lower.endsWith('.csv')) return 'text/csv';
+  if (lower.endsWith('.tsv')) return 'text/tab-separated-values';
+  if (lower.endsWith('.json')) return 'application/json';
+  return 'text/plain';
+}
+
+function fileNameWithIndex(fileName: string, index: number): string {
+  const dot = fileName.lastIndexOf('.');
+  if (dot <= 0) {
+    return `${fileName}-${index}`;
+  }
+  return `${fileName.slice(0, dot)}-${index}${fileName.slice(dot)}`;
+}
+
+/** bundle 内でファイル名衝突（同名 included 文書）を避ける。 */
+function dedupeFileName(fileName: string, used: Set<string>): string {
+  if (!used.has(fileName)) {
+    used.add(fileName);
+    return fileName;
+  }
+  let index = 2;
+  let candidate = fileNameWithIndex(fileName, index);
+  while (used.has(candidate)) {
+    index += 1;
+    candidate = fileNameWithIndex(fileName, index);
+  }
+  used.add(candidate);
+  return candidate;
+}
+
+/**
+ * guide（メタ層）の markdown。included は名前+理由のみで本文は載せない
+ * （本文を載せると単一 .md と同じ frame 誤読を再発させるため）。
+ */
+function buildSourceBundleGuideMarkdown(
+  input: ContextPackageExportInput,
+  includedSourceFileNames: string[]
+): string {
+  const humanReviewDocuments = input.humanReviewDocuments ?? [];
+  const allExcludedDocuments = [
+    ...input.excludedDocuments,
+    ...humanReviewDocuments.map((document) => ({
+      ...document,
+      status: document.status ?? 'Restricted / human review only',
+    })),
+  ];
+
+  const truncatedDocuments = input.budgetTruncatedDocuments ?? [];
+  const droppedChunks = totalDroppedChunks(truncatedDocuments);
+  const isTruncated = droppedChunks > 0;
+  const manifestTruncationLine = isTruncated
+    ? `\n- ⚠️ Budget truncation: ${droppedChunks} safe chunk(s) across ${truncatedDocuments.length} document(s) were dropped to fit the model input budget — coverage is INCOMPLETE`
+    : '';
+  const instructions = isTruncated
+    ? [...sourceBundleInstructions, truncationInstruction]
+    : sourceBundleInstructions;
+
+  const includedSourceList =
+    includedSourceFileNames.length === 0
+      ? '- None'
+      : includedSourceFileNames.map((name) => `- ${name}`).join('\n');
+
+  return `# AI-Ready Context Package — Guide
+
+This file is the META guide for a Context Package. It does NOT contain the factual
+content. The factual content is delivered as the separate included source files
+listed below — use those source files for factual answers.
+
+## Package Manifest
+
+- Purpose: ${input.purpose}
+- Generated at: ${formatGeneratedAt(input.generatedAt)}
+- Source documents reviewed: ${input.sourceDocumentsReviewed}
+- Included documents: ${input.includedDocuments.length}
+- Excluded documents: ${input.excludedDocuments.length}
+- Human review required: ${humanReviewDocuments.length}${manifestTruncationLine}
+
+## Instructions for Downstream AI
+
+${instructions.join('\n')}
+
+## Included Source Files
+
+${includedDocumentsMarkdown(input.includedDocuments)}
+
+### File list
+
+${includedSourceList}
+
+## Excluded Documents (NOT provided as sources)
+
+${excludedDocumentsMarkdown(allExcludedDocuments)}
+
+## Budget Truncation (Incomplete Coverage)
+
+${budgetTruncationMarkdown(truncatedDocuments)}
+
+## Missing Knowledge
+
+${bulletList(input.missingKnowledge)}
+
+## Questions for Human Owner
+
+${numberedList(input.questionsForHumanOwner)}
+`;
+}
+
+/**
+ * Context Package を「個別 source ファイル群 + guide 1枚」に分割して返す。
+ * - included: 1文書 = 1ファイル（本文のみ。masked 文書は ai_safe 本文）。
+ * - excluded / restricted / pending masking: source file は作らず guide に名前+理由のみ。
+ * - guide: メタ層（manifest / instructions / 4分類）。
+ * UI / スクリプトはこの純関数を共有して download(zip) / ファイル出力に使う。
+ */
+export function exportContextPackageSourceBundle(
+  input: ContextPackageExportInput
+): ContextPackageSourceBundle {
+  const used = new Set<string>([CONTEXT_PACKAGE_GUIDE_FILE_NAME]);
+  const includedFiles: ContextPackageSourceFile[] = input.includedDocuments.map(
+    (document) => {
+      const fileName = dedupeFileName(document.fileName, used);
+      return {
+        fileName,
+        content: document.aiSafeContent,
+        contentType: contentTypeForFileName(fileName),
+        role: 'included-source' as const,
+      };
+    }
+  );
+
+  const guideFile: ContextPackageSourceFile = {
+    fileName: CONTEXT_PACKAGE_GUIDE_FILE_NAME,
+    content: buildSourceBundleGuideMarkdown(
+      input,
+      includedFiles.map((file) => file.fileName)
+    ),
+    contentType: 'text/markdown',
+    role: 'guide',
+  };
+
+  // guide を先頭に（ファイル名 00- でソート時も先頭に来る）。
+  return { files: [guideFile, ...includedFiles] };
+}
