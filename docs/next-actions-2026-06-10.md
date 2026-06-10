@@ -12,10 +12,12 @@
 
 | Priority | テーマ | 目的 | いまの状態 | Done |
 |---|---|---|---|---|
-| P0 | Phase 4-UX ブラウザ手動通し | README の「手動通し待ち」を潰し、提出前 evidence を作る | 機能実装済み、human browser 証跡が未記録 | `purpose → candidates → Safety Review → Preview → async生成 → result → copy/download` のスクショ/ログを `docs/phase-4-ux-manual-pass-YYYY-MM-DD.md` に保存 |
-| P1 | NotebookLM 用 source bundle zip UI | 実証済みの勝ち筋を app の導線に載せる | `exportContextPackageSourceBundle()` は実装済み。UI は単一 markdown copy/download のみ | `ContextPackageForm` に secondary export「NotebookLM用 bundle」を追加し、guide + included sources を zip download できる |
-| P1 | Extraction & Masking Quality Gate | 「安全に止める」だけでなく「止めすぎない」「構造化データ精度が十分」を示す | Curator public/direct は測定済み。DLP/Masker over-mask と DocumentIR / KnowledgeChunk の key-field / table / locator precision は薄い | 公開文書 over-mask eval、日本式公的文書 structured key-field eval、大きめ/混在資料 eval の最小セットが `pnpm` script または doc-runbook で回る |
-| P1 | 大きなファイルの事前分割 | token limit failure を減らし、巨大 chunk / 全体失敗を避ける | upload は 5 MiB 上限。XLSX 大ファイルで失敗が可視化済み | extractor / Curator 前に分割または sampling plan を作り、sheet / page / row group 単位で安全に処理できる |
+| P0 | Phase 4-UX ブラウザ手動通し | README の「手動通し待ち」を潰し、提出前 evidence を作る | 完了。local synchronous UX は copy/download まで確認済み。async polling は Cloud Tasks / production smoke scope | [docs/phase-4-ux-manual-pass-2026-06-10.md](phase-4-ux-manual-pass-2026-06-10.md) と `docs/phase-4-ux-evidence/2026-06-10/` に保存 |
+| P1-A | NotebookLM source bundle API payload | 実証済みの勝ち筋を app の result payload に載せる | `exportContextPackageSourceBundle()` は実装済み。API result は単一 markdown のみ | Context Package result に `sourceBundle.files` が含まれ、excluded / human-review 本文が混入しないテストが通る |
+| P1-B | NotebookLM source bundle zip UI | P1-A の payload をユーザーが zip として落とせるようにする | UI は単一 markdown copy/download のみ | `ContextPackageForm` に secondary export「NotebookLM用 bundle」を追加し、guide + included sources を zip download できる |
+| P1-C | Demo / docs を bundle 前提へ更新 | デモの最後を product truth に合わせる | `docs/demo-scenario.md` は単一 `.md` export の見せ方が古い | デモシナリオが「NotebookLM には source bundle を渡す」に更新される |
+| P1-D | Extraction & Masking Quality Gate | 「安全に止める」だけでなく「止めすぎない」「構造化データ精度が十分」を示す | Curator public/direct は測定済み。DLP/Masker over-mask と DocumentIR / KnowledgeChunk の key-field / table / locator precision は薄い | 公開文書 over-mask eval、日本式公的文書 structured key-field eval、大きめ/混在資料 eval の最小セットが `pnpm` script または doc-runbook で回る |
+| P1-E | 大きなファイルの事前分割 | token limit failure を減らし、巨大 chunk / 全体失敗を避ける | upload は 5 MiB 上限。XLSX 大ファイルで失敗が可視化済み | extractor / Curator 前に分割または sampling plan を作り、sheet / page / row group 単位で安全に処理できる |
 | P2 | Phase 3-F デモ polish | 動画シナリオを現状の product truth に合わせる | `docs/demo-scenario.md` は単一 `.md` export の見せ方が古い | 最後の Export は「NotebookLM には source bundle を渡す」に更新 |
 | P2 | 提出前の軽い運用補強 | 「まわす」説明力を上げる | alert / sweeper / TTL は済み。enqueue 二重 submit と SLO が未整理 | 二重 submit の挙動確認、簡易 SLO 1枚を `operate-deliver-readiness.md` へ追記 |
 | P3 | 不要 CSS / UI 残骸 cleanup | 保守性を上げ、次の UI 変更を軽くする | 旧 heatmap / risk-callout / status badge modifier / sensitivity 重複などが残る | 挙動変更なしで未使用 CSS と古い `inventory-demo-*` naming を整理 |
@@ -43,7 +45,17 @@
 - restricted / needs review / missing / questions が UI 上で確認できる。
 - async job が成功し、result の copy/download が動く。
 
-## P1: NotebookLM 用 source bundle zip UI
+## P1 分割方針
+
+P1 は範囲が広いため、提出価値に直結する delivery 導線と、品質評価・大容量耐性を分けて進める。
+
+1. **P1-A: source bundle API payload** — まず server result に source bundle を安全に含める。zip UI より先に、excluded / human-review 本文が payload に混ざらないことをテストで固定する。
+2. **P1-B: source bundle zip UI** — P1-A の payload をブラウザで zip 化して download する。ここで UI と browser evidence を作る。
+3. **P1-C: demo/docs update** — デモの最後を「NotebookLM には source bundle」に更新する。UI が入ってから短く閉じる。
+4. **P1-D: Extraction & Masking Quality Gate** — safety / structure / over-mask の評価を切る。P1-A/B とは別の評価基盤作業として扱う。
+5. **P1-E: large file pre-splitting** — P1-D で露出した失敗ケースを入力にして、XLSX / CSV / PDF の分割方針を実装する。
+
+## P1-A / P1-B: NotebookLM 用 source bundle zip UI
 
 **実装方針**:
 - 単一 `.md` は維持する。これは汎用 markdown / Gemini / RAG / copy 用の primary artifact。
@@ -57,16 +69,26 @@
 - `fflate` などの client zip library を使う。
 - 依存追加時は `pnpm` と `pnpm-workspace.yaml` の `minimumReleaseAge: 4320` を守る。
 - 既存 API result は `markdown` だけなので、UI zip 化には次のどちらかが必要:
-  - API result に source bundle payload を追加する。
+  - **P1-A の推奨**: API result に source bundle payload を追加する。
   - API result の元になる export input から bundle を server side で作り、result に files を含める。
 
-**Done**:
+**P1-A Done**:
+- `buildContextPackageResponsePayload` 相当の result に `sourceBundle.files` を追加する。
+- `sourceBundle.files` は `00-CONTEXT-PACKAGE-GUIDE.md` と included source files だけを含む。
+- excluded / restricted / human-review / pending masking の本文が payload に入らないことを unit test で固定する。
+- API payload サイズが過大になる場合の fallback 方針を記録する（P1-B 実装前に止める判断材料）。
+
+**P1-B Done**:
 - `ContextPackageForm` の result panel に「NotebookLM用 bundle をダウンロード」を追加。
 - zip 内ファイル名が sanitize / dedupe される。
 - excluded / human-review 文書の本文が zip に含まれないことをテストする。
-- `docs/demo-scenario.md` の Export シーンを bundle 前提へ更新する。
+- Chrome または in-app browser + filesystem 確認で zip download を検証する。
 
-## P1: Extraction & Masking Quality Gate
+**P1-C Done**:
+- `docs/demo-scenario.md` の Export シーンを bundle 前提へ更新する。
+- 単一 `.md` は汎用 artifact、NotebookLM は source bundle という説明に揃える。
+
+## P1-D: Extraction & Masking Quality Gate
 
 **狙い**: UI polish よりも、「AI に渡してよい Context Package の品質」を示す。安全側に倒すだけではなく、公開文書を過剰に止めないこと、重要項目が `DocumentIR` / `KnowledgeChunk` として正しく構造化されること、大きめ/混在資料で壊れないことを測る。
 
@@ -142,7 +164,7 @@
 
 **位置づけ**: NotebookLM E2E の 5問テストを、変換精度・抽出精度の評価にも拡張する。
 
-## P1: 大きなファイルの事前分割
+## P1-E: 大きなファイルの事前分割
 
 **問題**:
 - 大きな XLSX / PDF で Curator token limit failure が起きる。
@@ -213,10 +235,10 @@
 
 ## 今すぐの推奨順
 
-1. P0 Phase 4-UX manual pass を記録する。
-2. P1 NotebookLM source bundle zip UI を実装する。
-3. P2 demo scenario を bundle 前提へ更新する。
-4. P1 Extraction & Masking Quality Gate の最小 eval を切る。
-5. P1 large file pre-splitting を、eval で露出した失敗ケースから実装する。
+1. P1-A NotebookLM source bundle API payload を実装する。
+2. P1-B NotebookLM source bundle zip UI を実装し、download evidence を取る。
+3. P1-C demo scenario を bundle 前提へ更新する。
+4. P1-D Extraction & Masking Quality Gate の最小 eval を切る。
+5. P1-E large file pre-splitting を、eval で露出した失敗ケースから実装する。
 6. P2 enqueue/SLO を提出資料向けに薄く固める。
 7. P3 CSS cleanup と Ingest 拡張判断に進む。
