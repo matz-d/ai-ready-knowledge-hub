@@ -140,6 +140,7 @@ vi.mock('../../../../lib/contextPackageJobs/enqueuer', () => ({
 
 import { POST } from '../route';
 import { createPurposeBinding } from '../../../../lib/audit/auditEvent';
+import { MAX_CONTEXT_PACKAGE_DOC_IDS } from '../../../../lib/contextPackageLimits';
 import { CONTEXT_PACKAGE_GUIDE_FILE_NAME } from '../../../../lib/exportContextPackage';
 
 function buildRequest(body: unknown): Request {
@@ -573,6 +574,39 @@ describe('POST /api/context-package', () => {
       limit: 10,
       docIds: ['doc-1', 'doc-2'],
     });
+  });
+
+  it('accepts broad docIds selection up to the product request limit', async () => {
+    const docIds = Array.from(
+      { length: MAX_CONTEXT_PACKAGE_DOC_IDS },
+      (_, index) => `doc-${index}`,
+    );
+
+    const response = await POST(buildRequest({ purpose: 'テスト用途', docIds }));
+
+    expect(response.status).toBe(200);
+    expect(runStrategistOrchestratorMock).toHaveBeenCalledWith({
+      purpose: 'テスト用途',
+      limit: 100,
+      docIds,
+    });
+  });
+
+  it('returns 400 when docIds exceed the product request limit', async () => {
+    const response = await POST(
+      buildRequest({
+        purpose: 'テスト用途',
+        docIds: Array.from(
+          { length: MAX_CONTEXT_PACKAGE_DOC_IDS + 1 },
+          (_, index) => `doc-${index}`,
+        ),
+      }),
+    );
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('invalid_request');
+    expect(runStrategistOrchestratorMock).not.toHaveBeenCalled();
   });
 
   it('returns 400 unknown_doc_ids when a requested docId does not exist', async () => {

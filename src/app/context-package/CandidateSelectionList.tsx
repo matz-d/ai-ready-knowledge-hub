@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  MAX_CONTEXT_PACKAGE_DOC_IDS,
   RECOMMENDATION_LABEL,
   type CandidateRow,
 } from './candidateSelectionUi';
@@ -38,7 +39,7 @@ export function CandidateSelectionList({
         <h2 className="cp-candidates-title">候補文書</h2>
         <p className="cp-candidates-meta">
           Inventory {inventoryScanned} 件をスキャン · 上位 {candidates.length}{' '}
-          件を表示 · {selectedCount} 件を選択中
+          件を表示 · {selectedCount} / {MAX_CONTEXT_PACKAGE_DOC_IDS} 件を選択中
         </p>
       </div>
 
@@ -46,6 +47,8 @@ export function CandidateSelectionList({
         {candidates.map((candidate) => {
           const isExclude = candidate.recommendation === 'exclude';
           const isChecked = selectedDocIds.has(candidate.docId);
+          const isSelectionLimitReached =
+            !isChecked && selectedCount >= MAX_CONTEXT_PACKAGE_DOC_IDS;
           const reasonText =
             candidate.recommendation === 'include'
               ? candidate.matchReason
@@ -63,7 +66,7 @@ export function CandidateSelectionList({
                   type="checkbox"
                   className="cp-candidate-checkbox"
                   checked={isChecked}
-                  disabled={disabled || isExclude}
+                  disabled={disabled || isExclude || isSelectionLimitReached}
                   onChange={(e) => onToggle(candidate.docId, e.target.checked)}
                   aria-label={`${candidate.fileName} を Context Package に含める`}
                 />

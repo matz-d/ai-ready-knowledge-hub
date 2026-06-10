@@ -33,6 +33,7 @@ import {
   type ContextPackageJobEnqueuer,
 } from '../../../lib/contextPackageJobs/enqueuer';
 import type { ContextPackageJobRequest } from '../../../lib/contextPackageJobs/schema';
+import { MAX_CONTEXT_PACKAGE_DOC_IDS } from '../../../lib/contextPackageLimits';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -62,7 +63,10 @@ function shouldFallbackToAsync(mode: ExecutionMode): boolean {
 const RequestSchema = z.object({
   purpose: z.string().min(1).max(2000),
   limit: z.number().int().min(1).max(100).default(100),
-  docIds: z.array(z.string().trim().min(1).max(200)).max(20).optional(),
+  docIds: z
+    .array(z.string().trim().min(1).max(200))
+    .max(MAX_CONTEXT_PACKAGE_DOC_IDS)
+    .optional(),
   mode: z.enum(['sync', 'async', 'auto']).default('sync'),
 });
 

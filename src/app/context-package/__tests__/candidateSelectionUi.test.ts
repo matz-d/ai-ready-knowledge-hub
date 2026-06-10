@@ -5,6 +5,7 @@ import {
   defaultSelectedDocIds,
   groupCandidatesByRecommendation,
   isCandidatesStale,
+  MAX_CONTEXT_PACKAGE_DOC_IDS,
   resolveDocIdsForGeneration,
   type CandidateRow,
 } from '../candidateSelectionUi';
@@ -52,6 +53,21 @@ const rows: CandidateRow[] = [
 describe('defaultSelectedDocIds', () => {
   it('selects include recommendations only', () => {
     expect(defaultSelectedDocIds(rows)).toEqual(['a']);
+  });
+
+  it('caps default include selections at the request docIds limit', () => {
+    const manyIncludeRows = Array.from(
+      { length: MAX_CONTEXT_PACKAGE_DOC_IDS + 1 },
+      (_, index): CandidateRow => ({
+        ...rows[0],
+        docId: `doc-${index}`,
+      }),
+    );
+
+    expect(defaultSelectedDocIds(manyIncludeRows)).toHaveLength(
+      MAX_CONTEXT_PACKAGE_DOC_IDS,
+    );
+    expect(defaultSelectedDocIds(manyIncludeRows).at(-1)).toBe('doc-99');
   });
 });
 
@@ -140,6 +156,22 @@ describe('canGenerateContextPackage', () => {
         isBusy: false,
         isFetchingCandidates: false,
         docIds: ['a'],
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects selections above the request docIds limit', () => {
+    expect(
+      canGenerateContextPackage({
+        purpose: 'test',
+        candidatesReady: true,
+        candidatesStale: false,
+        isBusy: false,
+        isFetchingCandidates: false,
+        docIds: Array.from(
+          { length: MAX_CONTEXT_PACKAGE_DOC_IDS + 1 },
+          (_, index) => `doc-${index}`,
+        ),
       }),
     ).toBe(false);
   });

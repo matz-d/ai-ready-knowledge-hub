@@ -5,7 +5,7 @@ import type { StrategistOrchestratorParent } from './types';
  * Pre-LLM input budget for the Strategist orchestrator (Phase 3-M follow-up).
  *
  * Why this exists:
- *   `/api/context-package` 経由で `limit: 20` 程度を投げると、safety gate を通った
+ *   `/api/context-package` 経由で広い候補セットを投げると、safety gate を通った
  *   chunk すべてが Strategist prompt に載り、Vertex Gemini の入力上限
  *   (131,072 tokens) を超えて `INVALID_ARGUMENT` で失敗していた。
  *   `limit` は「Inventory から読む document 数」であり、LLM 投入上限とは別物。
