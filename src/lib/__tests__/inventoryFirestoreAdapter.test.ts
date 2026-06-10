@@ -9,6 +9,7 @@ import type {
 import { FIRESTORE_DOCUMENT_SCHEMA_VERSION } from '../firestoreSchema';
 import {
   adaptFirestoreDocumentToInventory,
+  countDocumentsByStatusFromFirestore,
   listInventoryDocumentsFromFirestore,
 } from '../inventoryFirestoreAdapter';
 import { adaptW1SnapshotEntries } from '../inventory';
@@ -431,5 +432,75 @@ describe('adaptFirestoreDocumentToInventory', () => {
       })
     );
     warnSpy.mockRestore();
+  });
+
+  it('counts pipeline statuses with Firestore aggregation queries', async () => {
+    const countForFilters = (filters: Array<[string, unknown]>): number => {
+      const statusFilter = filters.find(([field]) => field === 'status')?.[1];
+      const aiUsePolicyFilter = filters.find(
+        ([field]) => field === 'aiUsePolicy'
+      )?.[1];
+      if (statusFilter === 'curated' && aiUsePolicyFilter === 'direct') {
+        return 4;
+      }
+      switch (statusFilter) {
+        case 'uploaded':
+          return 1;
+        case 'curating':
+          return 2;
+        case 'masking':
+          return 3;
+        case 'curated':
+          return 6;
+        case 'blocked':
+          return 7;
+        case 'ai_safe':
+          return 8;
+        case 'restricted':
+          return 9;
+        case 'failed':
+          return 10;
+        default:
+          return 0;
+      }
+    };
+    const countGet = vi.fn(
+      (filters: Array<[string, unknown]>) =>
+        async () => ({
+          data: () => ({ count: countForFilters(filters) }),
+        })
+    );
+    const makeQuery = (filters: Array<[string, unknown]>) => ({
+      where: vi.fn((field: string, _operator: string, value: unknown) =>
+        makeQuery([...filters, [field, value]])
+      ),
+      count: vi.fn(() => ({
+        get: countGet(filters),
+      })),
+    });
+    const collection = {
+      where: vi.fn((field: string, _operator: string, value: unknown) =>
+        makeQuery([[field, value]])
+      ),
+      select: vi.fn(),
+      get: vi.fn(),
+    };
+    vi.mocked(getFirestoreClient).mockReturnValue({
+      collection: vi.fn(() => collection),
+    } as unknown as ReturnType<typeof getFirestoreClient>);
+
+    await expect(countDocumentsByStatusFromFirestore()).resolves.toEqual({
+      uploaded: 1,
+      curating: 2,
+      masking: 3,
+      curated: 6,
+      blocked: 7,
+      ai_safe: 8,
+      restricted: 9,
+      failed: 10,
+      directCurated: 4,
+    });
+    expect(collection.select).not.toHaveBeenCalled();
+    expect(collection.get).not.toHaveBeenCalled();
   });
 });

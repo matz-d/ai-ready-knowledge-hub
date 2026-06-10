@@ -10,6 +10,11 @@ import type {
 } from './firestoreSchema';
 import type { InventoryDocument } from './inventory';
 import { parseFirestoreDocumentSnapshot } from './parseFirestoreDocumentData';
+import {
+  PIPELINE_STATUSES,
+  emptyPipelineStatusCounts,
+  type PipelineStatusCounts,
+} from './pipelineStatusCounts';
 
 const INVENTORY_TERMINAL_STATUSES = new Set<FirestoreDocumentStatus>([
   'curated',
@@ -191,6 +196,38 @@ export async function resolveInventoryDocumentsByIds(
 
     return { docId, outcome: 'terminal', document };
   });
+}
+
+/**
+ * Pipeline 可視化用に status 別件数を数える。
+ *
+ * Inventory（terminal のみ）と違い全ライフサイクルを対象にするため、
+ * terminal filter を通さず `status` フィールドだけの projection で読む。
+ * スコープは `listInventoryDocumentsFromFirestore` と同一
+ * （同じ collection、デプロイ単位のテナント分離に従う）。
+ */
+export async function countDocumentsByStatusFromFirestore(): Promise<PipelineStatusCounts> {
+  const collection = getFirestoreClient().collection(DOCUMENTS_COLLECTION);
+  const counts = emptyPipelineStatusCounts();
+
+  const statusCounts = await Promise.all(
+    PIPELINE_STATUSES.map(async (status) => {
+      const snapshot = await collection.where('status', '==', status).count().get();
+      return [status, snapshot.data().count] as const;
+    })
+  );
+  for (const [status, count] of statusCounts) {
+    counts[status] = count;
+  }
+
+  const directCuratedSnapshot = await collection
+    .where('status', '==', 'curated')
+    .where('aiUsePolicy', '==', 'direct')
+    .count()
+    .get();
+  counts.directCurated = directCuratedSnapshot.data().count;
+
+  return counts;
 }
 
 export async function listInventoryDocumentsFromFirestore(
