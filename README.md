@@ -16,9 +16,9 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 
 ---
 
-## 現在のステータス (2026-06-08)
+## 現在のステータス (2026-06-10)
 
-**フェーズ**: Phase 4-UX MVP **実装済み**。purpose 入力から候補文書を metadata-only で提示し、include / exclude / needs_review、Safety Review、生成前 Preview を経て Context Package を生成する導線まで到達した。Phase 3-H-3 の PDF 3 subtype 本線統合、Masker PDF 本線、Context Package 非同期 job 化、Production Hardening（#15 job GC / stuck-running recovery、#16 large result GCS offload）の production smoke と issue close も完了済み。次は Phase 4-UX のブラウザ手動通し、Phase 3-F デモ polish、Ingest 拡張の product 判断。
+**フェーズ**: Phase 4-UX MVP **実装済み**。purpose 入力から候補文書を metadata-only で提示し、include / exclude / needs_review、Safety Review、生成前 Preview を経て Context Package を生成する導線まで到達した。Phase 3-H-3 の PDF 3 subtype 本線統合、Masker PDF 本線、Context Package 非同期 job 化、Production Hardening（#15 job GC / stuck-running recovery、#16 large result GCS offload）の production smoke と issue close も完了済み。NotebookLM delivery E2E では単一 `.md` より source 分割 bundle が正しい渡し方だと実証済み。次は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) の順に、Phase 4-UX ブラウザ手動通し、NotebookLM 用 bundle zip UI、Extraction & Masking Quality Gate、大きなファイルの事前分割へ進む。
 
 ### 完了済み
 
@@ -271,18 +271,15 @@ sample-data/
 
 ### 次にやること
 
-正本の一覧・Ingest 起票の詳細は [docs/open-questions.md](docs/open-questions.md)（次フェーズ表 + §Ingest 拡張）。
+直近の作業順は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) を正とする。背景となる未決論点・Ingest 起票の詳細は [docs/open-questions.md](docs/open-questions.md)（次フェーズ表 + §Ingest 拡張）。
 
-- **Phase 4-UX 手動通し**: purpose 入力 → candidates API → Safety Review → Preview acknowledgement → async Context Package 生成をブラウザで確認する。
-- **Phase 3-F**: PDF 3 subtype と Phase 4-UX を含むデモ polish・動画シナリオ・見栄え調整。
-- **scan-pdf 公開拡大の判断**: `unmaskablePiiFindings` 閾値再評価と `D-P3-H-7 Q4` 後続を別 decision で扱う。
-- **Ingest 拡張（起票済み・未着手）**:
-  - **standalone images** — PNG/JPEG 等の画像ファイル単体（scan-pdf とは別）
-  - **Drive folder bulk** — 共有フォルダ配下のバッチ import
-  - **local directory batch** — ローカルディレクトリ / 複数ファイル一括投入
-  - **Drive sync** — 鮮度検知に基づく自動 re-import（3-B 手動の延長）
-- **Phase 3-H `office-native`**: `.pptx` / `.docx` 原本（優先 4・時間があれば）。
-- **Phase 3-G**: `cloud-sanitized-ingress` prototype。
+- **P0 Phase 4-UX 手動通し**: purpose 入力 → candidates API → Safety Review → Preview acknowledgement → async Context Package 生成 → result → copy/download をブラウザで確認・記録する。
+- **P1 NotebookLM 用 source bundle zip UI**: 単一 `.md` は維持しつつ、`exportContextPackageSourceBundle()` を UI の secondary export に載せる。
+- **P1 Extraction & Masking Quality Gate**: 公開文書 over-mask、日本式公的文書の構造化データ精度（field / value / table / locator）、大きめ/混在資料、下流 QA の最小 eval を切る。
+- **P1 大きなファイルの事前分割**: XLSX / CSV / PDF の near-limit・巨大 chunk・token limit failure に対し、sheet / row group / page group 単位の分割方針を実装する。
+- **P2 Phase 3-F**: 動画シナリオを source bundle 前提へ更新し、Dashboard refresh 後の画面に合わせる。
+- **P2 運用補強**: enqueue 二重 submit の挙動確認と簡易 SLO 1枚。
+- **P3 cleanup / Ingest 判断**: 不要 CSS 削除、Drive folder bulk / local directory batch / standalone images の product 判断。
 
 ---
 
@@ -294,6 +291,7 @@ sample-data/
 | [docs/scope.md](docs/scope.md) | MVPでやること・やらないこと |
 | [docs/decisions.md](docs/decisions.md) | 意思決定ログ（D1〜D5 + 各 Phase の採用判断・CodeRabbit 対応記録） |
 | [docs/open-questions.md](docs/open-questions.md) | 未決定事項と次フェーズ候補 |
+| [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) | Phase 4-UX / delivery E2E 後の直近優先順位と作業順 |
 | [docs/architecture.md](docs/architecture.md) | システム構成、4エージェント、データフロー |
 | [docs/firestore-schema.md](docs/firestore-schema.md) | Firestore document shape の正本 |
 | [docs/phase-3-c-direction.md](docs/phase-3-c-direction.md) | Phase 3-C 認証・デプロイ方針（Cloud IAP / GitHub Actions / BYOC 戦略） |
@@ -322,10 +320,11 @@ sample-data/
 ## 次に再開するとき、最初に読むべきもの
 
 1. このREADMEの「現在のステータス」
-2. [docs/open-questions.md](docs/open-questions.md) — 次フェーズ候補（Phase 3-F、Masker PDF 統合）
-3. [docs/phase-3-h-3-direction.md](docs/phase-3-h-3-direction.md) §8.3 — scan-pdf M6 DoD（完了済み）
-4. [docs/decisions.md](docs/decisions.md) — `D-P3-H-6` / `D-P3-H-7`（H-3 採用判断）
-4. Cloud Run URL: `https://ai-ready-knowledge-hub-mrvutsz24a-an.a.run.app`（IAP 保護済み、許可ユーザのみアクセス可）
+2. [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) — 直近の実装・検証順
+3. [docs/open-questions.md](docs/open-questions.md) — 背景となる次フェーズ候補（Ingest 拡張など）
+4. [docs/phase-3-h-3-direction.md](docs/phase-3-h-3-direction.md) §8.3 — scan-pdf M6 DoD（完了済み）
+5. [docs/decisions.md](docs/decisions.md) — `D-P3-H-6` / `D-P3-H-7`（H-3 採用判断）
+6. Cloud Run URL: `https://ai-ready-knowledge-hub-mrvutsz24a-an.a.run.app`（IAP 保護済み、許可ユーザのみアクセス可）
 
 ---
 

@@ -179,7 +179,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | Phase 3-H `office-native` | `.pptx` / `.docx` 原本の conversion subtype 4 | Phase 3-H 優先 4・時間があれば |
 | Phase 3-G | `cloud-sanitized-ingress` prototype | 高セキュリティ顧客向け後続 |
 
-**次のアクション**: Production Hardening close-out は完了。次は Phase 4-UX のブラウザ手動通し、Phase 3-F（デモ polish）、Ingest 拡張（画像単体・Drive/ローカル一括・Drive 同期）の product 判断へ進む。scan-pdf 公開拡大は **`unmaskablePiiFindings` 閾値再評価**を別 decision で扱う（`D-P3-H-7 Q4` 後続）。
+**次のアクション**: Production Hardening close-out と delivery E2E は完了。直近の実装・検証順は [docs/next-actions-2026-06-10.md](next-actions-2026-06-10.md) を正とする。要約すると、Phase 4-UX のブラウザ手動通し → NotebookLM 用 source bundle zip UI → Extraction & Masking Quality Gate（公開文書 over-mask + 構造化データ精度）→ 大きなファイルの事前分割 → Phase 3-F（デモ polish）へ進む。Ingest 拡張（画像単体・Drive/ローカル一括・Drive 同期）は product 判断として本書に残す。scan-pdf 公開拡大は **`unmaskablePiiFindings` 閾値再評価**を別 decision で扱う（`D-P3-H-7 Q4` 後続）。
 
 ### Ingest 拡張（起票 2026-05-21）
 
