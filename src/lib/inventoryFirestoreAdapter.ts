@@ -10,6 +10,10 @@ import type {
 } from './firestoreSchema';
 import type { InventoryDocument } from './inventory';
 import { parseFirestoreDocumentSnapshot } from './parseFirestoreDocumentData';
+import {
+  aggregatePipelineStatusCounts,
+  type PipelineStatusCounts,
+} from './pipelineStatusCounts';
 
 const INVENTORY_TERMINAL_STATUSES = new Set<FirestoreDocumentStatus>([
   'curated',
@@ -191,6 +195,25 @@ export async function resolveInventoryDocumentsByIds(
 
     return { docId, outcome: 'terminal', document };
   });
+}
+
+/**
+ * Pipeline 可視化用に status 別件数を数える。
+ *
+ * Inventory（terminal のみ）と違い全ライフサイクルを対象にするため、
+ * terminal filter を通さず `status` フィールドだけの projection で読む。
+ * スコープは `listInventoryDocumentsFromFirestore` と同一
+ * （同じ collection、デプロイ単位のテナント分離に従う）。
+ */
+export async function countDocumentsByStatusFromFirestore(): Promise<PipelineStatusCounts> {
+  const snapshot = await getFirestoreClient()
+    .collection(DOCUMENTS_COLLECTION)
+    .select('status')
+    .get();
+
+  return aggregatePipelineStatusCounts(
+    snapshot.docs.map((doc) => doc.get('status'))
+  );
 }
 
 export async function listInventoryDocumentsFromFirestore(

@@ -7,6 +7,11 @@ import {
   adaptFirestoreDocumentToInventory,
 } from '../../../lib/inventoryFirestoreAdapter';
 import { wasPromotedByMasker } from '../../../agents/masker/upgrade';
+import {
+  AI_USE_POLICY_LABELS,
+  DOCUMENT_STATUS_LABELS,
+  SENSITIVITY_LABELS,
+} from '../../../lib/displayLabels';
 import type { InventoryDocument } from '../../../lib/inventory';
 import { DocumentDetailClient } from './DocumentDetailClient';
 
@@ -55,11 +60,13 @@ export default async function DocumentDetailPage({ params }: Props) {
           <div className="doc-detail-header__meta">
             <span
               className={sensitivityPillClass(doc.sensitivity)}
-              title="sensitivity"
+              title={`機密度: ${doc.sensitivity}`}
             >
-              {doc.sensitivity}
+              {SENSITIVITY_LABELS[doc.sensitivity]}
             </span>
-            <span className={statusBadgeClass(doc.status)}>{doc.status}</span>
+            <span className={statusBadgeClass(doc.status)}>
+              {DOCUMENT_STATUS_LABELS[doc.status]}
+            </span>
           </div>
           <h1 className="doc-detail-title">{doc.fileName}</h1>
           <p className="doc-detail-sub">
@@ -74,43 +81,43 @@ export default async function DocumentDetailPage({ params }: Props) {
           <h2>分類情報</h2>
           <dl className="doc-detail-dl">
             <div>
-              <dt>Document type</dt>
+              <dt>文書種別</dt>
               <dd>{doc.documentType}</dd>
             </div>
             <div>
-              <dt>Business domain</dt>
+              <dt>業務領域</dt>
               <dd>{doc.businessDomain}</dd>
             </div>
             <div>
-              <dt>Sensitivity</dt>
-              <dd>{doc.sensitivity}</dd>
+              <dt>機密度</dt>
+              <dd>{SENSITIVITY_LABELS[doc.sensitivity]}</dd>
             </div>
             <div>
-              <dt>Freshness</dt>
+              <dt>鮮度</dt>
               <dd>{doc.freshness}</dd>
             </div>
             <div>
-              <dt>AI policy</dt>
-              <dd>{doc.aiUsePolicy}</dd>
+              <dt>AI利用方針</dt>
+              <dd>{AI_USE_POLICY_LABELS[doc.aiUsePolicy]}</dd>
             </div>
             <div>
-              <dt>Authoritative</dt>
-              <dd>{doc.isAuthoritativeCandidate ? 'Yes' : 'No'}</dd>
+              <dt>正本候補</dt>
+              <dd>{doc.isAuthoritativeCandidate ? 'はい' : 'いいえ'}</dd>
             </div>
             <div>
-              <dt>Sensitivity source</dt>
+              <dt>機密度の根拠</dt>
               <dd>{doc.sensitivitySource}</dd>
             </div>
             {doc.sensitivityReason ? (
               <div>
-                <dt>Sensitivity reason</dt>
+                <dt>機密度判定理由</dt>
                 <dd>{doc.sensitivityReason}</dd>
               </div>
             ) : null}
             {doc.originalCuratorSensitivity ? (
               <div>
-                <dt>Original curator sensitivity</dt>
-                <dd>{doc.originalCuratorSensitivity}</dd>
+                <dt>Curator の元判定</dt>
+                <dd>{SENSITIVITY_LABELS[doc.originalCuratorSensitivity]}</dd>
               </div>
             ) : null}
           </dl>
@@ -125,8 +132,11 @@ export default async function DocumentDetailPage({ params }: Props) {
 
         {wasPromotedByMasker(doc) ? (
           <p className="inventory-masker-promo" role="status">
-            Masker により Restricted へ格上げ（原本 Curator:{' '}
-            {doc.originalCuratorSensitivity ?? '—'}）
+            Masker により厳重管理へ格上げ（Curator の元判定:{' '}
+            {doc.originalCuratorSensitivity
+              ? SENSITIVITY_LABELS[doc.originalCuratorSensitivity]
+              : '—'}
+            ）
           </p>
         ) : null}
 
@@ -139,25 +149,25 @@ export default async function DocumentDetailPage({ params }: Props) {
             </div>
             {doc.storagePath ? (
               <div>
-                <dt>Storage path</dt>
+                <dt>原本保存パス</dt>
                 <dd><code>{doc.storagePath}</code></dd>
               </div>
             ) : null}
             {doc.aiSafeStoragePath ? (
               <div>
-                <dt>AI-safe path</dt>
+                <dt>AI利用用パス</dt>
                 <dd><code>{doc.aiSafeStoragePath}</code></dd>
               </div>
             ) : null}
             {doc.createdAt ? (
               <div>
-                <dt>Created at</dt>
+                <dt>作成日時</dt>
                 <dd>{new Date(doc.createdAt).toLocaleString('ja-JP')}</dd>
               </div>
             ) : null}
             {doc.updatedAt ? (
               <div>
-                <dt>Updated at</dt>
+                <dt>更新日時</dt>
                 <dd>{new Date(doc.updatedAt).toLocaleString('ja-JP')}</dd>
               </div>
             ) : null}
