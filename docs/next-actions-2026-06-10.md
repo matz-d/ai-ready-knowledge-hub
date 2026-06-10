@@ -15,6 +15,7 @@
 | P0 | Phase 4-UX ブラウザ手動通し | README の「手動通し待ち」を潰し、提出前 evidence を作る | 完了。local synchronous UX は copy/download まで確認済み。async polling は Cloud Tasks / production smoke scope | [docs/phase-4-ux-manual-pass-2026-06-10.md](phase-4-ux-manual-pass-2026-06-10.md) と `docs/phase-4-ux-evidence/2026-06-10/` に保存 |
 | P1-A | NotebookLM source bundle API payload | 実証済みの勝ち筋を app の result payload に載せる | `exportContextPackageSourceBundle()` は実装済み。API result は単一 markdown のみ | Context Package result に `sourceBundle.files` が含まれ、excluded / human-review 本文が混入しないテストが通る |
 | P1-B | NotebookLM source bundle zip UI | P1-A の payload をユーザーが zip として落とせるようにする | UI は単一 markdown copy/download のみ | `ContextPackageForm` に secondary export「NotebookLM用 bundle」を追加し、guide + included sources を zip download できる |
+| P1-F | Async full-coverage strategist | async job が広い選択を実際に全件レビューできるようにする（**実行順は P1-C より先**） | P1-B 確認で露出: async job は `enforceSyncBudget:false` でも `inputBudget` が DEFAULT のまま（5文書/80chunk）。30文書選択で safe 400 chunk が dropped、zip が3ファイルに。実装後 review の残タスクは [docs/p1-f-review-follow-up-tasks.md](p1-f-review-follow-up-tasks.md) に分離 | [docs/p1-f-full-coverage-strategist.md](p1-f-full-coverage-strategist.md) の Stage 2 Done 条件（batched strategist + missing/questions reduce、給与シナリオ再実行で truncation ゼロ） |
 | P1-C | Demo / docs を bundle 前提へ更新 | デモの最後を product truth に合わせる | `docs/demo-scenario.md` は単一 `.md` export の見せ方が古い | デモシナリオが「NotebookLM には source bundle を渡す」に更新される |
 | P1-D | Extraction & Masking Quality Gate | 「安全に止める」だけでなく「止めすぎない」「構造化データ精度が十分」を示す | Curator public/direct は測定済み。DLP/Masker over-mask と DocumentIR / KnowledgeChunk の key-field / table / locator precision は薄い | 公開文書 over-mask eval、日本式公的文書 structured key-field eval、大きめ/混在資料 eval の最小セットが `pnpm` script または doc-runbook で回る |
 | P1-E | 大きなファイルの事前分割 | token limit failure を減らし、巨大 chunk / 全体失敗を避ける | upload は 5 MiB 上限。XLSX 大ファイルで失敗が可視化済み | extractor / Curator 前に分割または sampling plan を作り、sheet / page / row group 単位で安全に処理できる |
@@ -235,10 +236,11 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 
 ## 今すぐの推奨順
 
-1. P1-A NotebookLM source bundle API payload を実装する。
-2. P1-B NotebookLM source bundle zip UI を実装し、download evidence を取る。
-3. P1-C demo scenario を bundle 前提へ更新する。
-4. P1-D Extraction & Masking Quality Gate の最小 eval を切る。
-5. P1-E large file pre-splitting を、eval で露出した失敗ケースから実装する。
-6. P2 enqueue/SLO を提出資料向けに薄く固める。
-7. P3 CSS cleanup と Ingest 拡張判断に進む。
+1. P1-A NotebookLM source bundle API payload を実装する。（完了）
+2. P1-B NotebookLM source bundle zip UI を実装し、download evidence を取る。（完了。確認中に P1-F のバグが露出）
+3. P1-F async full-coverage strategist を実装する（[docs/p1-f-full-coverage-strategist.md](p1-f-full-coverage-strategist.md)）。review 残タスクは [docs/p1-f-review-follow-up-tasks.md](p1-f-review-follow-up-tasks.md) に残す。
+4. P1-C demo scenario を bundle 前提へ更新する。
+5. P1-D Extraction & Masking Quality Gate の最小 eval を切る。
+6. P1-E large file pre-splitting を、eval で露出した失敗ケースから実装する。
+7. P2 enqueue/SLO を提出資料向けに薄く固める。
+8. P3 CSS cleanup と Ingest 拡張判断に進む。
