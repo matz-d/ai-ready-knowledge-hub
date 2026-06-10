@@ -61,8 +61,8 @@ export type ContextPackageJobError = {
 /**
  * 完了 job が保持する Context Package payload。
  *
- * 同期経路 `POST /api/context-package` のレスポンス本文と同型（`markdown` と
- * projection 済み chunk view のみ。raw chunk.text は含めない）。Firestore の
+ * 同期経路 `POST /api/context-package` のレスポンス本文と同型（`markdown`、
+ * `sourceBundle`、projection 済み chunk view。raw chunk.text は含めない）。Firestore の
  * 1MB doc 上限に収めるため、runner 側でサイズガードする。
  */
 export type ContextPackageJobResult = Record<string, unknown>;

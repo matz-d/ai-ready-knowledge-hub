@@ -5,6 +5,7 @@
  * 同一形状の payload を返すための共有ビルダー。raw chunk.text を境界外へ出さない
  * projection（responseView）はここを必ず通す。
  */
+import { exportContextPackageSourceBundle } from '../../lib/exportContextPackage';
 import { buildStrategistContextPackage } from './toContextPackage';
 import {
   toExcludedChunkView,
@@ -16,7 +17,8 @@ import type { StrategistOrchestratorResult } from './types';
 export function buildContextPackageResponsePayload(
   result: StrategistOrchestratorResult,
 ): Record<string, unknown> {
-  const { markdown } = buildStrategistContextPackage(result);
+  const { input, markdown } = buildStrategistContextPackage(result);
+  const sourceBundle = exportContextPackageSourceBundle(input);
 
   return {
     purpose: result.purpose,
@@ -30,6 +32,7 @@ export function buildContextPackageResponsePayload(
     humanReviewQuestions: result.humanReviewQuestions,
     syncEstimateSeconds: result.syncEstimateSeconds,
     markdown,
+    sourceBundle,
     counts: {
       included: result.included.length,
       excluded: result.excluded.length,

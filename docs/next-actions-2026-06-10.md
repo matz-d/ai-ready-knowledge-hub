@@ -76,7 +76,7 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 - `buildContextPackageResponsePayload` 相当の result に `sourceBundle.files` を追加する。
 - `sourceBundle.files` は `00-CONTEXT-PACKAGE-GUIDE.md` と included source files だけを含む。
 - excluded / restricted / human-review / pending masking の本文が payload に入らないことを unit test で固定する。
-- API payload サイズが過大になる場合の fallback 方針を記録する（P1-B 実装前に止める判断材料）。
+- API payload サイズが過大になる場合の fallback 方針を記録する（P1-B 実装前に止める判断材料）。初期方針は、既存 async result offload と同じく job result 全体の GCS offload を使う。同期 route で payload 過大が見えた場合は、source bundle だけを別 endpoint / GCS object に逃がす設計へ切り替える。
 
 **P1-B Done**:
 - `ContextPackageForm` の result panel に「NotebookLM用 bundle をダウンロード」を追加。
