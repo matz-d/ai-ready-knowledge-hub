@@ -16,6 +16,10 @@ import {
   type CandidateRow,
   type CandidatesApiResponse,
 } from './candidateSelectionUi';
+import {
+  downloadSourceBundleZip,
+  type SourceBundleZipInput,
+} from './sourceBundleZip';
 
 const MAX_PURPOSE = 2000;
 
@@ -86,6 +90,7 @@ type ContextPackageResult = {
   missing: string[];
   humanReviewQuestions: string[];
   markdown: string;
+  sourceBundle?: SourceBundleZipInput;
   budgetDroppedDocuments: { docId: string; fileName: string; droppedChunks: number }[];
   counts: {
     included: number;
@@ -208,6 +213,9 @@ export function ContextPackageForm() {
     (preGenerationPreview === null ||
       !previewRequiresAcknowledgement(preGenerationPreview) ||
       previewAcknowledged);
+  const sourceBundle = result?.sourceBundle;
+  const hasSourceBundle =
+    sourceBundle !== undefined && sourceBundle.files.length > 0;
 
   const invalidateCandidates = () => {
     setCandidatesFetchState('idle');
@@ -859,6 +867,19 @@ export function ContextPackageForm() {
             >
               Markdown をダウンロード
             </button>
+            {hasSourceBundle ? (
+              <button
+                type="button"
+                className="cp-download-btn"
+                onClick={() =>
+                  sourceBundle
+                    ? downloadSourceBundleZip(sourceBundle, result.purpose)
+                    : undefined
+                }
+              >
+                NotebookLM 用 bundle をダウンロード
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

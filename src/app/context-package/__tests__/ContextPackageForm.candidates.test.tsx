@@ -73,6 +73,23 @@ const RESULT_FIXTURE = {
   missing: [],
   humanReviewQuestions: [],
   markdown: '# done',
+  sourceBundle: {
+    files: [
+      {
+        fileName: '00-CONTEXT-PACKAGE-GUIDE.md',
+        content: '# Guide\n\nIncluded source files are separate.',
+        contentType: 'text/markdown',
+        role: 'guide',
+      },
+      {
+        fileName: '給与計算チェックリスト.csv',
+        originalFileName: '給与計算チェックリスト.csv',
+        content: '項目,説明\n給与,月次給与計算',
+        contentType: 'text/csv',
+        role: 'included-source',
+      },
+    ],
+  },
   budgetDroppedDocuments: [],
   counts: {
     included: 0,
@@ -111,6 +128,7 @@ async function fetchCandidatesAndSubmit() {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -263,6 +281,45 @@ describe('ContextPackageForm candidate selection', () => {
     const body = JSON.parse((contextPackageCall![1] as RequestInit).body as string);
     expect(body.docIds).toEqual(['doc-include']);
     expect(body.purpose).toBe('テスト用途');
+  });
+
+  it('downloads the source bundle as a NotebookLM zip', async () => {
+    const fetchMock = vi.fn(routeFetch);
+    const createObjectURL = vi.fn((object: Blob | MediaSource) => {
+      void object;
+      return 'blob:source-bundle';
+    });
+    const revokeObjectURL = vi.fn((url: string) => {
+      void url;
+    });
+    const OriginalURL = URL;
+
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+    vi.stubGlobal(
+      'URL',
+      class extends OriginalURL {
+        static createObjectURL = createObjectURL;
+        static revokeObjectURL = revokeObjectURL;
+      },
+    );
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {});
+
+    const ContextPackageForm = await loadForm();
+    render(<ContextPackageForm />);
+    await fetchCandidatesAndSubmit();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'NotebookLM 用 bundle をダウンロード',
+      }),
+    );
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    expect(blob.type).toBe('application/zip');
+    expect(clickSpy).toHaveBeenCalledTimes(1);
   });
 
   it('advanced docIds override checkbox selection', async () => {
