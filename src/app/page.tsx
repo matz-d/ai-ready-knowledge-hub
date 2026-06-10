@@ -14,9 +14,10 @@ import {
   SENSITIVITY_LABELS,
 } from '../lib/displayLabels';
 import {
-  aggregatePipelineStatusCounts,
+  aggregatePipelineDocumentCounts,
   aiReadyDocumentCount,
   protectedDocumentCount,
+  readyPercentFromCounts,
   totalDocumentCount,
   type PipelineStatusCounts,
 } from '../lib/pipelineStatusCounts';
@@ -122,16 +123,18 @@ export default async function Home() {
   ]);
   const documents = inventoryState?.documents ?? [];
 
-  // KPI は live 件数を優先し、fallback（W1 snapshot）時は terminal 文書から導出する。
+  // KPI は live 件数を優先する。ただし W1 fallback 一覧と Firestore の live 件数は混ぜない。
+  const canUseLiveCounts =
+    liveStatusCounts !== null && inventoryState?.source !== 'w1-fallback';
   const effectiveCounts =
-    liveStatusCounts ??
-    aggregatePipelineStatusCounts(documents.map((doc) => doc.status));
+    canUseLiveCounts
+      ? liveStatusCounts
+      : aggregatePipelineDocumentCounts(documents);
   const totalDocuments = totalDocumentCount(effectiveCounts);
   const aiReadyCount = aiReadyDocumentCount(effectiveCounts);
   const protectedCount = protectedDocumentCount(effectiveCounts);
   const maskedCount = effectiveCounts.ai_safe;
-  const readyPercent =
-    totalDocuments > 0 ? Math.round((aiReadyCount / totalDocuments) * 100) : 0;
+  const readyPercent = readyPercentFromCounts(effectiveCounts);
 
   const protectedDocuments = documents.filter(
     (doc) => doc.status === 'restricted' || doc.status === 'blocked'
@@ -158,7 +161,10 @@ export default async function Home() {
         </div>
       </section>
 
-      <PipelineFunnel initialCounts={liveStatusCounts} readyPercent={readyPercent} />
+      <PipelineFunnel
+        initialCounts={canUseLiveCounts ? liveStatusCounts : null}
+        initialReadyPercent={readyPercent}
+      />
 
       <section className="dashboard-kpi-grid" aria-label="文書の状態サマリー">
         <div className="dashboard-kpi">

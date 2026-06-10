@@ -11,7 +11,8 @@ import type {
 import type { InventoryDocument } from './inventory';
 import { parseFirestoreDocumentSnapshot } from './parseFirestoreDocumentData';
 import {
-  aggregatePipelineStatusCounts,
+  PIPELINE_STATUSES,
+  emptyPipelineStatusCounts,
   type PipelineStatusCounts,
 } from './pipelineStatusCounts';
 
@@ -206,14 +207,27 @@ export async function resolveInventoryDocumentsByIds(
  * （同じ collection、デプロイ単位のテナント分離に従う）。
  */
 export async function countDocumentsByStatusFromFirestore(): Promise<PipelineStatusCounts> {
-  const snapshot = await getFirestoreClient()
-    .collection(DOCUMENTS_COLLECTION)
-    .select('status')
-    .get();
+  const collection = getFirestoreClient().collection(DOCUMENTS_COLLECTION);
+  const counts = emptyPipelineStatusCounts();
 
-  return aggregatePipelineStatusCounts(
-    snapshot.docs.map((doc) => doc.get('status'))
+  const statusCounts = await Promise.all(
+    PIPELINE_STATUSES.map(async (status) => {
+      const snapshot = await collection.where('status', '==', status).count().get();
+      return [status, snapshot.data().count] as const;
+    })
   );
+  for (const [status, count] of statusCounts) {
+    counts[status] = count;
+  }
+
+  const directCuratedSnapshot = await collection
+    .where('status', '==', 'curated')
+    .where('aiUsePolicy', '==', 'direct')
+    .count()
+    .get();
+  counts.directCurated = directCuratedSnapshot.data().count;
+
+  return counts;
 }
 
 export async function listInventoryDocumentsFromFirestore(

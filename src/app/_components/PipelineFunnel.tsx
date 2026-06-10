@@ -6,6 +6,7 @@ import {
   aiReadyDocumentCount,
   inFlightDocumentCount,
   protectedDocumentCount,
+  readyPercentFromCounts,
   type PipelineStatusCounts,
 } from '../../lib/pipelineStatusCounts';
 
@@ -14,13 +15,13 @@ const POLL_INTERVAL_MS = 4000;
 type PipelineFunnelProps = {
   /** null = Firestore 未接続（fallback 表示）。件数行を出さず説明だけ描画する。 */
   initialCounts: PipelineStatusCounts | null;
-  /** AI-Ready 率（%）。サーバー側で status 件数から算出して渡す。 */
-  readyPercent: number;
+  /** Firestore 未接続時の AI-Ready 率（%）。 */
+  initialReadyPercent: number;
 };
 
 export function PipelineFunnel({
   initialCounts,
-  readyPercent,
+  initialReadyPercent,
 }: PipelineFunnelProps) {
   const router = useRouter();
   const [counts, setCounts] = useState(initialCounts);
@@ -60,6 +61,9 @@ export function PipelineFunnel({
 
   const aiReady = counts ? aiReadyDocumentCount(counts) : null;
   const protectedDocs = counts ? protectedDocumentCount(counts) : null;
+  const readyPercent = counts
+    ? readyPercentFromCounts(counts)
+    : initialReadyPercent;
   const failed = counts?.failed ?? 0;
 
   return (

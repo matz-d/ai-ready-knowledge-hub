@@ -11,7 +11,21 @@ import type { FirestoreDocumentStatus } from './firestoreSchema';
  * `inventoryFirestoreAdapter.countDocumentsByStatusFromFirestore` にある
  * （client component から import しても server 依存を引き込まないため）。
  */
-export type PipelineStatusCounts = Record<FirestoreDocumentStatus, number>;
+export type PipelineStatusCounts = Record<FirestoreDocumentStatus, number> & {
+  /**
+   * `status=curated` のうち、Curator が direct と判定済みの件数。
+   *
+   * `curated` には legacy の `requires_masking + maskingPending:true` も含まれるため、
+   * AI-ready KPI は status だけでなくこの内訳を使って安全側に数える。
+   */
+  directCurated: number;
+};
+
+export type PipelineDocumentCountInput = {
+  status: unknown;
+  aiUsePolicy?: unknown;
+  maskingPending?: unknown;
+};
 
 export const PIPELINE_STATUSES = [
   'uploaded',
@@ -34,6 +48,7 @@ export function emptyPipelineStatusCounts(): PipelineStatusCounts {
     ai_safe: 0,
     restricted: 0,
     failed: 0,
+    directCurated: 0,
   };
 }
 
@@ -59,14 +74,34 @@ export function aggregatePipelineStatusCounts(
   return counts;
 }
 
+export function aggregatePipelineDocumentCounts(
+  documents: Iterable<PipelineDocumentCountInput>
+): PipelineStatusCounts {
+  const counts = emptyPipelineStatusCounts();
+  for (const document of documents) {
+    if (!isKnownStatus(document.status)) {
+      continue;
+    }
+    counts[document.status] += 1;
+    if (
+      document.status === 'curated' &&
+      document.aiUsePolicy === 'direct' &&
+      document.maskingPending !== true
+    ) {
+      counts.directCurated += 1;
+    }
+  }
+  return counts;
+}
+
 /** パイプライン処理中（非 terminal）の文書数。 */
 export function inFlightDocumentCount(counts: PipelineStatusCounts): number {
   return counts.uploaded + counts.curating + counts.masking;
 }
 
-/** AI に渡せる状態で終端した文書数（そのまま利用可 + マスキング済み）。 */
+/** AI に渡せる状態で終端した文書数（direct curated + マスキング済み）。 */
 export function aiReadyDocumentCount(counts: PipelineStatusCounts): number {
-  return counts.curated + counts.ai_safe;
+  return counts.directCurated + counts.ai_safe;
 }
 
 /** 機密のため AI 利用から保護された文書数（除外は断言、の側）。 */
@@ -76,4 +111,9 @@ export function protectedDocumentCount(counts: PipelineStatusCounts): number {
 
 export function totalDocumentCount(counts: PipelineStatusCounts): number {
   return PIPELINE_STATUSES.reduce((sum, status) => sum + counts[status], 0);
+}
+
+export function readyPercentFromCounts(counts: PipelineStatusCounts): number {
+  const total = totalDocumentCount(counts);
+  return total > 0 ? Math.round((aiReadyDocumentCount(counts) / total) * 100) : 0;
 }
