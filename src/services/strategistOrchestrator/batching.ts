@@ -1,10 +1,16 @@
 import type { KnowledgeChunk } from '../../lib/knowledgeChunkSchema';
 import {
   DEFAULT_STRATEGIST_INPUT_BUDGET,
+  admitChunkToBudget,
+  batchSatisfiesBudgetContract,
+  chunkAdmitsToBudget,
+  chunksAdmitToBudget,
+  emptyBudgetAdmissionAccumulator,
   estimatePromptCharsForChunk,
   estimateTokensFromChars,
   purposeTerms,
   scoreCandidateForPurpose,
+  type BudgetAdmissionAccumulator,
   type BudgetCandidate,
   type StrategistInputBudgetConfig,
 } from './budget';
@@ -23,12 +29,11 @@ export type StrategistBatchPartitionResult = {
 
 type BatchAccumulator = {
   candidates: BudgetCandidate[];
-  docIds: Set<string>;
-  totalChars: number;
+  admission: BudgetAdmissionAccumulator;
 };
 
 function emptyBatch(): BatchAccumulator {
-  return { candidates: [], docIds: new Set(), totalChars: 0 };
+  return { candidates: [], admission: emptyBudgetAdmissionAccumulator() };
 }
 
 function chunkFitsBatch(
@@ -36,25 +41,7 @@ function chunkFitsBatch(
   candidate: BudgetCandidate,
   config: StrategistInputBudgetConfig,
 ): boolean {
-  if (batch.candidates.length >= config.maxChunks) {
-    return false;
-  }
-  const docId = candidate.chunk.docId;
-  const isNewDocument = !batch.docIds.has(docId);
-  if (isNewDocument && batch.docIds.size >= config.maxDocuments) {
-    return false;
-  }
-  const chunkChars = estimatePromptCharsForChunk(
-    candidate.chunk,
-    config.maxCharsPerChunk,
-  );
-  if (
-    batch.totalChars + chunkChars > config.maxTotalPromptChars &&
-    batch.candidates.length > 0
-  ) {
-    return false;
-  }
-  return true;
+  return chunkAdmitsToBudget(batch.admission, candidate, config);
 }
 
 function addToBatch(
@@ -62,35 +49,23 @@ function addToBatch(
   candidate: BudgetCandidate,
   config: StrategistInputBudgetConfig,
 ): void {
-  const chunkChars = estimatePromptCharsForChunk(
-    candidate.chunk,
-    config.maxCharsPerChunk,
-  );
   batch.candidates.push(candidate);
-  batch.docIds.add(candidate.chunk.docId);
-  batch.totalChars += chunkChars;
+  admitChunkToBudget(batch.admission, candidate, config);
 }
 
-function estimatedPromptCharsForCandidates(
-  candidates: readonly BudgetCandidate[],
-  config: Pick<StrategistInputBudgetConfig, 'maxCharsPerChunk'>,
-): number {
-  return candidates.reduce(
-    (sum, candidate) =>
-      sum +
-      estimatePromptCharsForChunk(candidate.chunk, config.maxCharsPerChunk),
-    0,
-  );
-}
+const STRICT_DOCUMENT_ADMISSION = {
+  allowFirstChunkCharOverflow: false,
+} as const;
 
 function documentFitsEmptyBatch(
   chunks: readonly BudgetCandidate[],
   config: StrategistInputBudgetConfig,
 ): boolean {
-  return (
-    chunks.length <= config.maxChunks &&
-    estimatedPromptCharsForCandidates(chunks, config) <=
-      config.maxTotalPromptChars
+  return chunksAdmitToBudget(
+    emptyBudgetAdmissionAccumulator(),
+    chunks,
+    config,
+    STRICT_DOCUMENT_ADMISSION,
   );
 }
 
@@ -99,17 +74,11 @@ function documentFitsCurrentBatch(
   chunks: readonly BudgetCandidate[],
   config: StrategistInputBudgetConfig,
 ): boolean {
-  if (chunks.length === 0) {
-    return true;
-  }
-  const docId = chunks[0]!.chunk.docId;
-  const isNewDocument = !batch.docIds.has(docId);
-  const nextDocCount = batch.docIds.size + (isNewDocument ? 1 : 0);
-  return (
-    batch.candidates.length + chunks.length <= config.maxChunks &&
-    nextDocCount <= config.maxDocuments &&
-    batch.totalChars + estimatedPromptCharsForCandidates(chunks, config) <=
-      config.maxTotalPromptChars
+  return chunksAdmitToBudget(
+    batch.admission,
+    chunks,
+    config,
+    STRICT_DOCUMENT_ADMISSION,
   );
 }
 
@@ -269,20 +238,7 @@ export function batchSatisfiesBudget(
   batch: readonly BudgetCandidate[],
   config: StrategistInputBudgetConfig,
 ): boolean {
-  const docIds = new Set<string>();
-  let totalChars = 0;
-  for (const candidate of batch) {
-    docIds.add(candidate.chunk.docId);
-    totalChars += estimatePromptCharsForChunk(
-      candidate.chunk,
-      config.maxCharsPerChunk,
-    );
-  }
-  return (
-    batch.length <= config.maxChunks &&
-    docIds.size <= config.maxDocuments &&
-    totalChars <= config.maxTotalPromptChars
-  );
+  return batchSatisfiesBudgetContract(batch, config);
 }
 
 /** テスト・検証用: chunk が元の document 内で順序を保っているか */

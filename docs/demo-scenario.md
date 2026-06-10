@@ -23,7 +23,7 @@
 | 1:20-1:35 | **Masker→Curator 逆feedback (A8)** | **顧問契約書を Masker が「マスク後も特定され得る」と判定 → Restricted に格上げ → AIに渡さない理由が残る瞬間** |
 | 1:35-2:15 | Purpose Query | 「新人スタッフ向けに給与計算業務を学べるAIを作りたい」と入力 |
 | 2:15-2:40 | Strategist の出力 | 使える情報 / 除外すべき情報 / 足りない情報 / 質問リスト。各判断を目的に結びつけて見せる |
-| 2:40-3:00 | **クロージング + Export (A9)** | **Context Package を export → purpose binding が残る → NotebookLM / Gemini / RAG に渡す前段が完成** |
+| 2:40-3:00 | **クロージング + Export (A9)** | **Context Package を export → NotebookLM には source bundle、Gemini/RAG には単一 Markdown → purpose binding が残る → 下流 AI に渡す前段が完成** |
 
 ---
 
@@ -87,7 +87,13 @@ UI では当該文書カードに赤いバッジが付き、`ai_safe_version` �
 ここでは「この目的なら使える」「この目的でも渡せない」「この目的にはまだ足りない」という目的単位の説明に寄せる。技術的な内部名より、担当者が上司や顧客に説明できる判断結果として見せる。
 
 **7. Export Context Package**
-Purpose Query に対して選ばれた文書セットだけを Markdown で出力する。冒頭に Package Manifest と下流AI向けInstructionsを置き、採用文書のAI参照版本文は `Full AI-Ready Sources` に省略せず含める。Restricted文書や旧版候補の本文は含めず、除外理由だけを残す。Context Package には purpose binding が残るため、「どの目的でこの情報セットをAIに渡したのか」を後から説明できる。
+
+2つの export 導線を見せる（UI の result panel に両方ある）。
+
+- **単一 Markdown（primary）**: Purpose Query に対して選ばれた文書セットを1つの `.md` にまとめる。Package Manifest、下流 AI 向け Instructions、Included / Excluded のメタ情報、および `Full AI-Ready Sources` に採用文書の AI 参照版本文を含める。Restricted 文書や旧版候補の本文は含めず、除外理由だけを残す。Gemini への貼り付け、RAG 取り込み、監査用の記録として使う。
+- **NotebookLM 用 source bundle（secondary）**: `00-CONTEXT-PACKAGE-GUIDE.md`（メタガイド）と included 文書の本文ファイルだけを zip にまとめる。excluded / restricted / human-review 文書はソースファイルとして含めない（bundle に不在＝意図的な除外）。E2E 検証で、単一 `.md` を NotebookLM の1ソースにすると manifest を「構成案」と誤読し本文を grounding できないことが実証済み（[delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md)）。
+
+どちらにも purpose binding が残るため、「どの目的でこの情報セットを AI に渡したのか」を後から説明できる。
 
 ---
 
@@ -120,10 +126,10 @@ Purpose Query に対して選ばれた文書セットだけを Markdown で出�
 - purpose binding を「このAIの用途に対する利用根拠」として見せる。監査用語として深掘りしすぎず、「あとから説明できる」ことを強調する
 
 ### Export の見せ方 (A9)
-- `[Export as Markdown]` ボタンをクリック → `.md` ファイルがダウンロード
-- ダウンロードした `.md` をエディタで開いて全体構造を見せる: `Package Manifest` → purpose → `Instructions for Downstream AI` → `Included Documents` → `Excluded Documents` → `Full AI-Ready Sources`
-- そのまま NotebookLM の `Add source` 領域にドラッグするカット (実 NotebookLM 画面でも、モックUIでも可)。Gemini や RAG に渡す場合も同じ前段成果物だと一言添える
-- キャプション: 「AIに渡す前に、使う理由と除外する理由が揃いました」
+- Context Package 結果画面で2つの export を見せる: **Markdown をダウンロード**（primary）と **NotebookLM 用 bundle をダウンロード**（secondary）
+- **単一 Markdown**: ボタンをクリック → `.md` をダウンロード → エディタで `Package Manifest` → purpose → `Instructions for Downstream AI` → `Included Documents` → `Excluded Documents` → `Full AI-Ready Sources` の構造を見せる。Gemini や RAG への投入、コピー用の primary artifact として説明する
+- **NotebookLM 用 bundle**: zip をダウンロード → 解凍 → `00-CONTEXT-PACKAGE-GUIDE.md` と included 生ソースを**すべて** NotebookLM の `Add source` に追加するカット（実 NotebookLM 画面でも、モック UI でも可）。単一 `.md` を NotebookLM に1ソースとして渡す見せ方はしない
+- キャプション: 「AI に渡す前に、使う理由と除外する理由が揃いました。NotebookLM にはメタと本文を分けた bundle を渡します」
 - このシーンを最後に置くことで、「前段プラットフォーム」の主張が物理的に成立した状態でデモを閉じる
 
 ---

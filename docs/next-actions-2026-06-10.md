@@ -4,7 +4,7 @@
 
 **前提**:
 - Phase 4-UX MVP、async Context Package job、Production Hardening、delivery E2E は実装・検証済み。
-- NotebookLM では単一 `.md` より **source 分割 bundle** が正しい渡し方だと実証済み。純関数 `exportContextPackageSourceBundle()` は実装済みで、UI zip 導線が未実装。
+- NotebookLM では単一 `.md` より **source 分割 bundle** が正しい渡し方だと実証済み。`exportContextPackageSourceBundle()` と UI zip 導線（P1-A/B）は実装済み。
 - dashboard refresh で不要 UI/CSS の残りが見つかっているが、機能ブロッカーではない。
 - 大きな XLSX で Curator token limit failure が実データ上に見えており、大きめ/混在資料への耐性は次の品質テーマ。
 
@@ -15,11 +15,11 @@
 | P0 | Phase 4-UX ブラウザ手動通し | README の「手動通し待ち」を潰し、提出前 evidence を作る | 完了。local synchronous UX は copy/download まで確認済み。async polling は Cloud Tasks / production smoke scope | [docs/phase-4-ux-manual-pass-2026-06-10.md](phase-4-ux-manual-pass-2026-06-10.md) と `docs/phase-4-ux-evidence/2026-06-10/` に保存 |
 | P1-A | NotebookLM source bundle API payload | 実証済みの勝ち筋を app の result payload に載せる | `exportContextPackageSourceBundle()` は実装済み。API result は単一 markdown のみ | Context Package result に `sourceBundle.files` が含まれ、excluded / human-review 本文が混入しないテストが通る |
 | P1-B | NotebookLM source bundle zip UI | P1-A の payload をユーザーが zip として落とせるようにする | UI は単一 markdown copy/download のみ | `ContextPackageForm` に secondary export「NotebookLM用 bundle」を追加し、guide + included sources を zip download できる |
-| P1-F | Async full-coverage strategist | async job が広い選択を実際に全件レビューできるようにする（**実行順は P1-C より先**） | P1-B 確認で露出: async job は `enforceSyncBudget:false` でも `inputBudget` が DEFAULT のまま（5文書/80chunk）。30文書選択で safe 400 chunk が dropped、zip が3ファイルに。実装後 review の残タスクは [docs/p1-f-review-follow-up-tasks.md](p1-f-review-follow-up-tasks.md) に分離 | [docs/p1-f-full-coverage-strategist.md](p1-f-full-coverage-strategist.md) の Stage 2 Done 条件（batched strategist + missing/questions reduce、給与シナリオ再実行で truncation ゼロ） |
-| P1-C | Demo / docs を bundle 前提へ更新 | デモの最後を product truth に合わせる | `docs/demo-scenario.md` は単一 `.md` export の見せ方が古い | デモシナリオが「NotebookLM には source bundle を渡す」に更新される |
+| P1-F | Async full-coverage strategist | async job が広い選択を実際に全件レビューできるようにする（**実行順は P1-C より先**） | 完了。Stage 2 本体実装済み。review 残タスクは [docs/p1-f-review-follow-up-tasks.md](p1-f-review-follow-up-tasks.md) に分離 | [docs/p1-f-full-coverage-strategist.md](p1-f-full-coverage-strategist.md) の Stage 2 Done 条件（batched strategist + missing/questions reduce、給与シナリオ再実行で truncation ゼロ） |
+| P1-C | Demo / docs を bundle 前提へ更新 | デモの最後を product truth に合わせる | 完了。`docs/demo-scenario.md` と `docs/demo-runbook.md` を bundle 前提へ更新 | デモシナリオが「NotebookLM には source bundle を渡す」に更新される |
 | P1-D | Extraction & Masking Quality Gate | 「安全に止める」だけでなく「止めすぎない」「構造化データ精度が十分」を示す | Curator public/direct は測定済み。DLP/Masker over-mask と DocumentIR / KnowledgeChunk の key-field / table / locator precision は薄い | 公開文書 over-mask eval、日本式公的文書 structured key-field eval、大きめ/混在資料 eval の最小セットが `pnpm` script または doc-runbook で回る |
 | P1-E | 大きなファイルの事前分割 | token limit failure を減らし、巨大 chunk / 全体失敗を避ける | upload は 5 MiB 上限。XLSX 大ファイルで失敗が可視化済み | extractor / Curator 前に分割または sampling plan を作り、sheet / page / row group 単位で安全に処理できる |
-| P2 | Phase 3-F デモ polish | 動画シナリオを現状の product truth に合わせる | `docs/demo-scenario.md` は単一 `.md` export の見せ方が古い | 最後の Export は「NotebookLM には source bundle を渡す」に更新 |
+| P2 | Phase 3-F デモ polish | 動画シナリオを現状の product truth に合わせる | P1-C で export 文言は更新済み。Dashboard refresh 後の画面構成・live funnel の見せ方は未反映 | 動画カットとナレーションが現 UI / bundle 導線と一致する |
 | P2 | 提出前の軽い運用補強 | 「まわす」説明力を上げる | alert / sweeper / TTL は済み。enqueue 二重 submit と SLO が未整理 | 二重 submit の挙動確認、簡易 SLO 1枚を `operate-deliver-readiness.md` へ追記 |
 | P3 | 不要 CSS / UI 残骸 cleanup | 保守性を上げ、次の UI 変更を軽くする | 旧 heatmap / risk-callout / status badge modifier / sensitivity 重複などが残る | 挙動変更なしで未使用 CSS と古い `inventory-demo-*` naming を整理 |
 | P3 | Ingest 拡張判断 | 次の product expansion を決める | Drive folder bulk / local directory batch / standalone images が候補 | 提出前は Drive folder bulk か local directory batch のどちらかを選定。standalone images は OCR/PII/eval 設計が重いので後続寄り |
@@ -238,8 +238,8 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 
 1. P1-A NotebookLM source bundle API payload を実装する。（完了）
 2. P1-B NotebookLM source bundle zip UI を実装し、download evidence を取る。（完了。確認中に P1-F のバグが露出）
-3. P1-F async full-coverage strategist を実装する（[docs/p1-f-full-coverage-strategist.md](p1-f-full-coverage-strategist.md)）。review 残タスクは [docs/p1-f-review-follow-up-tasks.md](p1-f-review-follow-up-tasks.md) に残す。
-4. P1-C demo scenario を bundle 前提へ更新する。
+3. P1-F async full-coverage strategist を実装する（[docs/p1-f-full-coverage-strategist.md](p1-f-full-coverage-strategist.md)）。（完了。review 残タスクは [docs/p1-f-review-follow-up-tasks.md](p1-f-review-follow-up-tasks.md) に残す）
+4. P1-C demo scenario を bundle 前提へ更新する。（完了）
 5. P1-D Extraction & Masking Quality Gate の最小 eval を切る。
 6. P1-E large file pre-splitting を、eval で露出した失敗ケースから実装する。
 7. P2 enqueue/SLO を提出資料向けに薄く固める。

@@ -381,6 +381,79 @@ describe('runStrategistOrchestrator', () => {
     expect(injected.strategistFlow).not.toHaveBeenCalled();
   });
 
+  it('routes weaker duplicate-version included chunks to human review after cross-batch merge', async () => {
+    const oldDoc = inventoryDoc({
+      id: 'doc-old',
+      fileName: '給与計算マニュアル_旧版.pdf',
+      freshness: 'superseded_candidate',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    const newDoc = inventoryDoc({
+      id: 'doc-new',
+      fileName: '給与計算マニュアル_v2.pdf',
+      freshness: 'current',
+      updatedAt: '2026-05-14T00:00:00.000Z',
+    });
+    const oldChunk = chunk({ id: 'old-chunk', docId: 'doc-old', text: 'old payroll rule' });
+    const newChunk = chunk({ id: 'new-chunk', docId: 'doc-new', text: 'new payroll rule' });
+    const strategistFlowStub = vi.fn(async ({ chunkInputs }) => ({
+      included: chunkInputs.map(({ chunk: row }: { chunk: KnowledgeChunk }) => ({
+        docId: row.docId,
+        chunkId: row.id,
+        rationale: `include ${row.id}`,
+        confidence: 0.8,
+      })),
+      excluded: [],
+      missing: [],
+      humanReviewQuestions: [],
+    }));
+    const injected = deps({
+      documents: [oldDoc, newDoc],
+      chunksByDocId: {
+        'doc-old': [oldChunk],
+        'doc-new': [newChunk],
+      },
+      strategistFlow:
+        strategistFlowStub as unknown as RunStrategistOrchestratorDeps['strategistFlow'],
+      consolidateGaps: vi.fn(async (input) => ({
+        ...consolidateMissingAndQuestionsDeterministic(input.batchOutputs),
+        consolidation: 'deterministic' as const,
+      })),
+    });
+
+    const result = await runStrategistOrchestrator(
+      {
+        purpose: 'payroll calculation training',
+        coverage: 'full',
+        enforceSyncBudget: false,
+        inputBudget: {
+          ...DEFAULT_STRATEGIST_INPUT_BUDGET,
+          maxDocuments: 1,
+          maxChunks: 1,
+        },
+      },
+      injected,
+    );
+
+    expect(strategistFlowStub).toHaveBeenCalledTimes(2);
+    expect(result.included).toEqual([
+      expect.objectContaining({ docId: 'doc-new', chunkId: 'new-chunk' }),
+    ]);
+    expect(result.excluded).toEqual([
+      expect.objectContaining({
+        docId: 'doc-old',
+        chunkId: 'old-chunk',
+        reason: 'human_confirmation_required',
+      }),
+    ]);
+    expect(result.humanReviewQuestions.some((question) => question.includes('旧版'))).toBe(
+      true,
+    );
+    expect(result.humanReviewQuestions.some((question) => question.includes('v2'))).toBe(
+      true,
+    );
+  });
+
   it('runs full coverage across batches and unions strategist outputs', async () => {
     const docA = inventoryDoc({ id: 'doc-a', fileName: 'a.md' });
     const docB = inventoryDoc({ id: 'doc-b', fileName: 'b.md' });

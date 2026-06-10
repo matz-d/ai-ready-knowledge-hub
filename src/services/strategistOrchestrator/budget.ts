@@ -224,6 +224,122 @@ export function estimatePromptCharsForChunk(
 }
 
 /**
+ * Strategist input budget の admission 判定に使う累積状態。
+ * sync budget (`applyStrategistInputBudget`) と async batch (`partitionStrategistBatches`)
+ * が同じ契約を共有するための共通 shape。
+ */
+export type BudgetAdmissionAccumulator = {
+  chunkCount: number;
+  docIds: Set<string>;
+  totalChars: number;
+};
+
+export function emptyBudgetAdmissionAccumulator(): BudgetAdmissionAccumulator {
+  return { chunkCount: 0, docIds: new Set(), totalChars: 0 };
+}
+
+export type BudgetAdmissionOptions = {
+  /**
+   * true（既定）: accumulator が空のとき 1 chunk 目は maxTotalPromptChars を超えても通す。
+   * false: 文書丸ごと fit 判定など、厳密な総量上限を使う。
+   */
+  allowFirstChunkCharOverflow?: boolean;
+};
+
+/**
+ * 1 chunk を既存 accumulator に追加してよいか（決定論的 admission predicate）。
+ *
+ * - maxChunks / maxDocuments / maxTotalPromptChars を解釈する単一の正本。
+ * - 既定では最初の 1 chunk は maxTotalPromptChars を超えても通す（巨大 chunk 1 件の特例）。
+ */
+export function chunkAdmitsToBudget(
+  accumulator: BudgetAdmissionAccumulator,
+  candidate: BudgetCandidate,
+  config: StrategistInputBudgetConfig,
+  options: BudgetAdmissionOptions = {},
+): boolean {
+  const allowFirstChunkCharOverflow = options.allowFirstChunkCharOverflow ?? true;
+  if (accumulator.chunkCount >= config.maxChunks) {
+    return false;
+  }
+  const docId = candidate.chunk.docId;
+  const isNewDocument = !accumulator.docIds.has(docId);
+  if (isNewDocument && accumulator.docIds.size >= config.maxDocuments) {
+    return false;
+  }
+  const chunkChars = estimatePromptCharsForChunk(
+    candidate.chunk,
+    config.maxCharsPerChunk,
+  );
+  const exceedsCharBudget =
+    accumulator.totalChars + chunkChars > config.maxTotalPromptChars;
+  if (
+    exceedsCharBudget &&
+    !(allowFirstChunkCharOverflow && accumulator.chunkCount === 0)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/** {@link chunkAdmitsToBudget} を通過した chunk を accumulator に反映する。 */
+export function admitChunkToBudget(
+  accumulator: BudgetAdmissionAccumulator,
+  candidate: BudgetCandidate,
+  config: StrategistInputBudgetConfig,
+): void {
+  const chunkChars = estimatePromptCharsForChunk(
+    candidate.chunk,
+    config.maxCharsPerChunk,
+  );
+  accumulator.chunkCount += 1;
+  accumulator.docIds.add(candidate.chunk.docId);
+  accumulator.totalChars += chunkChars;
+}
+
+/**
+ * 連続する chunk 群をまとめて accumulator に載せられるか。
+ * batching の文書単位 fit 判定で使う。
+ */
+export function chunksAdmitToBudget(
+  accumulator: BudgetAdmissionAccumulator,
+  candidates: readonly BudgetCandidate[],
+  config: StrategistInputBudgetConfig,
+  options: BudgetAdmissionOptions = {},
+): boolean {
+  const simulated: BudgetAdmissionAccumulator = {
+    chunkCount: accumulator.chunkCount,
+    docIds: new Set(accumulator.docIds),
+    totalChars: accumulator.totalChars,
+  };
+  for (const candidate of candidates) {
+    if (!chunkAdmitsToBudget(simulated, candidate, config, options)) {
+      return false;
+    }
+    admitChunkToBudget(simulated, candidate, config);
+  }
+  return true;
+}
+
+/**
+ * candidate 列が budget 契約を満たすか（テスト・検証用の shared contract）。
+ * 空 batch は常に true。
+ */
+export function batchSatisfiesBudgetContract(
+  candidates: readonly BudgetCandidate[],
+  config: StrategistInputBudgetConfig,
+): boolean {
+  const accumulator = emptyBudgetAdmissionAccumulator();
+  for (const candidate of candidates) {
+    if (!chunkAdmitsToBudget(accumulator, candidate, config)) {
+      return false;
+    }
+    admitChunkToBudget(accumulator, candidate, config);
+  }
+  return true;
+}
+
+/**
  * safety gate 通過済みの候補に pre-LLM budget を適用する。
  *
  * 手順:
@@ -253,28 +369,17 @@ export function applyStrategistInputBudget(
   ranked.sort((a, b) => (b.score - a.score) || (a.index - b.index));
 
   const acceptedIndices = new Set<number>();
-  const acceptedDocIds = new Set<string>();
-  let totalChars = 0;
+  const accumulator = emptyBudgetAdmissionAccumulator();
 
   for (const row of ranked) {
     if (acceptedIndices.size >= config.maxChunks) {
       break;
     }
-    const docId = row.candidate.chunk.docId;
-    const isNewDocument = !acceptedDocIds.has(docId);
-    if (isNewDocument && acceptedDocIds.size >= config.maxDocuments) {
-      continue; // この document は枠オーバー。別 document の chunk なら採用余地が残る。
-    }
-    const chunkChars = estimatePromptCharsForChunk(
-      row.candidate.chunk,
-      config.maxCharsPerChunk,
-    );
-    if (totalChars + chunkChars > config.maxTotalPromptChars && acceptedIndices.size > 0) {
-      continue; // 文字量超過。最初の1件は必ず通す（per-chunk cap で必ず収まる）。
+    if (!chunkAdmitsToBudget(accumulator, row.candidate, config)) {
+      continue;
     }
     acceptedIndices.add(row.index);
-    acceptedDocIds.add(docId);
-    totalChars += chunkChars;
+    admitChunkToBudget(accumulator, row.candidate, config);
   }
 
   // 入力順に並べ直して返す
@@ -309,9 +414,9 @@ export function applyStrategistInputBudget(
       totalCandidates: candidates.length,
       keptChunks: kept.length,
       droppedChunks: candidates.length - kept.length,
-      keptDocuments: acceptedDocIds.size,
-      estimatedPromptChars: totalChars,
-      estimatedPromptTokens: estimateTokensFromChars(totalChars),
+      keptDocuments: accumulator.docIds.size,
+      estimatedPromptChars: accumulator.totalChars,
+      estimatedPromptTokens: estimateTokensFromChars(accumulator.totalChars),
     },
   };
 }

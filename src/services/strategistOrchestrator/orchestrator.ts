@@ -35,6 +35,7 @@ import {
   type ConsolidateGapsInput,
   type ConsolidatedStrategistGaps,
 } from './consolidateGaps';
+import { applyDuplicateVersionAmbiguityGuard } from './duplicateVersionGuard';
 
 const DEFAULT_LIMIT = 100;
 
@@ -484,6 +485,20 @@ async function runFullCoverageStrategist(params: {
   });
   strategistResult.missing = consolidated.missing;
   strategistResult.humanReviewQuestions = consolidated.humanReviewQuestions;
+
+  const duplicateGuard = applyDuplicateVersionAmbiguityGuard({
+    included: strategistResult.included,
+    joinedByKey: params.joinedByKey,
+  });
+  strategistResult.included = duplicateGuard.included;
+  strategistResult.excluded = [
+    ...strategistResult.excluded,
+    ...duplicateGuard.humanConfirmationRequired,
+  ];
+  strategistResult.humanReviewQuestions = [
+    ...strategistResult.humanReviewQuestions,
+    ...duplicateGuard.humanReviewQuestions,
+  ];
 
   const safeJoinedByKey = new Map(
     params.safeCandidates.map((candidate) => {

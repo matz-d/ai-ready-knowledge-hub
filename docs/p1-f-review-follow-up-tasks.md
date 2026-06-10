@@ -13,39 +13,38 @@ P1-F Stage 2 の本体と主要 hardening は実装済み。
 - single batch では reduce LLM を呼ばない
 - batch prompt の safety excluded count は batch-local にした
 
-## Remaining Review Findings
+## Completed Review Follow-ups
 
-### P1-F-FU-1: Cross-document stale / superseded decision
+実装順序: **FU-2 → FU-1**（budget contract を先に単一化し、batch 境界の安全を固めてから version ambiguity guard を足す）。
 
-**Problem**: 旧版・新版・改訂版などの関連文書が別 batch に分かれると、batch 内 strategist は相互比較できない。現在の included / excluded union は決定論的だが、「旧版を stale として落とす」「新版を優先する」という判断が batch 境界をまたいで必要な場合に弱い。
+### P1-F-FU-2: Budget admission predicate unification ✅
 
-**Why it matters**: Context Package は「使える情報」と「除外すべき情報」を区別するプロダクトなので、古い資料を included に残すと downstream AI の信頼性を落とす。
+**Problem**: `budget.ts` と `batching.ts` が、chunk admission / budget guard に近い判定を別々に持っていた。sync budget と async batch の境界条件がずれるリスクがあった。
 
-**Candidate approaches**:
-- Batch 前に related document grouping を作り、同じ topic / version family は同じ batch に寄せる。
-- Batch 後に included / excluded の cross-document reduce pass を追加し、stale / superseded の再判定だけを行う。
-- First step として、file name / doc title / freshness metadata から明らかな version family を作る決定論 heuristic を評価する。
+**Chosen approach**:
+- `budget.ts` に `chunkAdmitsToBudget` / `admitChunkToBudget` / `chunksAdmitToBudget` / `batchSatisfiesBudgetContract` を切り出し、`StrategistInputBudgetConfig` の単一解釈を共有する。
+- `applyStrategistInputBudget`（sync / relevance-ranked greedy）と `partitionStrategistBatches`（async / document-oriented full coverage）は **同じ admission predicate** を使うが、**選び方・分割方針は分離したまま**。
+- 最初の 1 chunk は `maxTotalPromptChars` を超えても通す特例を predicate に含めた。
 
-**Done**:
-- 旧版・新版が別 batch に分かれる fixture test を追加する。
-- 新版が included、旧版が excluded または human-review になる。
-- reduce / grouping が新しい chunk id を発明しないことを検証する。
+**Verification**:
+- `src/services/strategistOrchestrator/__tests__/budgetAdmissionContract.test.ts`
+- 既存 `budget.test.ts` / `batching.test.ts`
 
-### P1-F-FU-2: Budget admission predicate unification
+### P1-F-FU-1: Cross-document stale / superseded safety ✅
 
-**Problem**: `budget.ts` と `batching.ts` が、chunk admission / budget guard に近い判定を別々に持っている。現状はテストで守っているが、将来片方だけ変わると sync budget と async batch の境界条件がずれる。
+**Problem**: 旧版・新版が別 batch に分かれると、batch 内 strategist は相互比較できない。included union だけでは version conflict を人間確認へ回せない。
 
-**Why it matters**: sync route は budget truncation、async route は batch full coverage という役割分担なので、同じ input budget contract を共有していないと「同期では落ちるが非同期 batch では単発 Vertex limit を超える」などの事故が起きる。
+**Chosen approach**（LLM reduce / batch 前 grouping ではない）:
+- full-coverage merge 後に、**決定論的 duplicate/version ambiguity guard**（`duplicateVersionGuard.ts`）を適用する。
+- filename / title / year / version / freshness / `updatedAt` は **弱いヒント** のみ。authoritative truth として auto-exclude しない。
+- 明らかな version family が推定でき、かつ強弱に差がある場合のみ、**弱い側の既存 included 参照**を `human_confirmation_required` に降格し、確認質問を追加する（stale / superseded と断言する auto-exclude はしない）。
+- 推定できない・同点の場合は no-op。chunk id / doc id は発明しない。
 
-**Candidate approaches**:
-- `StrategistInputBudgetConfig` を使う admission helper を `budget.ts` から切り出す。
-- `applyStrategistInputBudget` と `partitionStrategistBatches` が同じ helper を呼ぶようにする。
-- 既存の budget / batching tests に shared contract test を追加する。
+**Product principle**: exclusion は断言、送信は予測。不確実な stale/version conflict は human review。
 
-**Done**:
-- admission helper が単一化される。
-- sync budget と async batch が同じ `maxDocuments` / `maxChunks` / `maxTotalPromptChars` / `maxCharsPerChunk` 解釈を使う。
-- 既存の P1-F batching tests と budget tests が通る。
+**Verification**:
+- `src/services/strategistOrchestrator/__tests__/duplicateVersionGuard.test.ts`
+- `orchestrator.test.ts` の cross-batch old/new fixture
 
 ## Related Non-review Follow-ups
 
