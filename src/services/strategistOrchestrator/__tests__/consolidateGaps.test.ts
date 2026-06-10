@@ -46,6 +46,29 @@ describe('consolidateMissingAndQuestionsDeterministic', () => {
 });
 
 describe('consolidateMissingAndQuestions', () => {
+  it('skips reduceFlow for a single batch', async () => {
+    const batchOutputs = [
+      {
+        missing: [{ topic: '不足トピック', whyNeeded: '必要。' }],
+        humanReviewQuestions: [],
+      },
+    ];
+    const reduceFlow = async () => {
+      throw new Error('single batch should not reduce');
+    };
+
+    const result = await consolidateMissingAndQuestions({
+      purpose: 'test',
+      includedSummary: [],
+      batchOutputs,
+      reduceFlow,
+    });
+
+    expect(result).toEqual(
+      consolidateMissingAndQuestionsDeterministic(batchOutputs),
+    );
+  });
+
   it('uses reduceFlow after deterministic dedupe', async () => {
     const batchOutputs = [
       {
@@ -54,13 +77,21 @@ describe('consolidateMissingAndQuestions', () => {
           { question: '承認者は誰ですか？', relatedChunkIds: ['chunk-1'] },
         ],
       },
+      {
+        missing: [{ topic: '別の不足トピック', whyNeeded: '必要。' }],
+        humanReviewQuestions: [],
+      },
     ];
-    const reduceFlow = async () => ({
+    const reduceCalls: unknown[] = [];
+    const reduceFlow = async (input: unknown) => {
+      reduceCalls.push(input);
+      return {
       missing: [],
       humanReviewQuestions: [
         { question: '承認者は誰ですか？', relatedChunkIds: ['chunk-1'] },
       ],
-    });
+      };
+    };
 
     const result = await consolidateMissingAndQuestions({
       purpose: 'test',
@@ -73,7 +104,6 @@ describe('consolidateMissingAndQuestions', () => {
         },
       ],
       batchOutputs,
-      allowedChunkIds: ['chunk-1'],
       reduceFlow,
     });
 
@@ -84,6 +114,9 @@ describe('consolidateMissingAndQuestions', () => {
       ],
       consolidation: 'llm',
     });
+    expect(reduceCalls).toEqual([
+      expect.objectContaining({ allowedChunkIds: ['chunk-1'] }),
+    ]);
   });
 
   it('falls back to deterministic consolidation when reduceFlow fails', async () => {
@@ -92,13 +125,16 @@ describe('consolidateMissingAndQuestions', () => {
         missing: [{ topic: '不足トピック', whyNeeded: '必要。' }],
         humanReviewQuestions: [],
       },
+      {
+        missing: [{ topic: '別の不足トピック', whyNeeded: '必要。' }],
+        humanReviewQuestions: [],
+      },
     ];
 
     const result = await consolidateMissingAndQuestions({
       purpose: 'test',
       includedSummary: [],
       batchOutputs,
-      allowedChunkIds: [],
       reduceFlow: async () => {
         throw new Error('reduce unavailable');
       },

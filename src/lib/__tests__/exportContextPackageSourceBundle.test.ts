@@ -134,6 +134,20 @@ describe('exportContextPackageSourceBundle', () => {
     expect(markdown).toContain('  - Dropped chunks: 1');
   });
 
+  it('marks degraded missing consolidation in portable artifacts', () => {
+    const input = baseInput({
+      missingKnowledgeConsolidation: 'deterministic_fallback',
+      missingKnowledge: ['給与締め日の確定情報'],
+    });
+    const markdown = exportContextPackageMarkdown(input);
+    const guide = exportContextPackageSourceBundle(input).files[0].content;
+
+    expect(markdown).toContain('Missing knowledge consolidation degraded');
+    expect(markdown).toContain('- 給与締め日の確定情報');
+    expect(guide).toContain('Missing knowledge consolidation degraded');
+    expect(guide).toContain('- 給与締め日の確定情報');
+  });
+
   it('infers content type from the file extension', () => {
     const { files } = exportContextPackageSourceBundle(baseInput());
     const byName = new Map(files.map((f) => [f.fileName, f.contentType]));

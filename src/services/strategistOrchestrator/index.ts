@@ -4,6 +4,7 @@ export { contextPackageAuditTarget } from './auditTarget';
 export {
   NoInventoryDocumentsError,
   NoKnowledgeChunksError,
+  StrategistFullCoverageLeaseLostError,
   StrategistFullCoverageRequiresAsyncError,
   StrategistSyncBudgetExceededError,
   UnresolvedDocIdsError,

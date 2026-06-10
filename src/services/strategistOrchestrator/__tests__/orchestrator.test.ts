@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   NoInventoryDocumentsError,
   NoKnowledgeChunksError,
+  StrategistFullCoverageLeaseLostError,
   StrategistFullCoverageRequiresAsyncError,
   StrategistSyncBudgetExceededError,
   UnresolvedDocIdsError,
@@ -466,6 +467,112 @@ describe('runStrategistOrchestrator', () => {
     });
     expect(result.missing.length).toBeGreaterThan(0);
     expect(result.humanReviewQuestions.length).toBeGreaterThan(0);
+  });
+
+  it('counts safety-only documents as reviewed in full coverage', async () => {
+    const safeDoc = inventoryDoc({ id: 'doc-safe', fileName: 'safe.md' });
+    const restrictedDoc = inventoryDoc({
+      id: 'doc-restricted',
+      fileName: 'restricted.md',
+      status: 'restricted',
+      sensitivity: 'Restricted',
+      aiUsePolicy: 'blocked',
+    });
+    const safeChunk = chunk({ id: 'safe-1', docId: 'doc-safe' });
+    const restrictedChunk = chunk({
+      id: 'restricted-1',
+      docId: 'doc-restricted',
+      sensitivity: 'Restricted',
+      aiUsePolicy: 'blocked',
+    });
+    const safetyGateStub = vi.fn((chunks: readonly KnowledgeChunk[]) => ({
+      safe: chunks.filter((row) => row.id === 'safe-1'),
+      excluded: chunks
+        .filter((row) => row.id === 'restricted-1')
+        .map((row) => ({
+          docId: row.docId,
+          chunkId: row.id,
+          rationale: 'safety gate rejected restricted chunk',
+          reason: 'restricted_sensitivity' as const,
+        })),
+    })) as unknown as RunStrategistOrchestratorDeps['safetyGate'];
+    const strategistFlowStub = vi.fn(async ({ chunkInputs }) => ({
+      included: chunkInputs.map(({ chunk: row }: { chunk: KnowledgeChunk }) => ({
+        docId: row.docId,
+        chunkId: row.id,
+        rationale: 'include',
+        confidence: 0.8,
+      })),
+      excluded: [],
+      missing: [],
+      humanReviewQuestions: [],
+    }));
+    const injected = deps({
+      documents: [safeDoc, restrictedDoc],
+      chunksByDocId: {
+        'doc-safe': [safeChunk],
+        'doc-restricted': [restrictedChunk],
+      },
+      safetyGate: safetyGateStub,
+      strategistFlow:
+        strategistFlowStub as unknown as RunStrategistOrchestratorDeps['strategistFlow'],
+    });
+
+    const result = await runStrategistOrchestrator(
+      { purpose: 'test', coverage: 'full', enforceSyncBudget: false },
+      injected,
+    );
+
+    expect(result.sourceDocumentsReviewed).toBe(2);
+    expect(result.safetyExcluded).toHaveLength(1);
+    expect(result.coverage).toMatchObject({ mode: 'full', batches: 1 });
+    expect(strategistFlowStub).toHaveBeenCalledWith(
+      expect.objectContaining({ safetyExcludedCount: 0 }),
+    );
+  });
+
+  it('aborts full coverage when batch progress reports lease loss', async () => {
+    const strategistFlowStub = vi.fn(async ({ chunkInputs }) => ({
+      included: chunkInputs.map(({ chunk: row }: { chunk: KnowledgeChunk }) => ({
+        docId: row.docId,
+        chunkId: row.id,
+        rationale: 'include',
+        confidence: 0.8,
+      })),
+      excluded: [],
+      missing: [],
+      humanReviewQuestions: [],
+    }));
+    const injected = deps({
+      documents: [inventoryDoc()],
+      chunksByDocId: {
+        'doc-1': [
+          chunk({ id: 'chunk-1' }),
+          chunk({ id: 'chunk-2' }),
+        ],
+      },
+      strategistFlow:
+        strategistFlowStub as unknown as RunStrategistOrchestratorDeps['strategistFlow'],
+    });
+
+    await expect(
+      runStrategistOrchestrator(
+        {
+          purpose: 'test',
+          coverage: 'full',
+          enforceSyncBudget: false,
+          inputBudget: {
+            ...DEFAULT_STRATEGIST_INPUT_BUDGET,
+            maxChunks: 1,
+          },
+        },
+        {
+          ...injected,
+          onBatchProgress: vi.fn(async () => false),
+        },
+      ),
+    ).rejects.toBeInstanceOf(StrategistFullCoverageLeaseLostError);
+    expect(strategistFlowStub).toHaveBeenCalledTimes(1);
   });
 
   describe('docIds strict resolution', () => {

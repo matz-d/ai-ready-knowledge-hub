@@ -29,7 +29,6 @@ export type ConsolidateGapsInput = {
   purpose: string;
   includedSummary: IncludedSummaryForReduce[];
   batchOutputs: Pick<StrategistOutput, 'missing' | 'humanReviewQuestions'>[];
-  allowedChunkIds: string[];
   reduceFlow?: (input: StrategistReduceInput) => Promise<StrategistReduceOutput>;
 };
 
@@ -91,6 +90,9 @@ export async function consolidateMissingAndQuestions(
   const deterministic = consolidateMissingAndQuestionsDeterministic(
     input.batchOutputs,
   );
+  if (input.batchOutputs.length <= 1) {
+    return deterministic;
+  }
   if (
     deterministic.missing.length === 0 &&
     deterministic.humanReviewQuestions.length === 0
@@ -100,12 +102,19 @@ export async function consolidateMissingAndQuestions(
 
   try {
     const reduce = input.reduceFlow ?? strategistReduceFlow;
+    const allowedChunkIds = Array.from(
+      new Set(
+        deterministic.humanReviewQuestions.flatMap(
+          (question) => question.relatedChunkIds ?? [],
+        ),
+      ),
+    ).sort();
     const reduced = await reduce({
       purpose: input.purpose,
       includedSummary: input.includedSummary,
       missingCandidates: deterministic.missing,
       humanReviewQuestionCandidates: deterministic.humanReviewQuestions,
-      allowedChunkIds: input.allowedChunkIds,
+      allowedChunkIds,
     });
     return {
       ...reduced,

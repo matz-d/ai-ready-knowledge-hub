@@ -10,6 +10,7 @@ import { location, modelId } from '../../agents/_shared/genkitClient';
 import {
   NoInventoryDocumentsError,
   NoKnowledgeChunksError,
+  StrategistFullCoverageLeaseLostError,
   StrategistSyncBudgetExceededError,
   UnresolvedDocIdsError,
   buildContextPackageResponsePayload,
@@ -205,7 +206,7 @@ export async function runContextPackageJob(
       },
       {
         onBatchProgress: async ({ batchesCompleted, batchesTotal }) => {
-          await updateContextPackageJobProgress(jobId, attemptToken, {
+          return updateContextPackageJobProgress(jobId, attemptToken, {
             batchesCompleted,
             batchesTotal,
           });
@@ -265,6 +266,13 @@ export async function runContextPackageJob(
 
     return { outcome: 'claimed_and_run', status: 'succeeded' };
   } catch (error) {
+    if (error instanceof StrategistFullCoverageLeaseLostError) {
+      console.warn('[context-package-job] lease lost during full coverage run', {
+        jobId,
+      });
+      return outcomeAfterRejectedAttemptWrite(jobId);
+    }
+
     const businessError = toBusinessJobError(error);
     if (businessError) {
       console.error('[context-package-job] business failure', { jobId, businessError });

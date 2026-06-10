@@ -12,9 +12,16 @@ const {
   writeContextPackageJobResultMock,
   runStrategistOrchestratorMock,
   recordAuditEventMock,
+  StrategistFullCoverageLeaseLostErrorMock,
   NoInventoryDocumentsErrorMock,
   UnresolvedDocIdsErrorMock,
 } = vi.hoisted(() => {
+  class StrategistFullCoverageLeaseLostErrorMock extends Error {
+    constructor() {
+      super('full coverage job lease was lost during batch progress update.');
+      this.name = 'StrategistFullCoverageLeaseLostError';
+    }
+  }
   class NoInventoryDocumentsErrorMock extends Error {
     constructor() {
       super('No terminal inventory documents found.');
@@ -46,6 +53,7 @@ const {
     writeContextPackageJobResultMock: vi.fn(),
     runStrategistOrchestratorMock: vi.fn(),
     recordAuditEventMock: vi.fn(),
+    StrategistFullCoverageLeaseLostErrorMock,
     NoInventoryDocumentsErrorMock,
     UnresolvedDocIdsErrorMock,
   };
@@ -80,6 +88,8 @@ vi.mock('../../../services/strategistOrchestrator', async () => {
     contextPackageAuditTarget: auditTarget.contextPackageAuditTarget,
     NoInventoryDocumentsError: NoInventoryDocumentsErrorMock,
     NoKnowledgeChunksError: class extends Error {},
+    StrategistFullCoverageLeaseLostError:
+      StrategistFullCoverageLeaseLostErrorMock,
     StrategistSyncBudgetExceededError: class extends Error {},
     UnresolvedDocIdsError: UnresolvedDocIdsErrorMock,
   };
@@ -255,6 +265,22 @@ describe('runContextPackageJob', () => {
       budgetDroppedChunks: 0,
     });
     expect(recordAuditEventMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('full coverage 中に lease を失ったら complete/fail せず skip する', async () => {
+    getContextPackageJobMock
+      .mockResolvedValueOnce(JOB)
+      .mockResolvedValueOnce({ ...JOB, status: 'running' });
+    runStrategistOrchestratorMock.mockRejectedValue(
+      new StrategistFullCoverageLeaseLostErrorMock(),
+    );
+
+    const outcome = await runContextPackageJob('job-1');
+
+    expect(outcome).toEqual({ outcome: 'skipped', reason: 'active_lease' });
+    expect(completeContextPackageJobMock).not.toHaveBeenCalled();
+    expect(failContextPackageJobMock).not.toHaveBeenCalled();
+    expect(releaseContextPackageJobLeaseMock).not.toHaveBeenCalled();
   });
 
   it('既知の orchestrator エラーを attemptToken 付き fail にマップする', async () => {

@@ -110,6 +110,7 @@ function buildStrategistExportInput(
     humanReviewDocuments: result.safetyExcluded.map(safetyToHumanReviewDocument),
     missingKnowledge: [...result.missing],
     questionsForHumanOwner: [...result.humanReviewQuestions],
+    missingKnowledgeConsolidation: result.coverage?.missingConsolidation,
     budgetTruncatedDocuments: result.budgetDroppedDocuments.map((doc) => ({
       fileName: doc.fileName,
       droppedChunks: doc.droppedChunks,

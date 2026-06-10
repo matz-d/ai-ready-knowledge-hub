@@ -113,7 +113,7 @@ partitionStrategistBatches(candidates, purpose, config) → { batches: BudgetCan
   - included/excluded はバッチ間 union（バッチは disjoint なので衝突しないが、念のため docId+chunkId 重複 assert）
   - missing / humanReviewQuestions は per-batch 結果を貯めて 2-3 の reduce へ
   - `budget` report は全バッチ合算で `droppedChunks: 0`。`coverage: { mode: 'full', batches: N }` を report に追加
-  - `sourceDocumentsReviewed` は **実際に strategist へ渡った distinct 文書数**にする（full では loaded と一致するはず。一致しない場合はバグ）
+- `sourceDocumentsReviewed` は **読み込んだ terminal 文書数**にする。safety gate で全 chunk が落ちた文書も「reviewed」の対象であり、manifest と safetyExcluded の自己矛盾を避ける。
 - guard: `coverage: 'full'` は `enforceSyncBudget: true` と併用不可（throw）。同期 route から full に入れない契約を型でなく実行時にも固定
 
 実装済み:
@@ -121,6 +121,7 @@ partitionStrategistBatches(candidates, purpose, config) → { batches: BudgetCan
 - `coverage:'full'` + `enforceSyncBudget:true` の guard
 - full mode は batch ごとに `strategistFlow` を逐次実行し、included/excluded を union。
 - full mode の `budget.droppedChunks` / `budgetDroppedDocuments` は 0 / `[]`。
+- full mode の `sourceDocumentsReviewed` は loaded document count。safe chunk が無い文書も safety review 済みとして数える。
 
 #### 2-3. reduce flow（`src/agents/strategist/reduceFlow.ts` + schema 追補、新 LLM call は package あたり1回）
 
@@ -135,23 +136,27 @@ partitionStrategistBatches(candidates, purpose, config) → { batches: BudgetCan
 - `src/services/strategistOrchestrator/consolidateGaps.ts`
 - full mode では deterministic dedupe 後に reduce LLM を1回呼ぶ。
 - reduce 失敗時は `deterministic_fallback` で job 全体は継続。
-- TODO: `deterministic_fallback` の degraded 表示を guide/markdown に出す小さな追補。
+- `deterministic_fallback` の degraded 表示は単一 markdown / bundle guide の Missing Knowledge 節へ出す。
+- 単一バッチでは cross-batch 不整合がないため reduce LLM を呼ばず deterministic のまま返す。
+- reduce prompt は compact JSON を使い、allowed chunk ids は candidate questions に出現した id の和集合だけに絞る。
 
 #### 2-4. runJob 配線（`runJob.ts`）
 
 - `runStrategistOrchestrator({ ..., enforceSyncBudget: false, coverage: 'full' })`
 - progress に `batchesCompleted / batchesTotal` を追加（`schema.ts#ContextPackageJobProgress` 拡張、optional field なので後方互換）
-- バッチごとに progress 書き込み（既存の progress 書き込み経路を流用。書き込み失敗で job を落とさない）
+- バッチごとに progress 書き込み（既存の progress 書き込み経路を流用）。progress 更新時に lease を renew し、attempt token 不一致などで `false` が返った場合は旧 worker を中断する。
 
 実装済み:
 - `runJob.ts` は async job で `coverage:'full'` を渡す。
 - `ContextPackageJobProgress` に `batchesCompleted / batchesTotal` を追加。
-- `updateContextPackageJobProgress()` を追加し、batch progress callback から best-effort 更新。
+- `updateContextPackageJobProgress()` を追加し、batch progress callback から lease renewal 付きで更新。
+- progress 更新が `false` を返した場合は `StrategistFullCoverageLeaseLostError` で batch loop を中断し、旧 worker は complete/fail せず skip する。
 
 #### 2-5. 運用リスク確認（コード変更前に値を確認、必要なら調整）
 
 - [x] job lease TTL / sweeper の stale 判定が「30文書 ≈ 7バッチ + reduce ≈ 数分」の実行時間に耐えるか
   - repo設定: `CONTEXT_PACKAGE_JOB_LEASE_MS = 15分`、queue max retry duration は setup doc で 30分推奨。
+  - batch progress 更新ごとに `leaseExpiresAt` を延長する。lease 喪失時は旧 worker を中断し、二重 LLM パスを避ける。
 - [ ] Cloud Tasks の dispatchDeadline と worker route の timeout が同上に耐えるか
   - repo上では明示的な dispatch deadline 設定は見当たらない。デプロイ済み queue / Cloud Run timeout の live config 確認が必要。
 - [ ] Gemini quota: package あたり LLM call が 1 → 最大 ~8 に増える。`docs/setup-gcp.md` の Gemini 運用監視節（D-OPS-1）に追記
@@ -165,6 +170,18 @@ partitionStrategistBatches(candidates, purpose, config) → { batches: BudgetCan
 - [x] `runJob.test.ts`: coverage:'full' 配線・progress 拡張
 - [x] payload/export: full coverage 時に truncation 節が出ないこと（既存 'None' 経路の確認）
 - [x] `pnpm typecheck` / `pnpm test` / `pnpm build`
+
+### Stage 2 Review Follow-up（2026-06-10）
+
+外部レビューで挙がった主要 finding への対応:
+- [x] lease renewal / lease lost abort: progress 更新で lease を延長し、false なら full coverage worker を中断。
+- [x] `sourceDocumentsReviewed` の意味補正: full mode でも loaded document count に統一。
+- [x] reduce fallback の degraded 表示: markdown / bundle guide に明示。
+- [x] reduce validation の正規化差分と prompt肥大の軽減: candidate key 正規化を統一、compact JSON、allowed ids を candidate questions に限定。
+- [x] 単一 batch では reduce LLM を呼ばない。
+- [x] batch prompt の `safetyExcludedCount` は batch 内 doc に対応する件数だけ渡す。
+- [ ] cross-document superseded / stale の再評価: 旧版・新版が別 batch に分かれると比較できない。Stage 2.5 として related document grouping または included/excluded reduce を検討する。
+- [ ] budget admission predicate の一本化: `budget.ts` と `batching.ts` の判定ロジック重複を後続で整理する。
 
 #### 2-7. Done 条件
 

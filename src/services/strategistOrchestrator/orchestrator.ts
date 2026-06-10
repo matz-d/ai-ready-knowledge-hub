@@ -109,6 +109,13 @@ export class StrategistFullCoverageRequiresAsyncError extends Error {
   }
 }
 
+export class StrategistFullCoverageLeaseLostError extends Error {
+  constructor(message = 'full coverage job lease was lost during batch progress update.') {
+    super(message);
+    this.name = 'StrategistFullCoverageLeaseLostError';
+  }
+}
+
 export class StrategistSyncBudgetExceededError extends Error {
   readonly estimatedSeconds: number;
   readonly targetSeconds: number;
@@ -163,7 +170,7 @@ export type RunStrategistOrchestratorDeps = {
   onBatchProgress?: (progress: {
     batchesCompleted: number;
     batchesTotal: number;
-  }) => void | Promise<void>;
+  }) => boolean | void | Promise<boolean | void>;
   consolidateGaps?: (
     input: ConsolidateGapsInput,
   ) => Promise<ConsolidatedStrategistGaps>;
@@ -319,6 +326,10 @@ export async function runStrategistOrchestrator(
       budget: emptyBudgetReport(budgetConfig),
       budgetDroppedDocuments: [],
       syncEstimateSeconds: 0,
+      coverage:
+        coverage === 'full'
+          ? { mode: 'full', batches: 0, missingConsolidation: 'deterministic' }
+          : { mode: 'budget' },
     };
   }
 
@@ -337,6 +348,7 @@ export async function runStrategistOrchestrator(
       activeStrategistFlow,
       onBatchProgress,
       consolidateGaps,
+      sourceDocumentsReviewed: documents.length,
     });
   }
 
@@ -403,6 +415,7 @@ async function runFullCoverageStrategist(params: {
   activeStrategistFlow: NonNullable<RunStrategistOrchestratorDeps['strategistFlow']>;
   onBatchProgress?: RunStrategistOrchestratorDeps['onBatchProgress'];
   consolidateGaps: NonNullable<RunStrategistOrchestratorDeps['consolidateGaps']>;
+  sourceDocumentsReviewed: number;
 }): Promise<StrategistOrchestratorResult> {
   const partition = partitionStrategistBatches(
     params.safeCandidates,
@@ -420,20 +433,29 @@ async function runFullCoverageStrategist(params: {
     const safeInputs = batch.map((candidate) =>
       strategistInputForSafeChunk(candidate.chunk, params.joinedByKey),
     );
+    const batchDocIds = new Set(batch.map((candidate) => candidate.chunk.docId));
     const batchResult = await params.activeStrategistFlow({
       purpose: params.purpose,
       chunkInputs: safeInputs,
-      safetyExcludedCount: params.safetyExcluded.length,
+      safetyExcludedCount: params.safetyExcluded.filter((row) =>
+        batchDocIds.has(row.docId),
+      ).length,
     });
     batchOutputs.push(batchResult);
 
     if (params.onBatchProgress) {
       try {
-        await params.onBatchProgress({
+        const progressAccepted = await params.onBatchProgress({
           batchesCompleted: batchIndex + 1,
           batchesTotal,
         });
+        if (progressAccepted === false) {
+          throw new StrategistFullCoverageLeaseLostError();
+        }
       } catch (progressError) {
+        if (progressError instanceof StrategistFullCoverageLeaseLostError) {
+          throw progressError;
+        }
         console.warn(
           '[strategistOrchestrator] onBatchProgress failed (ignored)',
           progressError,
@@ -459,7 +481,6 @@ async function runFullCoverageStrategist(params: {
       } satisfies IncludedSummaryForReduce;
     }),
     batchOutputs,
-    allowedChunkIds: params.safeCandidates.map((candidate) => candidate.chunk.id),
   });
   strategistResult.missing = consolidated.missing;
   strategistResult.humanReviewQuestions = consolidated.humanReviewQuestions;
@@ -471,20 +492,20 @@ async function runFullCoverageStrategist(params: {
     }),
   );
 
-  const distinctReviewedDocuments = reviewedDocIds.size;
+  const distinctSafeDocuments = reviewedDocIds.size;
   const fullBudgetReport: StrategistInputBudgetReport = {
     config: params.budgetConfig,
     totalCandidates: partition.stats.totalCandidates,
     keptChunks: partition.stats.totalCandidates,
     droppedChunks: 0,
-    keptDocuments: distinctReviewedDocuments,
+    keptDocuments: distinctSafeDocuments,
     estimatedPromptChars: partition.stats.totalEstimatedPromptChars,
     estimatedPromptTokens: partition.stats.totalEstimatedPromptTokens,
   };
 
   return buildResult({
     purpose: params.purpose,
-    sourceDocumentsReviewed: distinctReviewedDocuments,
+    sourceDocumentsReviewed: params.sourceDocumentsReviewed,
     strategistResult,
     safeJoinedByKey,
     safetyExcluded: params.safetyExcluded,

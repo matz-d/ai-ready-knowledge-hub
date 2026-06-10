@@ -84,13 +84,13 @@ function buildReducePrompt(input: StrategistReduceInput): string {
 ${input.purpose}
 
 ## Included Summary（本文なし）
-${JSON.stringify(input.includedSummary, null, 2)}
+${JSON.stringify(input.includedSummary)}
 
 ## Missing Candidates（この中から統合・削除のみ）
-${JSON.stringify(input.missingCandidates, null, 2)}
+${JSON.stringify(input.missingCandidates)}
 
 ## Human Review Question Candidates（この中から統合・削除のみ）
-${JSON.stringify(input.humanReviewQuestionCandidates, null, 2)}
+${JSON.stringify(input.humanReviewQuestionCandidates)}
 
 ## allowedChunkIds
 ${JSON.stringify(input.allowedChunkIds)}
@@ -98,15 +98,19 @@ ${JSON.stringify(input.allowedChunkIds)}
 上記を全体整合させ、指定スキーマの JSON を1つだけ返してください。`;
 }
 
+function normalizeCandidateKey(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 function reduceOutputValidationMessage(
   input: StrategistReduceInput,
   output: StrategistReduceOutput,
 ): string | undefined {
   const allowedMissingTopics = new Set(
-    input.missingCandidates.map((item) => item.topic.trim().toLowerCase()),
+    input.missingCandidates.map((item) => normalizeCandidateKey(item.topic)),
   );
   for (let index = 0; index < output.missing.length; index += 1) {
-    const topic = output.missing[index]!.topic.trim().toLowerCase();
+    const topic = normalizeCandidateKey(output.missing[index]!.topic);
     if (!allowedMissingTopics.has(topic)) {
       return `missing[${index}].topic was not present in missingCandidates`;
     }
@@ -114,13 +118,13 @@ function reduceOutputValidationMessage(
 
   const allowedQuestions = new Set(
     input.humanReviewQuestionCandidates.map((item) =>
-      item.question.trim().toLowerCase(),
+      normalizeCandidateKey(item.question),
     ),
   );
   const allowedChunkIds = new Set(input.allowedChunkIds);
   for (let index = 0; index < output.humanReviewQuestions.length; index += 1) {
     const question = output.humanReviewQuestions[index]!;
-    if (!allowedQuestions.has(question.question.trim().toLowerCase())) {
+    if (!allowedQuestions.has(normalizeCandidateKey(question.question))) {
       return `humanReviewQuestions[${index}].question was not present in candidates`;
     }
     for (const chunkId of question.relatedChunkIds ?? []) {

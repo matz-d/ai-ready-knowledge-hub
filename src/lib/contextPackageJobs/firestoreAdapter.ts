@@ -240,6 +240,9 @@ export async function updateContextPackageJobProgress(
 
     tx.update(ref, {
       progress,
+      leaseExpiresAt: new Date(
+        Date.now() + CONTEXT_PACKAGE_JOB_LEASE_MS,
+      ).toISOString(),
       updatedAt: FieldValue.serverTimestamp(),
     });
     return true;
