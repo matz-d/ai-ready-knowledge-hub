@@ -7,6 +7,7 @@ const {
   completeContextPackageJobWithResultRefMock,
   failContextPackageJobMock,
   releaseContextPackageJobLeaseMock,
+  updateContextPackageJobProgressMock,
   deleteContextPackageJobResultMock,
   writeContextPackageJobResultMock,
   runStrategistOrchestratorMock,
@@ -40,6 +41,7 @@ const {
     completeContextPackageJobWithResultRefMock: vi.fn(),
     failContextPackageJobMock: vi.fn(),
     releaseContextPackageJobLeaseMock: vi.fn(),
+    updateContextPackageJobProgressMock: vi.fn(),
     deleteContextPackageJobResultMock: vi.fn(),
     writeContextPackageJobResultMock: vi.fn(),
     runStrategistOrchestratorMock: vi.fn(),
@@ -57,6 +59,7 @@ vi.mock('../firestoreAdapter', () => ({
     completeContextPackageJobWithResultRefMock,
   failContextPackageJob: failContextPackageJobMock,
   releaseContextPackageJobLease: releaseContextPackageJobLeaseMock,
+  updateContextPackageJobProgress: updateContextPackageJobProgressMock,
 }));
 
 vi.mock('../resultStorage', () => ({
@@ -178,6 +181,7 @@ beforeEach(() => {
   completeContextPackageJobWithResultRefMock.mockResolvedValue(true);
   failContextPackageJobMock.mockResolvedValue(true);
   releaseContextPackageJobLeaseMock.mockResolvedValue(true);
+  updateContextPackageJobProgressMock.mockResolvedValue(true);
   deleteContextPackageJobResultMock.mockResolvedValue(undefined);
   writeContextPackageJobResultMock.mockResolvedValue({
     storage: 'gcs',
@@ -223,7 +227,22 @@ describe('runContextPackageJob', () => {
 
     expect(outcome).toEqual({ outcome: 'claimed_and_run', status: 'succeeded' });
     expect(runStrategistOrchestratorMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enforceSyncBudget: false, limit: 50 }),
+      expect.objectContaining({
+        enforceSyncBudget: false,
+        coverage: 'full',
+        limit: 50,
+      }),
+      expect.objectContaining({
+        onBatchProgress: expect.any(Function),
+      }),
+    );
+    const progressCallback =
+      runStrategistOrchestratorMock.mock.calls[0][1].onBatchProgress;
+    await progressCallback({ batchesCompleted: 1, batchesTotal: 2 });
+    expect(updateContextPackageJobProgressMock).toHaveBeenCalledWith(
+      'job-1',
+      ATTEMPT_TOKEN,
+      { batchesCompleted: 1, batchesTotal: 2 },
     );
     const [jobId, token, payload, progress] =
       completeContextPackageJobMock.mock.calls[0];

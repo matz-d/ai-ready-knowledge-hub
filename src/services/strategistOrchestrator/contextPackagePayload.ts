@@ -47,5 +47,6 @@ export function buildContextPackageResponsePayload(
     },
     // budget で落とした safe chunk の文書別内訳。空でなければ package は不完全。
     budgetDroppedDocuments: result.budgetDroppedDocuments,
+    ...(result.coverage ? { coverage: result.coverage } : {}),
   };
 }

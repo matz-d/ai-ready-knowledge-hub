@@ -221,6 +221,31 @@ export async function releaseContextPackageJobLease(
   });
 }
 
+export async function updateContextPackageJobProgress(
+  jobId: string,
+  attemptToken: string,
+  progress: ContextPackageJobProgress,
+): Promise<boolean> {
+  const db = getFirestoreClient();
+  const ref = jobRef(jobId);
+
+  return db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    if (!snapshot.exists) return false;
+    const data = snapshot.data();
+    if (!data) return false;
+
+    if (data.status !== 'running') return false;
+    if (data.attemptToken !== attemptToken) return false;
+
+    tx.update(ref, {
+      progress,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return true;
+  });
+}
+
 export async function completeContextPackageJob(
   jobId: string,
   attemptToken: string,

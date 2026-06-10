@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   NoInventoryDocumentsError,
   NoKnowledgeChunksError,
+  StrategistFullCoverageRequiresAsyncError,
   StrategistSyncBudgetExceededError,
   UnresolvedDocIdsError,
   runStrategistOrchestrator,
   type RunStrategistOrchestratorDeps,
 } from '../orchestrator';
 import { DEFAULT_STRATEGIST_INPUT_BUDGET } from '../budget';
+import { consolidateMissingAndQuestionsDeterministic } from '../consolidateGaps';
 import type { StrategistOutput } from '../../../agents/strategist/schema';
 import type { InventoryDocument } from '../../../lib/inventory';
 import type { ResolvedInventoryDocument } from '../../../lib/inventoryFirestoreAdapter';
@@ -59,7 +61,18 @@ function deps(params: {
   resolveByIds?: RunStrategistOrchestratorDeps['resolveInventoryDocumentsByIds'];
   safetyGate?: RunStrategistOrchestratorDeps['safetyGate'];
   strategistFlow?: RunStrategistOrchestratorDeps['strategistFlow'];
-}): Required<RunStrategistOrchestratorDeps> {
+  consolidateGaps?: RunStrategistOrchestratorDeps['consolidateGaps'];
+}): RunStrategistOrchestratorDeps & {
+  listInventoryDocuments: NonNullable<
+    RunStrategistOrchestratorDeps['listInventoryDocuments']
+  >;
+  resolveInventoryDocumentsByIds: NonNullable<
+    RunStrategistOrchestratorDeps['resolveInventoryDocumentsByIds']
+  >;
+  listChunks: NonNullable<RunStrategistOrchestratorDeps['listChunks']>;
+  safetyGate: NonNullable<RunStrategistOrchestratorDeps['safetyGate']>;
+  strategistFlow: NonNullable<RunStrategistOrchestratorDeps['strategistFlow']>;
+} {
   const listInventoryDocuments = vi.fn(async () => params.documents ?? []);
   const resolveInventoryDocumentsByIds =
     params.resolveByIds ?? vi.fn(async () => [] as ResolvedInventoryDocument[]);
@@ -87,6 +100,9 @@ function deps(params: {
     listChunks,
     safetyGate: safetyGate!,
     strategistFlow: strategistFlow!,
+    ...(params.consolidateGaps
+      ? { consolidateGaps: params.consolidateGaps }
+      : {}),
   };
 }
 
@@ -347,6 +363,109 @@ describe('runStrategistOrchestrator', () => {
       ),
     ).rejects.toBeInstanceOf(StrategistSyncBudgetExceededError);
     expect(strategistFlowStub).not.toHaveBeenCalled();
+  });
+
+  it('throws when coverage full is combined with enforceSyncBudget true', async () => {
+    const injected = deps({
+      documents: [inventoryDoc()],
+      chunksByDocId: { 'doc-1': [chunk()] },
+    });
+
+    await expect(
+      runStrategistOrchestrator(
+        { purpose: 'test', coverage: 'full', enforceSyncBudget: true },
+        injected,
+      ),
+    ).rejects.toBeInstanceOf(StrategistFullCoverageRequiresAsyncError);
+    expect(injected.strategistFlow).not.toHaveBeenCalled();
+  });
+
+  it('runs full coverage across batches and unions strategist outputs', async () => {
+    const docA = inventoryDoc({ id: 'doc-a', fileName: 'a.md' });
+    const docB = inventoryDoc({ id: 'doc-b', fileName: 'b.md' });
+    const chunksA = Array.from({ length: 4 }, (_, index) =>
+      chunk({ id: `a-${index}`, docId: 'doc-a', text: `a-${index}` }),
+    );
+    const chunksB = Array.from({ length: 3 }, (_, index) =>
+      chunk({ id: `b-${index}`, docId: 'doc-b', text: `b-${index}` }),
+    );
+    const strategistFlowStub = vi.fn(async ({ chunkInputs }) => {
+      const first = chunkInputs[0]?.chunk;
+      return {
+        included: first
+          ? [
+              {
+                docId: first.docId,
+                chunkId: first.id,
+                rationale: `include ${first.id}`,
+                confidence: 0.8,
+              },
+            ]
+          : [],
+        excluded: [],
+        missing: [
+          {
+            topic: `missing from ${first?.docId ?? 'none'}`,
+            whyNeeded: 'batch gap',
+          },
+        ],
+        humanReviewQuestions: [
+          {
+            question: `question for ${first?.id ?? 'none'}`,
+            relatedChunkIds: first ? [first.id] : [],
+          },
+        ],
+      } satisfies StrategistOutput;
+    });
+    const injected = deps({
+      documents: [docA, docB],
+      chunksByDocId: {
+        'doc-a': chunksA,
+        'doc-b': chunksB,
+      },
+      strategistFlow:
+        strategistFlowStub as unknown as RunStrategistOrchestratorDeps['strategistFlow'],
+      consolidateGaps: vi.fn(async (input) => ({
+        ...consolidateMissingAndQuestionsDeterministic(input.batchOutputs),
+        consolidation: 'deterministic' as const,
+      })),
+    });
+
+    const result = await runStrategistOrchestrator(
+      {
+        purpose: 'test full coverage',
+        coverage: 'full',
+        enforceSyncBudget: false,
+        inputBudget: {
+          ...DEFAULT_STRATEGIST_INPUT_BUDGET,
+          maxDocuments: 1,
+          maxChunks: 3,
+        },
+      },
+      injected,
+    );
+
+    const sentChunkIds = strategistFlowStub.mock.calls.flatMap((call) =>
+      call[0].chunkInputs.map(
+        (row: { chunk: KnowledgeChunk }) => row.chunk.id,
+      ),
+    );
+    expect(new Set(sentChunkIds).size).toBe(7);
+    expect(sentChunkIds.sort()).toEqual(
+      [...chunksA, ...chunksB].map((row) => row.id).sort(),
+    );
+    expect(strategistFlowStub).toHaveBeenCalledTimes(3);
+    expect(result.included).toHaveLength(3);
+    expect(result.budget.droppedChunks).toBe(0);
+    expect(result.budgetDroppedDocuments).toEqual([]);
+    expect(result.sourceDocumentsReviewed).toBe(2);
+    expect(result.coverage).toEqual({
+      mode: 'full',
+      batches: 3,
+      missingConsolidation: 'deterministic',
+    });
+    expect(result.missing.length).toBeGreaterThan(0);
+    expect(result.humanReviewQuestions.length).toBeGreaterThan(0);
   });
 
   describe('docIds strict resolution', () => {

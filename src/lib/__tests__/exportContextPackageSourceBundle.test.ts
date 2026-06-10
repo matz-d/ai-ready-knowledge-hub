@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CONTEXT_PACKAGE_GUIDE_FILE_NAME,
+  exportContextPackageMarkdown,
   exportContextPackageSourceBundle,
   type ContextPackageExportInput,
 } from '../exportContextPackage';
@@ -86,6 +87,51 @@ describe('exportContextPackageSourceBundle', () => {
       'Use those source files for factual answers.'
     );
     expect(guide.content).toContain('Confidential (AI-safe via masking)');
+  });
+
+  it('marks budget truncation inside the portable bundle guide', () => {
+    const guide = exportContextPackageSourceBundle(
+      baseInput({
+        budgetTruncatedDocuments: [
+          { fileName: '給与計算チェックリスト.md', droppedChunks: 1 },
+          { fileName: 'mhlw-r07-model-work-rules.pdf', droppedChunks: 167 },
+        ],
+      }),
+    ).files[0];
+
+    expect(guide.content).toContain(
+      'Budget truncation: 168 safe chunk(s) across 2 document(s)',
+    );
+    expect(guide.content).toContain('coverage is INCOMPLETE');
+    expect(guide.content).toContain(
+      'This package is INCOMPLETE: some safe content was dropped',
+    );
+    expect(guide.content).toContain('## Budget Truncation (Incomplete Coverage)');
+    expect(guide.content).toContain('- 給与計算チェックリスト.md');
+    expect(guide.content).toContain('  - Dropped chunks: 1');
+    expect(guide.content).toContain('- mhlw-r07-model-work-rules.pdf');
+    expect(guide.content).toContain('  - Dropped chunks: 167');
+  });
+
+  it('marks budget truncation in the single markdown artifact as well', () => {
+    const markdown = exportContextPackageMarkdown(
+      baseInput({
+        budgetTruncatedDocuments: [
+          { fileName: '給与計算チェックリスト.md', droppedChunks: 1 },
+        ],
+      }),
+    );
+
+    expect(markdown).toContain(
+      'Budget truncation: 1 safe chunk(s) across 1 document(s)',
+    );
+    expect(markdown).toContain('coverage is INCOMPLETE');
+    expect(markdown).toContain(
+      'This package is INCOMPLETE: some safe content was dropped',
+    );
+    expect(markdown).toContain('## Budget Truncation (Incomplete Coverage)');
+    expect(markdown).toContain('- 給与計算チェックリスト.md');
+    expect(markdown).toContain('  - Dropped chunks: 1');
   });
 
   it('infers content type from the file extension', () => {

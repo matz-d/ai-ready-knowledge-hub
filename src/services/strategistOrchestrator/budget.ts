@@ -214,7 +214,10 @@ export function scoreCandidateForPurpose(
 }
 
 /** prompt に載る 1 chunk あたりの推定文字数（本文 truncate + メタ行オーバーヘッド） */
-function promptCharsForChunk(chunk: KnowledgeChunk, maxCharsPerChunk: number): number {
+export function estimatePromptCharsForChunk(
+  chunk: KnowledgeChunk,
+  maxCharsPerChunk: number,
+): number {
   const body = scoringTextForChunk(chunk);
   const bodyChars = Math.min(body.length, maxCharsPerChunk);
   return bodyChars + PROMPT_CHUNK_OVERHEAD_CHARS;
@@ -262,7 +265,10 @@ export function applyStrategistInputBudget(
     if (isNewDocument && acceptedDocIds.size >= config.maxDocuments) {
       continue; // この document は枠オーバー。別 document の chunk なら採用余地が残る。
     }
-    const chunkChars = promptCharsForChunk(row.candidate.chunk, config.maxCharsPerChunk);
+    const chunkChars = estimatePromptCharsForChunk(
+      row.candidate.chunk,
+      config.maxCharsPerChunk,
+    );
     if (totalChars + chunkChars > config.maxTotalPromptChars && acceptedIndices.size > 0) {
       continue; // 文字量超過。最初の1件は必ず通す（per-chunk cap で必ず収まる）。
     }

@@ -16,16 +16,25 @@ import type { KnowledgeChunk } from '../../lib/knowledgeChunkSchema';
 import type {
   SafetyExcludedChunk,
   StrategistChunkSelection,
+  StrategistCoverageMode,
   StrategistOrchestratorParent,
   StrategistOrchestratorResult,
 } from './types';
+import { partitionStrategistBatches } from './batching';
 import {
   applyStrategistInputBudget,
   DEFAULT_STRATEGIST_INPUT_BUDGET,
+  type BudgetCandidate,
   type BudgetDroppedDocument,
   type StrategistInputBudgetConfig,
   type StrategistInputBudgetReport,
 } from './budget';
+import {
+  consolidateMissingAndQuestions,
+  type IncludedSummaryForReduce,
+  type ConsolidateGapsInput,
+  type ConsolidatedStrategistGaps,
+} from './consolidateGaps';
 
 const DEFAULT_LIMIT = 100;
 
@@ -91,6 +100,15 @@ const STRATEGIST_SYNC_ESTIMATE_BASE_SECONDS = 2.5;
 const STRATEGIST_SYNC_ESTIMATE_PER_CHUNK_SECONDS = 0.1;
 const STRATEGIST_SYNC_ESTIMATE_PER_TOKEN_SECONDS = 0.00035;
 
+export class StrategistFullCoverageRequiresAsyncError extends Error {
+  constructor(
+    message = 'coverage:"full" requires enforceSyncBudget:false (async job path only).',
+  ) {
+    super(message);
+    this.name = 'StrategistFullCoverageRequiresAsyncError';
+  }
+}
+
 export class StrategistSyncBudgetExceededError extends Error {
   readonly estimatedSeconds: number;
   readonly targetSeconds: number;
@@ -123,9 +141,14 @@ export type RunStrategistOrchestratorInput = {
   /**
    * 同期 20 秒ゲートを強制するか（既定 true）。非同期 job 経路では false にして、
    * 20 秒超の見込みでも実行を続ける。pre-LLM budget（Vertex token 上限の絞り込み）は
-   * このフラグに関わらず常に適用する。
+   * budget モードでのみ適用する。full モードではバッチ分割へ置き換える。
    */
   enforceSyncBudget?: boolean;
+  /**
+   * `budget`（既定）: 現行の pre-LLM budget 絞り込み + 単発 strategistFlow。
+   * `full`: 全 safe chunk をバッチ分割して逐次 strategistFlow（async 専用）。
+   */
+  coverage?: StrategistCoverageMode;
 };
 
 export type RunStrategistOrchestratorDeps = {
@@ -136,6 +159,14 @@ export type RunStrategistOrchestratorDeps = {
   listChunks?: (documentId: string) => Promise<KnowledgeChunk[]>;
   strategistFlow?: typeof strategistFlow;
   safetyGate?: typeof runSafetyGate;
+  /** full coverage バッチ進捗（job progress 用。失敗しても job を落とさない） */
+  onBatchProgress?: (progress: {
+    batchesCompleted: number;
+    batchesTotal: number;
+  }) => void | Promise<void>;
+  consolidateGaps?: (
+    input: ConsolidateGapsInput,
+  ) => Promise<ConsolidatedStrategistGaps>;
 };
 
 type JoinedChunk = {
@@ -243,7 +274,15 @@ export async function runStrategistOrchestrator(
     createChunkFirestoreAdapter().listChunksForDocument;
   const activeSafetyGate = deps.safetyGate ?? runSafetyGate;
   const activeStrategistFlow = deps.strategistFlow ?? strategistFlow;
+  const onBatchProgress = deps.onBatchProgress;
+  const consolidateGaps = deps.consolidateGaps ?? consolidateMissingAndQuestions;
   const budgetConfig = input.inputBudget ?? DEFAULT_STRATEGIST_INPUT_BUDGET;
+  const coverage = input.coverage ?? 'budget';
+  const enforceSyncBudget = input.enforceSyncBudget ?? true;
+
+  if (coverage === 'full' && enforceSyncBudget) {
+    throw new StrategistFullCoverageRequiresAsyncError();
+  }
 
   // docIds 指定時は strict resolution（unknown / non-terminal が 1 件でもあれば throw）。
   // 未指定時だけ従来の inventory limit fallback / NoInventoryDocumentsError を維持する。
@@ -283,13 +322,28 @@ export async function runStrategistOrchestrator(
     };
   }
 
+  const safeCandidates: BudgetCandidate[] = safetyResult.safe.map((chunk) => {
+    const joined = requireSafeJoinedChunk(chunk, joinedByKey);
+    return { chunk, parent: joined.parent };
+  });
+
+  if (coverage === 'full') {
+    return runFullCoverageStrategist({
+      purpose: input.purpose,
+      safeCandidates,
+      joinedByKey,
+      safetyExcluded,
+      budgetConfig,
+      activeStrategistFlow,
+      onBatchProgress,
+      consolidateGaps,
+    });
+  }
+
   // pre-LLM budget: safety gate を通った chunk を Strategist 呼び出し前に
   // 関連度で並べ、Vertex token 上限を超えないサイズへ決定論的に絞り込む。
   const budgetResult = applyStrategistInputBudget(
-    safetyResult.safe.map((chunk) => {
-      const joined = requireSafeJoinedChunk(chunk, joinedByKey);
-      return { chunk, parent: joined.parent };
-    }),
+    safeCandidates,
     input.purpose,
     budgetConfig,
   );
@@ -302,7 +356,6 @@ export async function runStrategistOrchestrator(
     );
   }
 
-  const enforceSyncBudget = input.enforceSyncBudget ?? true;
   const syncEstimateSeconds = estimateStrategistSyncSeconds(budgetResult.report);
   if (enforceSyncBudget && syncEstimateSeconds > STRATEGIST_SYNC_TARGET_SECONDS) {
     throw new StrategistSyncBudgetExceededError({
@@ -337,7 +390,144 @@ export async function runStrategistOrchestrator(
     budget: budgetResult.report,
     budgetDroppedDocuments: budgetResult.droppedDocuments,
     syncEstimateSeconds,
+    coverage: { mode: 'budget' },
   });
+}
+
+async function runFullCoverageStrategist(params: {
+  purpose: string;
+  safeCandidates: BudgetCandidate[];
+  joinedByKey: Map<string, JoinedChunk>;
+  safetyExcluded: SafetyExcludedChunk[];
+  budgetConfig: StrategistInputBudgetConfig;
+  activeStrategistFlow: NonNullable<RunStrategistOrchestratorDeps['strategistFlow']>;
+  onBatchProgress?: RunStrategistOrchestratorDeps['onBatchProgress'];
+  consolidateGaps: NonNullable<RunStrategistOrchestratorDeps['consolidateGaps']>;
+}): Promise<StrategistOrchestratorResult> {
+  const partition = partitionStrategistBatches(
+    params.safeCandidates,
+    params.purpose,
+    params.budgetConfig,
+  );
+  const batchesTotal = partition.batches.length;
+  const batchOutputs: StrategistOutput[] = [];
+  const reviewedDocIds = new Set<string>();
+
+  for (const [batchIndex, batch] of partition.batches.entries()) {
+    for (const candidate of batch) {
+      reviewedDocIds.add(candidate.chunk.docId);
+    }
+    const safeInputs = batch.map((candidate) =>
+      strategistInputForSafeChunk(candidate.chunk, params.joinedByKey),
+    );
+    const batchResult = await params.activeStrategistFlow({
+      purpose: params.purpose,
+      chunkInputs: safeInputs,
+      safetyExcludedCount: params.safetyExcluded.length,
+    });
+    batchOutputs.push(batchResult);
+
+    if (params.onBatchProgress) {
+      try {
+        await params.onBatchProgress({
+          batchesCompleted: batchIndex + 1,
+          batchesTotal,
+        });
+      } catch (progressError) {
+        console.warn(
+          '[strategistOrchestrator] onBatchProgress failed (ignored)',
+          progressError,
+        );
+      }
+    }
+  }
+
+  const strategistResult = mergeStrategistBatchOutputs(batchOutputs);
+  const consolidated = await params.consolidateGaps({
+    purpose: params.purpose,
+    includedSummary: strategistResult.included.map((ref) => {
+      const joined = requireJoinedChunk(
+        ref.docId,
+        ref.chunkId,
+        params.joinedByKey,
+      );
+      return {
+        docId: ref.docId,
+        fileName: joined.parent.fileName,
+        chunkId: ref.chunkId,
+        rationale: ref.rationale,
+      } satisfies IncludedSummaryForReduce;
+    }),
+    batchOutputs,
+    allowedChunkIds: params.safeCandidates.map((candidate) => candidate.chunk.id),
+  });
+  strategistResult.missing = consolidated.missing;
+  strategistResult.humanReviewQuestions = consolidated.humanReviewQuestions;
+
+  const safeJoinedByKey = new Map(
+    params.safeCandidates.map((candidate) => {
+      const key = chunkKey(candidate.chunk.docId, candidate.chunk.id);
+      return [key, requireSafeJoinedChunk(candidate.chunk, params.joinedByKey)] as const;
+    }),
+  );
+
+  const distinctReviewedDocuments = reviewedDocIds.size;
+  const fullBudgetReport: StrategistInputBudgetReport = {
+    config: params.budgetConfig,
+    totalCandidates: partition.stats.totalCandidates,
+    keptChunks: partition.stats.totalCandidates,
+    droppedChunks: 0,
+    keptDocuments: distinctReviewedDocuments,
+    estimatedPromptChars: partition.stats.totalEstimatedPromptChars,
+    estimatedPromptTokens: partition.stats.totalEstimatedPromptTokens,
+  };
+
+  return buildResult({
+    purpose: params.purpose,
+    sourceDocumentsReviewed: distinctReviewedDocuments,
+    strategistResult,
+    safeJoinedByKey,
+    safetyExcluded: params.safetyExcluded,
+    budget: fullBudgetReport,
+    budgetDroppedDocuments: [],
+    syncEstimateSeconds: estimateStrategistSyncSeconds(fullBudgetReport),
+    coverage: {
+      mode: 'full',
+      batches: batchesTotal,
+      missingConsolidation: consolidated.consolidation,
+    },
+  });
+}
+
+function mergeStrategistBatchOutputs(
+  batchOutputs: StrategistOutput[],
+): StrategistOutput {
+  const included = new Map<string, StrategistOutput['included'][number]>();
+  const excluded = new Map<string, StrategistOutput['excluded'][number]>();
+
+  for (const output of batchOutputs) {
+    for (const ref of output.included) {
+      const key = chunkKey(ref.docId, ref.chunkId);
+      if (included.has(key) || excluded.has(key)) {
+        throw new Error(`Duplicate strategist included ref across batches: ${key}`);
+      }
+      included.set(key, ref);
+    }
+    for (const ref of output.excluded) {
+      const key = chunkKey(ref.docId, ref.chunkId);
+      if (included.has(key) || excluded.has(key)) {
+        throw new Error(`Duplicate strategist excluded ref across batches: ${key}`);
+      }
+      excluded.set(key, ref);
+    }
+  }
+
+  return {
+    included: Array.from(included.values()),
+    excluded: Array.from(excluded.values()),
+    missing: [],
+    humanReviewQuestions: [],
+  };
 }
 
 function requireSafeJoinedChunk(
@@ -426,6 +616,7 @@ function buildResult(params: {
   budget: StrategistInputBudgetReport;
   budgetDroppedDocuments: BudgetDroppedDocument[];
   syncEstimateSeconds: number;
+  coverage?: StrategistOrchestratorResult['coverage'];
 }): StrategistOrchestratorResult {
   return {
     purpose: params.purpose,
@@ -445,6 +636,7 @@ function buildResult(params: {
     budget: params.budget,
     budgetDroppedDocuments: params.budgetDroppedDocuments,
     syncEstimateSeconds: params.syncEstimateSeconds,
+    coverage: params.coverage,
   };
 }
 

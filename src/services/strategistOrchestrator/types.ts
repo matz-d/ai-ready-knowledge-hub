@@ -4,10 +4,21 @@ import type {
 } from '../../agents/strategist/schema';
 import type { InventoryDocument } from '../../lib/inventory';
 import type { KnowledgeChunk } from '../../lib/knowledgeChunkSchema';
+import type { MissingConsolidationMode } from './consolidateGaps';
 import type {
   BudgetDroppedDocument,
   StrategistInputBudgetReport,
 } from './budget';
+
+export type StrategistCoverageMode = 'budget' | 'full';
+
+export type StrategistCoverageReport = {
+  mode: StrategistCoverageMode;
+  /** full coverage 時のバッチ数（budget モードでは省略可） */
+  batches?: number;
+  /** missing / questions の統合方式 */
+  missingConsolidation?: MissingConsolidationMode;
+};
 
 export type StrategistOrchestratorParent = Pick<
   InventoryDocument,
@@ -57,4 +68,6 @@ export type StrategistOrchestratorResult = {
   budgetDroppedDocuments: BudgetDroppedDocument[];
   /** 同期実行の所要時間推定（秒）。20秒超え見込みは API 側で 422 を返して同期実行しない。 */
   syncEstimateSeconds: number;
+  /** full / budget coverage の観測用メタデータ（後方互換のため optional） */
+  coverage?: StrategistCoverageReport;
 };
