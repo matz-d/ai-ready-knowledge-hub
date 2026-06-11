@@ -2,7 +2,7 @@
 
 ## Current Progress Snapshot
 
-P1-D has an initial stable, report-only quality gate and a local mixed-PDF check.
+P1-D has a stable quality gate (deterministic zero checks are CI blockers, recall metrics stay report-only) and a local mixed-PDF check.
 
 Implemented:
 
@@ -14,7 +14,7 @@ Implemented:
 - Locator coverage now reports `notFound` and `unlocated` separately, so missing content and missing evidence locators are not conflated.
 - Structured `expectedValues` / `expectedTableCells` are now present for the first P1-D public blank-form and public guide sidecars.
 - `expectedFieldTiers` now separates `core` field recall from broad `extended` recall without breaking the existing `expectedFields: string[]` golden sidecar contract.
-- Deterministic zero-check candidates are reported for public false masking, empty chunks, and oversized chunks without making the report a CI blocker yet.
+- Deterministic zero checks (public false masking, empty chunks, oversized chunks) are CI blockers: `--ci` exits non-zero on failure and `conversion-eval.yml` runs the `p1d-stable-zero` required job on pull requests. Recall-style averages remain report-only because they move whenever expected sidecars are honestly broadened.
 - `documentIrToKnowledgeChunks` now drops whitespace-only renderable blocks, so blank OCR/PDF blocks do not become empty KnowledgeChunks.
 - `mhlw-labor-conditions-notice-blank-scan` now has committed P1-D DocumentIR and expected sidecars.
 - scan-pdf DocumentIR sidecars are raw OCR baselines. They intentionally do not hand-add `tableIndex` / `rowIndex` locators that the scan-pdf pipeline does not emit.
@@ -32,7 +32,9 @@ pnpm eval:p1d:mixed-pdf -- local-data/annual-report-doc-2025-viewing-ja.pdf --ou
 Latest verification:
 
 - `pnpm typecheck`: green.
-- `pnpm test`: `80` test files / `858` tests passed.
+- `pnpm test`: `80` test files / `861` tests passed.
+- `pnpm build`: green.
+- `pnpm tsx scripts/runP1dQualityGate.ts --ci`: exit `0` with all deterministic zero checks passing.
 - stable quality report: `9` evaluated / `1` skipped.
 - local mixed PDF check: `partial` with `table_failed`; text extraction succeeded for `56` pages / `176746` chars.
 
@@ -41,7 +43,6 @@ Remaining P1-D gaps before treating the quality gate as mature:
 - Continue structured `expectedValues` and `expectedTableCells` coverage across the remaining synthetic / slide committed sidecars, choosing values from source-document intent rather than only values already present in the sidecar.
 - Continue tiering expected fields across the remaining committed sidecars so future blocker candidates can focus on core fields while the full recall signal remains visible.
 - Keep public curator over-restriction live-only via the existing curator classification eval; do not create stable curator output sidecars.
-- Promote deterministic zero-check candidates to CI blocker after one more full stable-eval pass confirms they remain zero.
 - Add live drift scripts only after stable fixture semantics are stronger.
 - Feed `table_failed` from the local mixed PDF check into P1-E's large-file pre-splitting / table fallback design.
 
@@ -57,10 +58,11 @@ Result:
 
 - mode: `stable`
 - liveCalls: `false`
-- reportOnly: `true`
+- metricsPolicy.ciBlockerMetrics: `falseMaskedTokenCount`, `emptyChunkCount`, `oversizedChunkCount`
+- metricsPolicy.recallMetricsReportOnly: `true`
 - evaluatedFixtureCount: `9`
 - skippedFixtureCount: `1`
-- schemaVersion: `2`
+- schemaVersion: `3`
 - fieldRecallAverage: `0.5891289016289016`
 - coreFieldRecallAverage: `0.7071428571428571`
 - valuePrecisionAverage: `1`
@@ -85,7 +87,7 @@ Notes:
 - `locatorCoverageAverage` is now independent from `fieldRecallAverage` because structured value/table expectations add locator-bearing evidence checks beyond field recall.
 - `coreFieldRecallAverage` is separated from full `fieldRecallAverage`; initial core coverage is measured for the public blank-form fixtures while un-tiered fixtures remain `measured: false` for core recall.
 - `valuePrecisionAverage` and `tableCellRecallAverage` are measured from structured sidecars. Table cell recall intentionally includes source-intent row/column relationships, so the current `0.6` exposes that row-only table chunks cannot yet prove header/column relations.
-- Deterministic zero checks now pass for public `falseMaskedTokenCount`, `emptyChunkCount`, and `oversizedChunkCount`; they are ready for blocker discussion, but the report remains `reportOnly` for this step.
+- Deterministic zero checks pass for public `falseMaskedTokenCount`, `emptyChunkCount`, and `oversizedChunkCount`, and are enforced as CI blockers via `pnpm tsx scripts/runP1dQualityGate.ts --ci` in the `p1d-stable-zero` job.
 - The scan-pdf sidecars preserve raw OCR behavior: table blocks can exist (`kind: "table"`) without table row locators. That absence is a real P1-E / drift-design signal, not something to patch into the sidecar by hand.
 
 ## Local Mixed PDF Check

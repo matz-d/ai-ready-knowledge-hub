@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildP1dQualityReport,
   evaluateP1dFixture,
+  listFailedDeterministicZeroChecks,
   P1dExpectedFixtureSchema,
 } from '../p1dQualityGate';
 import { parseDocumentIr, type DocumentIr } from '../documentIr';
@@ -217,7 +218,7 @@ describe('P1-D quality gate stable metrics', () => {
     );
   });
 
-  it('builds a report-only stable summary without live-call semantics', () => {
+  it('builds a stable summary without live-call semantics', () => {
     const report = buildP1dQualityReport(
       [
         evaluateP1dFixture({
@@ -252,7 +253,6 @@ describe('P1-D quality gate stable metrics', () => {
 
     expect(report.mode).toBe('stable');
     expect(report.liveCalls).toBe(false);
-    expect(report.reportOnly).toBe(true);
     expect(report.summary.evaluatedFixtureCount).toBe(1);
     expect(report.summary.skippedFixtureCount).toBe(1);
     expect(report.summary.fieldRecallAverage).toBe(1);
@@ -265,23 +265,58 @@ describe('P1-D quality gate stable metrics', () => {
         expected: 0,
         actual: 0,
         passed: true,
-        ciBlockerCandidate: true,
+        ciBlocker: true,
       },
       {
         metric: 'emptyChunkCount',
         expected: 0,
         actual: 0,
         passed: true,
-        ciBlockerCandidate: true,
+        ciBlocker: true,
       },
       {
         metric: 'oversizedChunkCount',
         expected: 0,
         actual: 0,
         passed: true,
-        ciBlockerCandidate: true,
+        ciBlocker: true,
       },
     ]);
-    expect(report.metricsPolicy.ciBlocker).toBe(false);
+    expect(report.metricsPolicy.ciBlockerMetrics).toEqual([
+      'falseMaskedTokenCount',
+      'emptyChunkCount',
+      'oversizedChunkCount',
+    ]);
+    expect(report.metricsPolicy.recallMetricsReportOnly).toBe(true);
+    expect(listFailedDeterministicZeroChecks(report)).toEqual([]);
+  });
+
+  it('lists failed deterministic zero checks for the CI gate', () => {
+    const report = buildP1dQualityReport(
+      [
+        evaluateP1dFixture({
+          documentId: 'public-doc-with-redaction',
+          fixturePath: 'fixture.document-ir.json',
+          sourceSubtype: 'official-doc-pdf',
+          isPublicDocument: true,
+          documentIr: testDocumentIr(),
+          chunks: [
+            {
+              text: 'Notice [REDACTED:PERSON_NAME]',
+              locator: { kind: 'pdf', page: 1 },
+              structureType: 'paragraph',
+            },
+          ],
+        }),
+      ],
+      [],
+      '2026-06-11T00:00:00.000Z'
+    );
+
+    const failed = listFailedDeterministicZeroChecks(report);
+    expect(failed).toHaveLength(1);
+    expect(failed[0].metric).toBe('falseMaskedTokenCount');
+    expect(failed[0].actual).toBe(1);
+    expect(failed[0].passed).toBe(false);
   });
 });

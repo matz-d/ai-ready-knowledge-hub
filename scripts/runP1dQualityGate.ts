@@ -3,6 +3,7 @@ import path from 'node:path';
 import {
   buildP1dQualityReport,
   evaluateP1dFixture,
+  listFailedDeterministicZeroChecks,
   P1dExpectedFixtureSchema,
   type P1dExpectedFixture,
   type P1dFixtureQualityResult,
@@ -111,11 +112,13 @@ const STABLE_FIXTURES = [
 type CliOptions = {
   outPath: string;
   pretty: boolean;
+  ci: boolean;
 };
 
 function parseArgs(argv: string[]): CliOptions {
   let outPath = 'tmp/p1d-quality-report.json';
   let pretty = true;
+  let ci = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -133,10 +136,14 @@ function parseArgs(argv: string[]): CliOptions {
       pretty = false;
       continue;
     }
+    if (arg === '--ci') {
+      ci = true;
+      continue;
+    }
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return { outPath, pretty };
+  return { outPath, pretty, ci };
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -273,6 +280,21 @@ async function main(): Promise<void> {
   await mkdir(path.dirname(outPath), { recursive: true });
   await writeFile(outPath, `${json}\n`, 'utf8');
   process.stdout.write(`${json}\n`);
+
+  if (options.ci) {
+    const failedChecks = listFailedDeterministicZeroChecks(report);
+    if (failedChecks.length > 0) {
+      for (const check of failedChecks) {
+        process.stderr.write(
+          `P1-D CI blocker failed: ${check.metric} expected ${check.expected}, got ${check.actual}\n`
+        );
+      }
+      process.exit(1);
+    }
+    process.stderr.write(
+      'P1-D CI blockers passed: all deterministic zero checks are 0\n'
+    );
+  }
 }
 
 main().catch((error: unknown) => {

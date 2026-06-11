@@ -99,6 +99,8 @@ export {
 export {
   buildP1dQualityReport,
   evaluateP1dFixture,
+  listFailedDeterministicZeroChecks,
+  P1D_CI_BLOCKER_METRICS,
   P1D_QUALITY_REPORT_SCHEMA_VERSION,
   P1dExpectedFixtureSchema,
   type P1dChunkReadiness,

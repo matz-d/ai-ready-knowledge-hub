@@ -55,6 +55,38 @@ jobs:
           name: conversion-eval-health
           path: tmp/conversion-eval-health.json
 
+  p1d-stable:
+    name: conversion-eval / p1d-stable-zero (required)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run P1-D stable quality gate (deterministic zero blockers)
+        run: pnpm tsx scripts/runP1dQualityGate.ts --ci --out tmp/p1d-quality-report.json
+
+      - name: Upload P1-D quality report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: p1d-quality-report
+          path: tmp/p1d-quality-report.json
+
   heuristic:
     name: conversion-eval / heuristic (warning)
     if: github.event_name == 'pull_request'

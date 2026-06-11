@@ -88,7 +88,12 @@ P1-D は、既存の eval 設計に合わせて **純関数 / sidecar ベース�
 
 ### 4.1 stable eval
 
-ローカルまたは CI で安定して回す評価。Vertex / Gemini / Cloud DLP live call は呼ばず、committed fixture と sidecar のみを使う。初期は **CI blocker にしない report-only** とし、閾値が安定してから blocker 化を検討する。
+ローカルまたは CI で安定して回す評価。Vertex / Gemini / Cloud DLP live call は呼ばず、committed fixture と sidecar のみを使う。
+
+CI gate は二段構成にする（2026-06-11 確定）。
+
+- **deterministic zero checks（CI blocker）**: `falseMaskedTokenCount`（public doc のみ）/ `emptyChunkCount` / `oversizedChunkCount`。LLM variance がなく「0 であるべき」が自明なため、`--ci` フラグ付き実行（`conversion-eval.yml` の `p1d-stable-zero` job）で fail 時に exit 1。
+- **recall 系平均（report-only 維持）**: `fieldRecall` / `coreFieldRecall` / `valuePrecision` / `tableCellRecall` / `locatorCoverage`。expected sidecar を正直に広げるたび値が動く段階なので、gate にすると「通る expected だけ書く」誘惑が生まれる。fixture 意味づけが安定した後に `coreFieldRecall` から blocker 化を検討する。
 
 初期コマンド案:
 
@@ -132,7 +137,7 @@ tmp/p1d-quality-report.json
 | `locatorCoverage` | stable | field / value / table cell に page / row / sheet / slide locator が付く割合 | 全 subtype | DocumentIR / KnowledgeChunk locator |
 | `emptyChunkCount` | stable | 空 chunk 数 | conversion / chunking | KnowledgeChunk |
 | `oversizedChunkCount` | stable | Firestore 500 KiB 上限や prompt budget 上危険な chunk 数 | PDF、XLSX、CSV | KnowledgeChunk |
-| `deterministicZeroChecks` | stable | LLM variance のないゼロ期待 metrics の blocker 候補。初期は report-only | false masking / chunk readiness | P1-D summary |
+| `deterministicZeroChecks` | stable | LLM variance のないゼロ期待 metrics。**CI blocker**（`--ci` で fail 時 exit 1） | false masking / chunk readiness | P1-D summary |
 | `largeMixedPdfExtractionStatus` | live/local | 大きめ混在 PDF の text extraction 状態 | 統合報告書 | local PDF extraction result |
 | `largeMixedPdfFailureReasons` | live/local | `table_failed`、`oversized`、`too_many_chunks` など status と直交する失敗理由 | 統合報告書 | local PDF extraction result |
 
@@ -212,5 +217,5 @@ pnpm tsx scripts/runP1dMixedPdfCheck.ts <local-annual-report.pdf>
 - 顧客実データ、実在顧客由来の匿名化データ、実在個人の PII は commit しない。
 - P1-D は品質評価の確立を優先し、巨大 PDF / XLSX / CSV の分割実装は P1-E に送る。
 - scan-pdf の再実行は重複作業ではなく、モデル変更後の drift 確認として扱う。
-- `pnpm eval:p1d:quality` は初期段階では report-only。CI blocker 化は metrics と fixture が安定した後に判断する。
+- `pnpm eval:p1d:quality` のローカル既定は report-only。CI（`--ci`）では deterministic zero checks のみ blocker、recall 系平均は fixture 安定後に `coreFieldRecall` から blocker 化を判断する。
 - 空白だけの DocumentIR block は KnowledgeChunk にしない。empty chunk は extraction result の証跡ではなく Context Package へ渡せないノイズとして扱う。

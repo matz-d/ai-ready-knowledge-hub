@@ -5,7 +5,7 @@ import { evalContextPackageReadiness } from './heuristic/evalContextPackageReadi
 import { evalCoverage } from './heuristic/evalCoverage';
 import { evalSemanticRetention, normalizeForSubstringMatch } from './golden';
 
-export const P1D_QUALITY_REPORT_SCHEMA_VERSION = 2 as const;
+export const P1D_QUALITY_REPORT_SCHEMA_VERSION = 3 as const;
 
 const P1dExpectedTierSchema = z.enum(['core', 'extended']);
 
@@ -101,8 +101,14 @@ export type P1dDeterministicZeroCheck = {
   expected: 0;
   actual: number;
   passed: boolean;
-  ciBlockerCandidate: true;
+  ciBlocker: true;
 };
+
+export const P1D_CI_BLOCKER_METRICS = [
+  'falseMaskedTokenCount',
+  'emptyChunkCount',
+  'oversizedChunkCount',
+] as const satisfies readonly P1dDeterministicZeroCheck['metric'][];
 
 export type P1dFixtureQualityResult = {
   documentId: string;
@@ -138,7 +144,6 @@ export type P1dQualityReport = {
   generatedAt: string;
   mode: 'stable';
   liveCalls: false;
-  reportOnly: true;
   summary: {
     evaluatedFixtureCount: number;
     skippedFixtureCount: number;
@@ -157,7 +162,8 @@ export type P1dQualityReport = {
   metricsPolicy: {
     stableEvalUsesCommittedSidecarsOnly: true;
     liveDriftChecksExcluded: true;
-    ciBlocker: false;
+    ciBlockerMetrics: typeof P1D_CI_BLOCKER_METRICS;
+    recallMetricsReportOnly: true;
   };
   fixtures: P1dFixtureQualityResult[];
   skippedFixtures: P1dSkippedFixture[];
@@ -429,8 +435,21 @@ function deterministicZeroCheck(
     expected: 0,
     actual,
     passed: actual === 0,
-    ciBlockerCandidate: true,
+    ciBlocker: true,
   };
+}
+
+/**
+ * Deterministic zero metrics that fail the CI gate. Recall-style averages stay
+ * report-only on purpose: they move whenever expected sidecars are broadened,
+ * and gating them would punish honest expectations.
+ */
+export function listFailedDeterministicZeroChecks(
+  report: P1dQualityReport
+): P1dDeterministicZeroCheck[] {
+  return report.summary.deterministicZeroChecks.filter(
+    (check) => !check.passed
+  );
 }
 
 export function evaluateP1dFixture<TChunk extends P1dEvalChunk>(
@@ -549,7 +568,6 @@ export function buildP1dQualityReport(
     generatedAt,
     mode: 'stable',
     liveCalls: false,
-    reportOnly: true,
     summary: {
       evaluatedFixtureCount: fixtures.length,
       skippedFixtureCount: skippedFixtures.length,
@@ -595,7 +613,8 @@ export function buildP1dQualityReport(
     metricsPolicy: {
       stableEvalUsesCommittedSidecarsOnly: true,
       liveDriftChecksExcluded: true,
-      ciBlocker: false,
+      ciBlockerMetrics: P1D_CI_BLOCKER_METRICS,
+      recallMetricsReportOnly: true,
     },
     fixtures: [...fixtures],
     skippedFixtures: [...skippedFixtures],
