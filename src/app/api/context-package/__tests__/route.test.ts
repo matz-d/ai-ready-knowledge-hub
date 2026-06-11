@@ -140,6 +140,8 @@ vi.mock('../../../../lib/contextPackageJobs/enqueuer', () => ({
 
 import { POST } from '../route';
 import { createPurposeBinding } from '../../../../lib/audit/auditEvent';
+import { MAX_CONTEXT_PACKAGE_DOC_IDS } from '../../../../lib/contextPackageLimits';
+import { CONTEXT_PACKAGE_GUIDE_FILE_NAME } from '../../../../lib/exportContextPackage';
 
 function buildRequest(body: unknown): Request {
   return new Request('http://localhost/api/context-package', {
@@ -307,8 +309,22 @@ describe('POST /api/context-package', () => {
       },
       budgetDroppedDocuments: [],
       syncEstimateSeconds: 7.4,
-      // markdown は本物の payload builder が生成する（内容ではなく projection 経路を検証）。
+      // markdown / sourceBundle は本物の payload builder が生成する。
       markdown: expect.any(String),
+      sourceBundle: {
+        files: [
+          expect.objectContaining({
+            fileName: CONTEXT_PACKAGE_GUIDE_FILE_NAME,
+            role: 'guide',
+            contentType: 'text/markdown',
+          }),
+          expect.objectContaining({
+            fileName: 'Runbook.md',
+            role: 'included-source',
+            content: 'stub',
+          }),
+        ],
+      },
       counts: {
         included: 1,
         excluded: 1,
@@ -424,6 +440,100 @@ describe('POST /api/context-package', () => {
     expect(body.included[0]?.chunk).not.toHaveProperty('text');
     expect(body.excluded[0]?.chunk).not.toHaveProperty('text');
     expect(body.safetyExcluded[0]?.chunk).not.toHaveProperty('text');
+
+    const bundle = JSON.parse(rawJson) as {
+      sourceBundle: {
+        files: { fileName: string; role: string; content: string }[];
+      };
+    };
+    const bundleContents = bundle.sourceBundle.files.map((f) => f.content).join('\n');
+    const bundleNames = bundle.sourceBundle.files.map((f) => f.fileName);
+    expect(bundleNames).toContain(CONTEXT_PACKAGE_GUIDE_FILE_NAME);
+    expect(bundleNames).toContain('Runbook.md');
+    expect(bundleContents).toContain('MASKED_OK');
+    expect(bundleContents).not.toContain('RAW_SECRET_CUSTOMER_NAME');
+    expect(bundleContents).not.toContain('EXCLUDED_RAW_BODY');
+    expect(bundleContents).not.toContain('RESTRICTED_RAW_BODY');
+    const includedSource = bundle.sourceBundle.files.find(
+      (f) => f.role === 'included-source',
+    );
+    expect(includedSource?.content).toBe('MASKED_OK');
+  });
+
+  it('sourceBundle.files contains guide and included sources only', async () => {
+    runStrategistOrchestratorMock.mockResolvedValue({
+      ...STUB_RESULT,
+      included: [
+        {
+          docId: 'doc-1',
+          chunkId: 'chunk-1',
+          rationale: '目的に合致',
+          confidence: 0.9,
+          chunk: {
+            ...STUB_CHUNK_BASE,
+            id: 'chunk-1',
+            text: 'INCLUDED_SAFE_BODY',
+          },
+          parent: STUB_PARENT,
+        },
+      ],
+      excluded: [
+        {
+          docId: 'doc-2',
+          chunkId: 'chunk-2',
+          rationale: '古い',
+          reason: 'superseded_or_stale' as const,
+          chunk: {
+            ...STUB_CHUNK_BASE,
+            id: 'chunk-2',
+            docId: 'doc-2',
+            text: 'EXCLUDED_RAW_BODY_SHOULD_NOT_APPEAR',
+          },
+          parent: { ...STUB_PARENT, id: 'doc-2', fileName: 'OldPolicy.md' },
+        },
+      ],
+      safetyExcluded: [
+        {
+          docId: 'doc-3',
+          chunkId: 'chunk-3',
+          rationale: 'Restricted',
+          reason: 'restricted_sensitivity' as const,
+          chunk: {
+            ...STUB_CHUNK_BASE,
+            id: 'chunk-3',
+            docId: 'doc-3',
+            sensitivity: 'Restricted' as const,
+            aiUsePolicy: 'blocked' as const,
+            text: 'RESTRICTED_RAW_BODY_SHOULD_NOT_APPEAR',
+          },
+          parent: { ...STUB_PARENT, id: 'doc-3', fileName: 'Contract.txt' },
+        },
+      ],
+    });
+
+    const response = await POST(buildRequest({ purpose: 'テスト用途' }));
+    const body = (await response.json()) as {
+      sourceBundle: {
+        files: { fileName: string; role: string; content: string }[];
+      };
+    };
+
+    expect(response.status).toBe(200);
+    const files = body.sourceBundle.files;
+    expect(files[0]?.fileName).toBe(CONTEXT_PACKAGE_GUIDE_FILE_NAME);
+    expect(files.filter((f) => f.role === 'included-source')).toHaveLength(1);
+    expect(files.map((f) => f.fileName)).toEqual([
+      CONTEXT_PACKAGE_GUIDE_FILE_NAME,
+      'Runbook.md',
+    ]);
+
+    const allContent = files.map((f) => f.content).join('\n');
+    expect(allContent).toContain('INCLUDED_SAFE_BODY');
+    expect(allContent).not.toContain('EXCLUDED_RAW_BODY_SHOULD_NOT_APPEAR');
+    expect(allContent).not.toContain('RESTRICTED_RAW_BODY_SHOULD_NOT_APPEAR');
+    // guide には除外文書名は載るが、除外/human-review 本文は載らない。
+    expect(files[0]?.content).toContain('OldPolicy.md');
+    expect(files[0]?.content).toContain('Contract.txt');
   });
 
   it('exposes budgetDroppedDocuments so truncation is visible to clients', async () => {
@@ -464,6 +574,39 @@ describe('POST /api/context-package', () => {
       limit: 10,
       docIds: ['doc-1', 'doc-2'],
     });
+  });
+
+  it('accepts broad docIds selection up to the product request limit', async () => {
+    const docIds = Array.from(
+      { length: MAX_CONTEXT_PACKAGE_DOC_IDS },
+      (_, index) => `doc-${index}`,
+    );
+
+    const response = await POST(buildRequest({ purpose: 'テスト用途', docIds }));
+
+    expect(response.status).toBe(200);
+    expect(runStrategistOrchestratorMock).toHaveBeenCalledWith({
+      purpose: 'テスト用途',
+      limit: 100,
+      docIds,
+    });
+  });
+
+  it('returns 400 when docIds exceed the product request limit', async () => {
+    const response = await POST(
+      buildRequest({
+        purpose: 'テスト用途',
+        docIds: Array.from(
+          { length: MAX_CONTEXT_PACKAGE_DOC_IDS + 1 },
+          (_, index) => `doc-${index}`,
+        ),
+      }),
+    );
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('invalid_request');
+    expect(runStrategistOrchestratorMock).not.toHaveBeenCalled();
   });
 
   it('returns 400 unknown_doc_ids when a requested docId does not exist', async () => {

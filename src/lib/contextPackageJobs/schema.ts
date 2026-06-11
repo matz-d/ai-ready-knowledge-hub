@@ -8,6 +8,7 @@
  * 設計の正本: docs/open-questions.md R10。
  */
 import { z } from 'zod';
+import { MAX_CONTEXT_PACKAGE_DOC_IDS } from '../contextPackageLimits';
 
 export const CONTEXT_PACKAGE_JOBS_COLLECTION = 'context_package_jobs';
 
@@ -39,6 +40,8 @@ export type ContextPackageJobProgress = {
   sourceDocumentsReviewed?: number;
   safeChunks?: number;
   budgetDroppedChunks?: number;
+  batchesCompleted?: number;
+  batchesTotal?: number;
 };
 
 /** 失敗時の機械可読コード。再実行可否の判定材料にする。 */
@@ -61,8 +64,8 @@ export type ContextPackageJobError = {
 /**
  * 完了 job が保持する Context Package payload。
  *
- * 同期経路 `POST /api/context-package` のレスポンス本文と同型（`markdown` と
- * projection 済み chunk view のみ。raw chunk.text は含めない）。Firestore の
+ * 同期経路 `POST /api/context-package` のレスポンス本文と同型（`markdown`、
+ * `sourceBundle`、projection 済み chunk view。raw chunk.text は含めない）。Firestore の
  * 1MB doc 上限に収めるため、runner 側でサイズガードする。
  */
 export type ContextPackageJobResult = Record<string, unknown>;
@@ -131,7 +134,10 @@ export const ContextPackageJobActorSchema = z.object({
 export const ContextPackageJobRequestSchema = z.object({
   purpose: z.string().min(1).max(2000),
   limit: z.number().int().min(1).max(100),
-  docIds: z.array(z.string().trim().min(1).max(200)).max(20).optional(),
+  docIds: z
+    .array(z.string().trim().min(1).max(200))
+    .max(MAX_CONTEXT_PACKAGE_DOC_IDS)
+    .optional(),
   tenantId: z.string().min(1),
   actor: ContextPackageJobActorSchema,
 });

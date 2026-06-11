@@ -48,6 +48,7 @@ export type ContextPackageExportInput = {
   humanReviewDocuments?: ExcludedContextDocument[];
   missingKnowledge: string[];
   questionsForHumanOwner: string[];
+  missingKnowledgeConsolidation?: 'llm' | 'deterministic' | 'deterministic_fallback';
   /**
    * budget で Strategist へ渡す前に落とした safe chunk の内訳。
    * 空 / 未指定なら truncation なし（完全版）。
@@ -151,6 +152,17 @@ function bulletList(items: string[]): string {
   return items.map((item) => `- ${item}`).join('\n');
 }
 
+function missingKnowledgeMarkdown(input: ContextPackageExportInput): string {
+  const list = bulletList(input.missingKnowledge);
+  if (input.missingKnowledgeConsolidation !== 'deterministic_fallback') {
+    return list;
+  }
+  return [
+    '- ⚠️ Missing knowledge consolidation degraded: reduce LLM failed; duplicate or already-covered missing items may remain.',
+    list,
+  ].join('\n');
+}
+
 function numberedList(items: string[]): string {
   if (items.length === 0) {
     return '1. No questions.';
@@ -250,7 +262,7 @@ ${budgetTruncationMarkdown(render.truncatedDocuments)}
 
 ## Missing Knowledge
 
-${bulletList(input.missingKnowledge)}
+${missingKnowledgeMarkdown(input)}
 
 ## Questions for Human Owner
 
@@ -445,7 +457,7 @@ ${budgetTruncationMarkdown(render.truncatedDocuments)}
 
 ## Missing Knowledge
 
-${bulletList(input.missingKnowledge)}
+${missingKnowledgeMarkdown(input)}
 
 ## Questions for Human Owner
 

@@ -1846,7 +1846,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 **検証結果:** bundle（guide + 生ソース5）を NotebookLM に投入し質問バッテリー **5/5 PASS**（33,000 / 220,000 / missing 認識 / questions 認識 / excluded 参照不可）。ユニットテスト 6件（`exportContextPackageSourceBundle.test.ts`）。
 
-**残（段階2）:** アプリ UI に bundle の zip ダウンロード導線を追加（client zip は `fflate` 候補）。Gemini / RAG 向け取り込み手順は同型で追補。
+**段階2（2026-06-10 完了）:** アプリ UI に bundle の zip ダウンロード導線を追加済み（`ContextPackageForm` の「NotebookLM 用 bundle をダウンロード」。公開3日以内の依存追加を避けるため、client zip は STORE method の最小 writer を自前実装）。**残:** Gemini / RAG 向け取り込み手順は同型で追補。
 
 ---
 

@@ -1,4 +1,5 @@
 import type { CandidateRecommendation } from '../../services/candidateSelection';
+import { MAX_CONTEXT_PACKAGE_DOC_IDS } from '../../lib/contextPackageLimits';
 
 /** Row shape returned by `POST /api/context-package/candidates` (metadata-only). */
 export type CandidateRow = {
@@ -35,9 +36,11 @@ export const RECOMMENDATION_LABEL: Record<CandidateRecommendation, string> = {
 /** docIds pre-selected when candidates are loaded (`include` only). */
 export function defaultSelectedDocIds(
   candidates: Pick<CandidateRow, 'docId' | 'recommendation'>[],
+  maxDocIds = MAX_CONTEXT_PACKAGE_DOC_IDS,
 ): string[] {
   return candidates
     .filter((c) => c.recommendation === 'include')
+    .slice(0, maxDocIds)
     .map((c) => c.docId);
 }
 
@@ -103,5 +106,10 @@ export function canGenerateContextPackage(params: {
   // Defense-in-depth for future callers: ContextPackageForm invalidates stale
   // candidates on edit, but generation must still refuse mismatched purpose/candidates.
   if (!params.candidatesReady || params.candidatesStale) return false;
-  return params.docIds.length > 0;
+  return (
+    params.docIds.length > 0 &&
+    params.docIds.length <= MAX_CONTEXT_PACKAGE_DOC_IDS
+  );
 }
+
+export { MAX_CONTEXT_PACKAGE_DOC_IDS };

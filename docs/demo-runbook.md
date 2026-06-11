@@ -231,7 +231,10 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 
 ## 7. Context Package export
 
-デモでは、export 前に Purpose Query の文言を読み上げます。ここが purpose binding の軸です。生成された Markdown は「NotebookLM / Gemini / RAG に渡す材料」ですが、同時に「なぜこの情報を渡してよいか」を説明する記録でもあります。
+デモでは、export 前に Purpose Query の文言を読み上げます。ここが purpose binding の軸です。export には2導線があります。
+
+- **単一 Markdown（primary）**: Gemini / RAG / コピー用。Package Manifest と Included / Excluded メタ、および `Full AI-Ready Sources` を1ファイルにまとめる。
+- **NotebookLM 用 source bundle（secondary）**: `00-CONTEXT-PACKAGE-GUIDE.md` + included 生ソースのみを zip 化。excluded / restricted はソースファイルとして含めない。NotebookLM では bundle の**全ファイル**を source 追加する（単一 `.md` を1ソースにしない）。手順の正本は [delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md)。
 
 1. live corpus から生成（Firestore + GCS）
 
@@ -271,8 +274,10 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 - purpose または package manifest に、入力した目的が残っている
 - `Included Documents` は、その目的に対して使う理由が説明できる文書だけになっている
 - `Excluded Documents` / human review 側に、古い資料・顧客固有情報・Restricted 格上げ文書が理由付きで残っている
-- `Full AI-Ready Sources` には、必要な本文だけが入り、raw の個人情報や restricted 本文が混ざっていない
-- 最後に「これを NotebookLM / Gemini / RAG に渡す。AI本体ではなく、その前に情報を整えるところが価値」と締める
+- 単一 Markdown の `Full AI-Ready Sources` には、必要な本文だけが入り、raw の個人情報や restricted 本文が混ざっていない
+- NotebookLM 用 bundle には `00-CONTEXT-PACKAGE-GUIDE.md` と included 生ソースだけが入り、excluded / restricted の本文ファイルは含まれない
+- UI から「NotebookLM 用 bundle をダウンロード」で zip を取得し、解凍後に全ファイルを NotebookLM へ source 追加できる
+- 最後に「NotebookLM には bundle、Gemini/RAG には単一 Markdown。AI 本体ではなく、その前に情報を整えるところが価値」と締める
 
 ### production async smoke
 

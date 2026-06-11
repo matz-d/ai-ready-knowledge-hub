@@ -10,6 +10,7 @@ import { location, modelId } from '../../agents/_shared/genkitClient';
 import {
   NoInventoryDocumentsError,
   NoKnowledgeChunksError,
+  StrategistFullCoverageLeaseLostError,
   StrategistSyncBudgetExceededError,
   UnresolvedDocIdsError,
   buildContextPackageResponsePayload,
@@ -29,6 +30,7 @@ import {
   failContextPackageJob,
   getContextPackageJob,
   releaseContextPackageJobLease,
+  updateContextPackageJobProgress,
 } from './firestoreAdapter';
 import {
   deleteContextPackageJobResult,
@@ -102,11 +104,16 @@ async function persistBusinessFailure(
 function progressFromResult(
   result: StrategistOrchestratorResult,
 ): ContextPackageJobProgress {
-  return {
+  const progress: ContextPackageJobProgress = {
     sourceDocumentsReviewed: result.sourceDocumentsReviewed,
     safeChunks: result.included.length,
     budgetDroppedChunks: result.budget.droppedChunks,
   };
+  if (result.coverage?.mode === 'full' && result.coverage.batches !== undefined) {
+    progress.batchesTotal = result.coverage.batches;
+    progress.batchesCompleted = result.coverage.batches;
+  }
+  return progress;
 }
 
 /**
@@ -187,15 +194,25 @@ export async function runContextPackageJob(
   const { request } = job;
 
   try {
-    const result = await runStrategistOrchestrator({
-      purpose: request.purpose,
-      limit: request.limit,
-      ...(request.docIds && request.docIds.length > 0
-        ? { docIds: request.docIds }
-        : {}),
-      // 非同期 job は 20 秒ゲートを外す（pre-LLM budget は引き続き効く）。
-      enforceSyncBudget: false,
-    });
+    const result = await runStrategistOrchestrator(
+      {
+        purpose: request.purpose,
+        limit: request.limit,
+        ...(request.docIds && request.docIds.length > 0
+          ? { docIds: request.docIds }
+          : {}),
+        enforceSyncBudget: false,
+        coverage: 'full',
+      },
+      {
+        onBatchProgress: async ({ batchesCompleted, batchesTotal }) => {
+          return updateContextPackageJobProgress(jobId, attemptToken, {
+            batchesCompleted,
+            batchesTotal,
+          });
+        },
+      },
+    );
 
     const payload = buildContextPackageResponsePayload(result);
     const progress = progressFromResult(result);
@@ -249,6 +266,13 @@ export async function runContextPackageJob(
 
     return { outcome: 'claimed_and_run', status: 'succeeded' };
   } catch (error) {
+    if (error instanceof StrategistFullCoverageLeaseLostError) {
+      console.warn('[context-package-job] lease lost during full coverage run', {
+        jobId,
+      });
+      return outcomeAfterRejectedAttemptWrite(jobId);
+    }
+
     const businessError = toBusinessJobError(error);
     if (businessError) {
       console.error('[context-package-job] business failure', { jobId, businessError });

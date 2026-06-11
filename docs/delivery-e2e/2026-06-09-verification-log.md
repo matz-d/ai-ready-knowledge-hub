@@ -101,4 +101,4 @@
 - [x] `operate-deliver-readiness.md` §B「エンドツーエンドの delivery 検証」行を 🔲 → ✅ に更新（本ログをリンク）
 - [x] §B「渡し先別の取り込み手順」行に、確立した NotebookLM 取り込み手順（bundle 全ファイルを source 追加）を反映
 - [x] `decisions.md` の `D-DLV-1` に source bundle 採用の追補を記録
-- [ ] 段階2: アプリ UI に bundle の zip ダウンロード導線を追加（client zip 候補 `fflate`）— 別チャンク
+- [x] 段階2: アプリ UI に bundle の zip ダウンロード導線を追加（P1-B、`ContextPackageForm` の「NotebookLM 用 bundle をダウンロード」）

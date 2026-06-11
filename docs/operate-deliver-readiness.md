@@ -47,7 +47,7 @@
 | restricted / human-review を「人間が確認すべき」として明示（沈黙除外しない） | ✅ | `humanReviewDocuments` を `Excluded` に `Restricted / human review only` で合流 | — | `preGenerationPreview.ts` |
 | 成果物の取得（.md ダウンロード） | ✅ | `ContextPackageForm` の「.md をダウンロード」（Blob → `context-package_{slug}.md`） | — | `ContextPackageForm.tsx` |
 | **渡し先別の取り込み手順（NotebookLM / Gemini / RAG）** | ✅ | NotebookLM の取り込み手順を E2E で確立: **単一 .md をチャットに貼らず、source 分割 bundle の全ファイルを source 追加**。経緯と手順は [delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md) | Gemini/RAG 手順は同型で追補可 | `delivery-e2e/` |
-| **出力粒度: 単一 .md vs source 分割** | ✅ | **D-DLV-1 fast-follow 発火・実装済（2026-06-09）**: E2E で単一 .md は NotebookLM が本文を grounding できず FAIL → `exportContextPackageSourceBundle()` で source 分割 bundle を追加し PASS。単一 .md は維持しつつ bundle を secondary export に | UI zip 導線は段階2 | `D-DLV-1`, `exportContextPackage.ts` |
+| **出力粒度: 単一 .md vs source 分割** | ✅ | **D-DLV-1 fast-follow 発火・実装済（2026-06-09）**: E2E で単一 .md は NotebookLM が本文を grounding できず FAIL → `exportContextPackageSourceBundle()` で source 分割 bundle を追加し PASS。単一 .md は維持しつつ bundle を secondary export に | UI zip 導線は P1-B で実装済み（`ContextPackageForm`） | `D-DLV-1`, `exportContextPackage.ts` |
 | **ダウンロード以外の handoff（clipboard / 直接連携）** | ✅ | **決定済・実装済（`D-DLV-2`, 2026-06-09）**: download + copy-to-clipboard の2導線。直接 API 連携はスコープ外。`Markdown をコピー`/`コピーしました`/`コピーできません` | — | `D-DLV-2`, `ContextPackageForm.tsx` |
 | **エンドツーエンドの delivery 検証（実 NotebookLM/Gemini 投入）** | ✅ | accounting-office 1ケースを実 NotebookLM に投入し質問バッテリー5問すべて PASS（included のみ使用 / excluded 不使用 / missing・questions 認識）。証跡は [delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md) | Gemini でも余力で確認 | `delivery-e2e/` |
 
@@ -71,7 +71,7 @@
 
 **とどける** が成立と言えるのは、B の ✅ 群（4分類の構造化出力 / 下流指示 / 正直なカバレッジ開示 / 理由・sensitivity 提示 / human-review 明示 / .md 取得）を満たすこと。**これも達成済み**。残るのは渡し先体験（渡し先別ガイド・出力粒度・handoff 幅・E2E 検証）で、ここが**ハッカソン提出のデモ価値に最も効く伸びしろ**。
 
-> 結論: まわす/とどける とも **コア DoD は通過済み**。**とどける の E2E 検証も 2026-06-09 達成**（実 NotebookLM 5/5 PASS、source 分割 bundle を fast-follow 実装）。残る限界効用は、段階2 の UI zip 導線（bundle の app 内ダウンロード）と Gemini/RAG 取り込み手順の追補。
+> 結論: まわす/とどける とも **コア DoD は通過済み**。**とどける の E2E 検証も 2026-06-09 達成**（実 NotebookLM 5/5 PASS、source 分割 bundle を fast-follow 実装）。UI zip 導線（P1-B）とデモ docs の bundle 前提更新（P1-C）も完了。残る限界効用は Gemini/RAG 取り込み手順の追補。
 
 ---
 

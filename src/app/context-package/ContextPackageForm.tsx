@@ -12,10 +12,15 @@ import {
   canGenerateContextPackage,
   defaultSelectedDocIds,
   isCandidatesStale,
+  MAX_CONTEXT_PACKAGE_DOC_IDS,
   resolveDocIdsForGeneration,
   type CandidateRow,
   type CandidatesApiResponse,
 } from './candidateSelectionUi';
+import {
+  downloadSourceBundleZip,
+  type SourceBundleZipInput,
+} from './sourceBundleZip';
 
 const MAX_PURPOSE = 2000;
 
@@ -86,6 +91,7 @@ type ContextPackageResult = {
   missing: string[];
   humanReviewQuestions: string[];
   markdown: string;
+  sourceBundle?: SourceBundleZipInput;
   budgetDroppedDocuments: { docId: string; fileName: string; droppedChunks: number }[];
   counts: {
     included: number;
@@ -185,6 +191,8 @@ export function ContextPackageForm() {
     () => resolveDocIdsForGeneration(docIdsRaw, selectedDocIds, parseDocIds),
     [docIdsRaw, selectedDocIds],
   );
+  const docIdsLimitExceeded =
+    docIdsForGeneration.length > MAX_CONTEXT_PACKAGE_DOC_IDS;
   const selectedDocIdsForGeneration = useMemo(
     () => new Set(docIdsForGeneration),
     [docIdsForGeneration],
@@ -208,6 +216,9 @@ export function ContextPackageForm() {
     (preGenerationPreview === null ||
       !previewRequiresAcknowledgement(preGenerationPreview) ||
       previewAcknowledged);
+  const sourceBundle = result?.sourceBundle;
+  const hasSourceBundle =
+    sourceBundle !== undefined && sourceBundle.files.length > 0;
 
   const invalidateCandidates = () => {
     setCandidatesFetchState('idle');
@@ -511,7 +522,9 @@ export function ContextPackageForm() {
             className="cp-submit"
             disabled={!generateEnabled}
             title={
-              !candidatesReady
+              docIdsLimitExceeded
+                ? `対象文書は最大 ${MAX_CONTEXT_PACKAGE_DOC_IDS} 件までです`
+                : !candidatesReady
                 ? '先に「候補を表示」で文書を選んでください'
                 : previewNeedsAck && !previewAcknowledged
                   ? 'プレビューを確認し、チェックを入れてください'
@@ -532,6 +545,14 @@ export function ContextPackageForm() {
         {candidatesError ? (
           <div className="cp-candidates-error" role="alert">
             {candidatesError}
+          </div>
+        ) : null}
+
+        {docIdsLimitExceeded ? (
+          <div className="cp-candidates-error" role="alert">
+            対象文書は最大 {MAX_CONTEXT_PACKAGE_DOC_IDS} 件までです。現在{' '}
+            {docIdsForGeneration.length} 件が選択されています。目的を分けるか、Doc ID
+            を絞って再試行してください。
           </div>
         ) : null}
 
@@ -558,7 +579,7 @@ export function ContextPackageForm() {
           </summary>
           <p className="cp-advanced-hint">
             入力がある場合はチェックボックス選択より優先して生成します（改行またはカンマ区切り・最大
-            20 件）。
+            {MAX_CONTEXT_PACKAGE_DOC_IDS} 件）。
           </p>
           <textarea
             id="cp-doc-ids"
@@ -859,6 +880,19 @@ export function ContextPackageForm() {
             >
               Markdown をダウンロード
             </button>
+            {hasSourceBundle ? (
+              <button
+                type="button"
+                className="cp-download-btn"
+                onClick={() =>
+                  sourceBundle
+                    ? downloadSourceBundleZip(sourceBundle, result.purpose)
+                    : undefined
+                }
+              >
+                NotebookLM 用 bundle をダウンロード
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
