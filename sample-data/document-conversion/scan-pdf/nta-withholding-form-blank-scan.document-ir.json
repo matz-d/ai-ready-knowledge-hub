@@ -3,7 +3,7 @@
   "source": {
     "fileName": "nta-withholding-form-blank-scan.pdf",
     "mediaType": "application/pdf",
-    "sourceKind": "upload",
+    "sourceKind": "poc",
     "sourceSubtype": "scan-pdf"
   },
   "pages": [
@@ -13,51 +13,254 @@
         {
           "blockId": "p1-ocr1",
           "kind": "heading",
-          "text": "給与所得者の扶養控除等（異動）申告書",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "text": "令和 年分 給与所得の源泉徴収票",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              15,
+              238,
+              41,
+              828
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
         },
         {
           "blockId": "p1-ocr2",
           "kind": "paragraph",
-          "text": "令和　　年分　　　　　給与の支払者の名称",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "text": "支払を受ける者\n住所又は居所\n（受給者番号）\n（個人番号）\n（役職名）\n氏名\n（フリガナ）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              45,
+              15,
+              147,
+              985
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.92
+          }
         },
         {
           "blockId": "p1-ocr3",
-          "kind": "paragraph",
-          "text": "あなたの氏名　　　　　　　　　　　　住所又は居所",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "kind": "table",
+          "text": "種別 | 支払金額 | 給与所得控除後の金額（調整控除後） | 所得控除の額の合計額 | 源泉徴収税額\n | 円 | 円 | 円 | 円",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              147,
+              15,
+              204,
+              985
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.9
+          }
         },
         {
           "blockId": "p1-ocr4",
           "kind": "paragraph",
-          "text": "世帯主の氏名　　　　　　　あなたとの続柄",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "text": "（源泉）控除対象配偶者の有無等 | 配偶者（特別）控除の額 | 控除対象扶養親族等の数（配偶者を除く。） | 16歳未満扶養親族の数 | 障害者の数（本人を除く。） | 非居住者である親族の数\n有 | 無 | 老人 | 特定 | 老人 | その他 | 特親 | 特定 | その他",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              204,
+              15,
+              296,
+              985
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.88
+          }
         },
         {
           "blockId": "p1-ocr5",
           "kind": "paragraph",
-          "text": "配偶者の有無　　有・無　　配偶者の氏名",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "text": "特定扶養親族特別控除の額 | 社会保険料等の金額 | 生命保険料の控除額 | 地震保険料の控除額 | 住宅借入金等特別控除の額",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              296,
+              15,
+              351,
+              985
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.91
+          }
         },
         {
           "blockId": "p1-ocr6",
           "kind": "paragraph",
-          "text": "控除対象扶養親族（16歳以上）の氏名・続柄・生年月日",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "text": "（摘要）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              351,
+              15,
+              433,
+              985
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
         },
         {
           "blockId": "p1-ocr7",
           "kind": "paragraph",
-          "text": "障害者、寡婦、ひとり親又は勤労学生　の場合には○をつけてください",
-          "locator": { "pageNumber": 1 },
-          "metadata": { "extractionProvider": "gemini-vertex-ocr" }
+          "text": "生命保険料の金額の内訳 | 新生命保険料の金額 | 旧生命保険料の金額 | 介護医療保険料の金額 | 新個人年金保険料の金額 | 旧個人年金保険料の金額\n住宅借入金等特別控除の額の内訳 | 住宅借入金等特別控除適用数 | 居住開始年月日（1回目） | 住宅借入金等特別控除区分（1回目） | 住宅借入金等年末残高（1回目）\n | 住宅借入金等特別控除可能額 | 居住開始年月日（2回目） | 住宅借入金等特別控除区分（2回目） | 住宅借入金等年末残高（2回目）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              433,
+              15,
+              520,
+              985
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.87
+          }
+        },
+        {
+          "blockId": "p1-ocr8",
+          "kind": "paragraph",
+          "text": "（源泉・特別）控除対象配偶者 | （フリガナ）\n氏名 | 区分 | 配偶者の合計所得 | 国民年金保険料等の金額 | 旧長期損害保険料の金額\n個人番号 | 基礎控除の額 | 所得金額調整控除額",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              520,
+              15,
+              576,
+              985
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.89
+          }
+        },
+        {
+          "blockId": "p1-ocr9",
+          "kind": "paragraph",
+          "text": "控除対象扶養親族等\n1 | （フリガナ）\n氏名 | 区分 | 個人番号\n2 | （フリガナ）\n氏名 | 区分 | 個人番号\n3 | （フリガナ）\n氏名 | 区分 | 個人番号\n4 | （フリガナ）\n氏名 | 区分 | 個人番号",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              576,
+              15,
+              798,
+              500
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.9
+          }
+        },
+        {
+          "blockId": "p1-ocr10",
+          "kind": "paragraph",
+          "text": "16歳未満の扶養親族\n1 | （フリガナ）\n氏名 | 区分\n2 | （フリガナ）\n氏名 | 区分\n3 | （フリガナ）\n氏名 | 区分\n4 | （フリガナ）\n氏名 | 区分",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              576,
+              500,
+              798,
+              985
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.9
+          }
+        },
+        {
+          "blockId": "p1-ocr11",
+          "kind": "paragraph",
+          "text": "未成年者 | 外国人 | 死亡退職 | 災害者 | 乙欄 | 本人が障害者 | 寡婦 | ひとり親 | 勤労学生\n特別 | その他",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              798,
+              15,
+              883,
+              517
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.88
+          }
+        },
+        {
+          "blockId": "p1-ocr12",
+          "kind": "paragraph",
+          "text": "中途就・退職 | 就職 | 退職 | 年 | 月 | 日\n受給者生年月日 | 元号 | 年 | 月 | 日",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              798,
+              517,
+              883,
+              985
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.91
+          }
+        },
+        {
+          "blockId": "p1-ocr13",
+          "kind": "paragraph",
+          "text": "支払者\n個人番号又は法人番号\n住所（居所）又は所在地\n氏名又は名称",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              883,
+              15,
+              980,
+              500
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.93
+          }
+        },
+        {
+          "blockId": "p1-ocr14",
+          "kind": "paragraph",
+          "text": "（右詰で記載してください。）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              883,
+              500,
+              915,
+              985
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.92
+          }
         }
       ]
     }

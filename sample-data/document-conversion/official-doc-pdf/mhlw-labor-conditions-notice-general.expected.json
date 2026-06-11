@@ -35,5 +35,36 @@
     "平成25年4月1日",
     "就業規則を確認できる場所や方法"
   ],
-  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW public form, no PII."
+  "expectedValues": [
+    {
+      "field": "契約期間",
+      "expectedValue": "期間の定めなし"
+    },
+    {
+      "field": "就業の場所",
+      "expectedValue": "○○事業所"
+    },
+    {
+      "field": "従事すべき業務",
+      "expectedValue": "事務職"
+    }
+  ],
+  "expectedTableCells": [
+    {
+      "tableId": "p1-t1",
+      "rowLabel": "契約期間",
+      "expectedValue": "期間の定めなし"
+    },
+    {
+      "tableId": "p1-t1",
+      "rowLabel": "就業の場所",
+      "expectedValue": "○○事業所"
+    },
+    {
+      "tableId": "p1-t1",
+      "rowLabel": "従事すべき業務",
+      "expectedValue": "事務職"
+    }
+  ],
+  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW public form, no PII. Structured value/table expectations are scoped to the committed P1-D DocumentIR sidecar."
 }

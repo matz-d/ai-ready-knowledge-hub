@@ -34,7 +34,9 @@
     "context:demo:w1": "tsx scripts/runContextPackageDemo.ts --w1",
     "strategist": "tsx scripts/runStrategist.ts",
     "curator:ui": "genkit start -- tsx scripts/runCurator.ts",
-    "eval:curator:classification": "tsx scripts/runCuratorClassificationEval.ts"
+    "eval:curator:classification": "tsx scripts/runCuratorClassificationEval.ts",
+    "eval:p1d:quality": "tsx scripts/runP1dQualityGate.ts",
+    "eval:p1d:mixed-pdf": "tsx scripts/runP1dMixedPdfCheck.ts"
   },
   "dependencies": {
     "@genkit-ai/google-genai": "^1.33.0",

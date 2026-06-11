@@ -131,18 +131,17 @@ describe('nta-withholding-form-blank-scan fixture', () => {
     expect(ir.source.sourceSubtype).toBe('scan-pdf');
   });
 
-  it('coverage: full pageCoverage (1 page, all blocks non-empty)', () => {
+  it('coverage: full pageCoverage with a table candidate', () => {
     const { coverage } = evalCoverage(
       { documentIr: ir, chunks: [] },
       { sourceSubtype: 'scan-pdf' }
     );
     expect(coverage.pageCoverage).toBe(1);
-    // Blank form: no table candidates in OCR output
-    expect(coverage.tableCandidates).toBe(0);
+    expect(coverage.tableCandidates).toBe(1);
     expect(coverage.textDensityWarnings).toHaveLength(0);
   });
 
-  it('locatorQuality: page locators present, no table locators', () => {
+  it('locatorQuality: page locators present, table locators absent in raw scan OCR', () => {
     const { locatorQuality } = evalLocatorQuality({ documentIr: ir, chunks: [] });
     expect(locatorQuality.hasPageLocators).toBe(true);
     expect(locatorQuality.hasTableLocators).toBe(false);
@@ -163,7 +162,7 @@ describe('nta-withholding-form-blank-scan fixture', () => {
 
     const axes = deriveAxisStatuses(result, 'heuristic', 'scan-pdf');
     expect(axes.coverage).toBe('pass');
-    expect(axes.locatorQuality).toBe('warn'); // page locators only → warn
+    expect(axes.locatorQuality).toBe('warn'); // raw scan OCR has page locators but no tableIndex/rowIndex
     expect(axes.safetyReadiness).toBe('pass');
   });
 });
