@@ -23,20 +23,33 @@ const P1dExpectedTableCellSchema = z.object({
   tier: P1dExpectedTierSchema.optional().default('extended'),
 });
 
-export const P1dExpectedFixtureSchema = z.object({
-  documentId: z.string().min(1),
-  expectedFields: z.array(z.string().min(1)).optional().default([]),
-  expectedFieldTiers: z
-    .record(z.string().min(1), P1dExpectedTierSchema)
-    .optional()
-    .default({}),
-  expectedValues: z.array(P1dExpectedValueSchema).optional().default([]),
-  expectedTableCells: z
-    .array(P1dExpectedTableCellSchema)
-    .optional()
-    .default([]),
-  notes: z.string().optional(),
-});
+export const P1dExpectedFixtureSchema = z
+  .object({
+    documentId: z.string().min(1),
+    expectedFields: z.array(z.string().min(1)).optional().default([]),
+    expectedFieldTiers: z
+      .record(z.string().min(1), P1dExpectedTierSchema)
+      .optional()
+      .default({}),
+    expectedValues: z.array(P1dExpectedValueSchema).optional().default([]),
+    expectedTableCells: z
+      .array(P1dExpectedTableCellSchema)
+      .optional()
+      .default([]),
+    notes: z.string().optional(),
+  })
+  .superRefine((expected, ctx) => {
+    const expectedFields = new Set(expected.expectedFields);
+    for (const field of Object.keys(expected.expectedFieldTiers)) {
+      if (!expectedFields.has(field)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['expectedFieldTiers', field],
+          message: `expectedFieldTiers key must also exist in expectedFields: ${field}`,
+        });
+      }
+    }
+  });
 
 export type P1dExpectedFixture = z.infer<typeof P1dExpectedFixtureSchema>;
 export type P1dExpectedTier = z.infer<typeof P1dExpectedTierSchema>;
@@ -50,6 +63,7 @@ export type P1dExpectedTableCell = z.infer<
 >;
 
 export type P1dEvalChunk = {
+  id?: string;
   text: string;
   maskedText?: string;
   locator?: unknown;
@@ -212,6 +226,59 @@ function findBestMatchingChunk(
   return matches.find(chunkHasLocator) ?? matches[0] ?? null;
 }
 
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function parseExpectedPdfTableId(
+  tableId: string
+): { page: number; tableIndex: number } | null {
+  const match = /^p(\d+)-t(\d+)$/u.exec(tableId);
+  if (!match) return null;
+  return {
+    page: Number(match[1]),
+    tableIndex: Number(match[2]),
+  };
+}
+
+function tableIdMatchesChunk(
+  tableId: string | undefined,
+  chunk: MatchableChunk
+): boolean {
+  if (tableId === undefined) return true;
+
+  const candidateIds = [chunk.id, chunk.id?.split(':').at(-1)].filter(
+    (value): value is string => value !== undefined
+  );
+  const locator = objectRecord(chunk.locator);
+  const paragraphId =
+    typeof locator?.paragraphId === 'string' ? locator.paragraphId : undefined;
+  if (paragraphId !== undefined) candidateIds.push(paragraphId);
+
+  if (
+    candidateIds.some(
+      (candidate) =>
+        candidate === tableId || candidate.startsWith(`${tableId}-`)
+    )
+  ) {
+    return true;
+  }
+
+  const expectedPdfTable = parseExpectedPdfTableId(tableId);
+  const page = typeof locator?.page === 'number' ? locator.page : undefined;
+  if (
+    expectedPdfTable &&
+    page === expectedPdfTable.page &&
+    paragraphId?.startsWith(`table-${expectedPdfTable.tableIndex}-`)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function evaluateExpectedValues(
   chunks: readonly MatchableChunk[],
   expectedValues: readonly P1dExpectedValue[]
@@ -280,8 +347,10 @@ function evaluateExpectedTableCells(
       .filter((value): value is string => value !== undefined)
       .map(normalizeForSubstringMatch);
 
-    const found = tableChunks.some((chunk) =>
-      required.every((value) => chunk.normalizedText.includes(value))
+    const found = tableChunks.some(
+      (chunk) =>
+        tableIdMatchesChunk(expected.tableId, chunk) &&
+        required.every((value) => chunk.normalizedText.includes(value))
     );
     if (!found) {
       const label = [
@@ -344,6 +413,7 @@ function evaluateLocatorCoverage(
         return findBestMatchingChunk(
           tableChunks,
           (chunk) =>
+            tableIdMatchesChunk(cell.tableId, chunk) &&
             required.every((value) => chunk.normalizedText.includes(value))
         );
       },
@@ -621,6 +691,7 @@ export function buildP1dQualityReport(
     deferredMetrics: [
       'publicDirectRate belongs to live curator classification eval',
       'overRestrictedCount belongs to live curator classification eval',
+      'stable falseMaskedTokenCount is a public sidecar redaction-marker tripwire; real over-mask measurement requires masker-output sidecars or live drift checks',
       'Cloud DLP false-positive redaction drift belongs to live drift check',
       'largeMixedPdfExtractionStatus belongs to local/live mixed PDF check',
       'largeMixedPdfFailureReasons belongs to local/live mixed PDF check',

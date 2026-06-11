@@ -95,6 +95,14 @@ CI gate は二段構成にする（2026-06-11 確定）。
 - **deterministic zero checks（CI blocker）**: `falseMaskedTokenCount`（public doc のみ）/ `emptyChunkCount` / `oversizedChunkCount`。LLM variance がなく「0 であるべき」が自明なため、`--ci` フラグ付き実行（`conversion-eval.yml` の `p1d-stable-zero` job）で fail 時に exit 1。
 - **recall 系平均（report-only 維持）**: `fieldRecall` / `coreFieldRecall` / `valuePrecision` / `tableCellRecall` / `locatorCoverage`。expected sidecar を正直に広げるたび値が動く段階なので、gate にすると「通る expected だけ書く」誘惑が生まれる。fixture 意味づけが安定した後に `coreFieldRecall` から blocker 化を検討する。
 
+現時点の stable `falseMaskedTokenCount` は、committed DocumentIR sidecar から作った direct chunk 内の `[REDACTED:*]` marker を検出する sidecar hygiene check である。masker は stable path では走らないため、本物の over-mask measurement は masker-output sidecar または live drift check を追加してから扱う。
+
+Fixture authoring rules:
+
+- `expectedFieldTiers` の key は必ず `expectedFields` にも含める。sidecar load 時に schema validation で失敗させる。
+- `expectedTableCells[].tableId` は、利用可能な chunk id / locator と照合する。table identity を確認しない単なる注釈としては使わない。
+- `expectedValues[].expectedValue` は、1文字の単位など弱すぎる値を避け、field/value の組み合わせが chunk 内で十分に識別的になる値を選ぶ。
+
 初期コマンド案:
 
 ```bash

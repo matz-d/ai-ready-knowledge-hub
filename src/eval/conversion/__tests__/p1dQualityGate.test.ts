@@ -197,6 +197,111 @@ describe('P1-D quality gate stable metrics', () => {
     expect(result.metrics.coreFieldRecall.rate).toBe(0.5);
   });
 
+  it('rejects expectedFieldTiers keys that are not expectedFields', () => {
+    expect(() =>
+      P1dExpectedFixtureSchema.parse({
+        documentId: 'tier-typo',
+        expectedFields: ['Synthetic Form'],
+        expectedFieldTiers: {
+          'Synthetic From': 'core',
+        },
+      })
+    ).toThrow(/expectedFieldTiers key must also exist in expectedFields/);
+  });
+
+  it('uses tableId to scope table-cell matching when table identity is available', () => {
+    const chunks = [
+      {
+        id: 'doc:p1-t1-r0',
+        text: 'Salary\tJPY 280,000',
+        locator: { kind: 'pdf', page: 1, paragraphId: 'p1-t1-r0' },
+        structureType: 'table',
+      },
+      {
+        id: 'doc:p1-t2-r0',
+        text: 'Salary\tJPY 310,000',
+        locator: { kind: 'pdf', page: 1, paragraphId: 'p1-t2-r0' },
+        structureType: 'table',
+      },
+    ];
+
+    const matched = evaluateP1dFixture({
+      documentId: 'table-id-matched',
+      fixturePath: 'sample-data/document-conversion/official-doc-pdf/table-id-matched.document-ir.json',
+      sourceSubtype: 'official-doc-pdf',
+      isPublicDocument: true,
+      documentIr: testDocumentIr(),
+      expected: P1dExpectedFixtureSchema.parse({
+        documentId: 'table-id-matched',
+        expectedTableCells: [
+          {
+            tableId: 'p1-t2',
+            rowLabel: 'Salary',
+            expectedValue: 'JPY 310,000',
+          },
+        ],
+      }),
+      chunks,
+    });
+
+    const mismatched = evaluateP1dFixture({
+      documentId: 'table-id-mismatched',
+      fixturePath: 'sample-data/document-conversion/official-doc-pdf/table-id-mismatched.document-ir.json',
+      sourceSubtype: 'official-doc-pdf',
+      isPublicDocument: true,
+      documentIr: testDocumentIr(),
+      expected: P1dExpectedFixtureSchema.parse({
+        documentId: 'table-id-mismatched',
+        expectedTableCells: [
+          {
+            tableId: 'p1-t2',
+            rowLabel: 'Salary',
+            expectedValue: 'JPY 280,000',
+          },
+        ],
+      }),
+      chunks,
+    });
+
+    expect(matched.metrics.tableCellRecall.rate).toBe(1);
+    expect(matched.metrics.locatorCoverage.rate).toBe(1);
+    expect(mismatched.metrics.tableCellRecall.rate).toBe(0);
+    expect(mismatched.metrics.tableCellRecall.missing).toEqual([
+      'p1-t2 / Salary / JPY 280,000',
+    ]);
+  });
+
+  it('maps pN-tM tableId expectations to synthesized table-M-row-N locators', () => {
+    const result = evaluateP1dFixture({
+      documentId: 'table-id-synthesized-locator',
+      fixturePath: 'sample-data/document-conversion/official-doc-pdf/table-id-synthesized-locator.document-ir.json',
+      sourceSubtype: 'official-doc-pdf',
+      isPublicDocument: true,
+      documentIr: testDocumentIr(),
+      expected: P1dExpectedFixtureSchema.parse({
+        documentId: 'table-id-synthesized-locator',
+        expectedTableCells: [
+          {
+            tableId: 'p3-t1',
+            rowLabel: '月',
+            columnLabel: '上限',
+            expectedValue: '45時間',
+          },
+        ],
+      }),
+      chunks: [
+        {
+          text: '月\t上限\t45時間',
+          locator: { kind: 'pdf', page: 3, paragraphId: 'table-1-row-1' },
+          structureType: 'table',
+        },
+      ],
+    });
+
+    expect(result.metrics.tableCellRecall.rate).toBe(1);
+    expect(result.metrics.locatorCoverage.rate).toBe(1);
+  });
+
   it('keeps unmeasured structured metrics explicit when expected sidecar is absent', () => {
     const result = evaluateP1dFixture({
       documentId: 'no-expected',

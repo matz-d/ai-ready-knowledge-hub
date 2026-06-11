@@ -11,5 +11,5 @@ out/
 dist/
 coverage/
 *.tsbuildinfo
-local-data/
-tmp/
+/local-data/
+/tmp/

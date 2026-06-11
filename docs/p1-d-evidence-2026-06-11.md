@@ -10,15 +10,16 @@ Implemented:
 - `pnpm eval:p1d:mixed-pdf -- <local-pdf>`: local-only mixed PDF check for text/table/chunk symptoms.
 - P1-D pure evaluators under `src/eval/conversion/` reuse existing semantic retention, coverage, and context-package readiness logic instead of creating a separate eval stack.
 - Report schema distinguishes measured values from unmeasured values via `measured: false` / `rate: null`.
-- `falseMaskedTokenCount` is scoped to public-document fixtures only; non-public synthetic PII fixtures contribute to neutral `redactionMarkerCount`.
+- `falseMaskedTokenCount` is scoped to public-document fixtures only; non-public synthetic PII fixtures contribute to neutral `redactionMarkerCount`. In the current stable path this is a committed-sidecar redaction-marker tripwire, not a full masker over-mask measurement.
 - Locator coverage now reports `notFound` and `unlocated` separately, so missing content and missing evidence locators are not conflated.
 - Structured `expectedValues` / `expectedTableCells` are now present for the first P1-D public blank-form and public guide sidecars.
-- `expectedFieldTiers` now separates `core` field recall from broad `extended` recall without breaking the existing `expectedFields: string[]` golden sidecar contract.
+- `expectedFieldTiers` now separates `core` field recall from broad `extended` recall without breaking the existing `expectedFields: string[]` golden sidecar contract. Tier keys are schema-validated against `expectedFields`, so typoed core fields fail when the sidecar is loaded.
+- `expectedTableCells[].tableId` is matched against available chunk identity / locator evidence when present, so table identity is no longer annotation-only.
 - Deterministic zero checks (public false masking, empty chunks, oversized chunks) are CI blockers: `--ci` exits non-zero on failure and `conversion-eval.yml` runs the `p1d-stable-zero` required job on pull requests. Recall-style averages remain report-only because they move whenever expected sidecars are honestly broadened.
 - `documentIrToKnowledgeChunks` now drops whitespace-only renderable blocks, so blank OCR/PDF blocks do not become empty KnowledgeChunks.
 - `mhlw-labor-conditions-notice-blank-scan` now has committed P1-D DocumentIR and expected sidecars.
 - scan-pdf DocumentIR sidecars are raw OCR baselines. They intentionally do not hand-add `tableIndex` / `rowIndex` locators that the scan-pdf pipeline does not emit.
-- `tmp/` and `local-data/` are ignored; detailed generated JSON reports stay local, while summary evidence is recorded in this doc.
+- root `/tmp/` and `/local-data/` are ignored; detailed generated JSON reports stay local, while summary evidence is recorded in this doc.
 
 Validated:
 
@@ -42,8 +43,11 @@ Remaining P1-D gaps before treating the quality gate as mature:
 
 - Continue structured `expectedValues` and `expectedTableCells` coverage across the remaining synthetic / slide committed sidecars, choosing values from source-document intent rather than only values already present in the sidecar.
 - Continue tiering expected fields across the remaining committed sidecars so future blocker candidates can focus on core fields while the full recall signal remains visible.
+- Add fixture guidance for `expectedValues`: avoid overly weak values such as one-character unit labels unless the paired field/value combination is uniquely identifying in the chunk.
 - Keep public curator over-restriction live-only via the existing curator classification eval; do not create stable curator output sidecars.
-- Add live drift scripts only after stable fixture semantics are stronger.
+- Add masker-output sidecars or live drift scripts before treating `falseMaskedTokenCount` as a true over-mask metric. The stable CI blocker currently proves only that public committed sidecars do not already contain redaction markers.
+- Decide whether `chunkLocatorCoverage` should follow the measured/null convention for zero-chunk fixtures instead of reporting `0`.
+- Clean up duplicate GitHub Actions setup with a composite action only if another conversion-eval job is added.
 - Feed `table_failed` from the local mixed PDF check into P1-E's large-file pre-splitting / table fallback design.
 
 ## Stable Quality Report
@@ -83,7 +87,7 @@ Notes:
 - This stable report uses committed fixture / sidecar files only.
 - Vertex / Gemini / Cloud DLP live calls are not used.
 - The low official-doc field recall is an intentional visibility gap from the current committed sidecars and should guide P1-D fixture/expected refinement.
-- `falseMaskedTokenCount` is measured only for fixtures marked as public documents; non-public synthetic PII fixtures contribute to neutral `redactionMarkerCount` instead.
+- `falseMaskedTokenCount` is measured only for fixtures marked as public documents; non-public synthetic PII fixtures contribute to neutral `redactionMarkerCount` instead. Because stable chunks are built directly from committed DocumentIR sidecars and the masker does not run, this blocker is a sidecar-hygiene check until masker-output sidecars or live drift checks are added.
 - `locatorCoverageAverage` is now independent from `fieldRecallAverage` because structured value/table expectations add locator-bearing evidence checks beyond field recall.
 - `coreFieldRecallAverage` is separated from full `fieldRecallAverage`; initial core coverage is measured for the public blank-form fixtures while un-tiered fixtures remain `measured: false` for core recall.
 - `valuePrecisionAverage` and `tableCellRecallAverage` are measured from structured sidecars. Table cell recall intentionally includes source-intent row/column relationships, so the current `0.6` exposes that row-only table chunks cannot yet prove header/column relations.
