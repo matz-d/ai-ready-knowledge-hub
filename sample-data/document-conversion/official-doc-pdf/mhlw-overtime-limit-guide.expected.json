@@ -34,5 +34,53 @@
     "https://www.startup-roudou.mhlw.go.jp/support.html",
     "e-Gov（イーガブ）"
   ],
-  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW public guide, no PII."
+  "expectedFieldTiers": {
+    "時間外労働の上限規制": "core",
+    "わかりやすい解説": "core",
+    "2019年４⽉施⾏": "core",
+    "中小企業への適用は2020年４⽉": "core",
+    "１⽇８時間・１週40時間以内": "core",
+    "毎週少なくとも１回": "core",
+    "36（サブロク）協定": "core",
+    "⽉45時間・年360時間": "core"
+  },
+  "expectedValues": [
+    {
+      "field": "2019年4月施行",
+      "expectedValue": "中小企業への適用は2020年4月",
+      "tier": "core"
+    },
+    {
+      "field": "1日8時間・1週40時間以内",
+      "expectedValue": "毎週少なくとも1回",
+      "tier": "core"
+    },
+    {
+      "field": "月",
+      "expectedValue": "45時間",
+      "tier": "core"
+    },
+    {
+      "field": "年",
+      "expectedValue": "360時間",
+      "tier": "core"
+    }
+  ],
+  "expectedTableCells": [
+    {
+      "tableId": "p3-t1",
+      "rowLabel": "月",
+      "columnLabel": "上限",
+      "expectedValue": "45時間",
+      "tier": "core"
+    },
+    {
+      "tableId": "p3-t1",
+      "rowLabel": "年",
+      "columnLabel": "上限",
+      "expectedValue": "360時間",
+      "tier": "core"
+    }
+  ],
+  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW public guide, no PII. Core structured expectations target source-document legal limit values and table cells."
 }

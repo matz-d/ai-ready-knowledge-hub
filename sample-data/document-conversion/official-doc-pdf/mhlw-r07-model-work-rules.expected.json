@@ -39,5 +39,52 @@
     "２０２１年４月",
     "３０日以上前に予告"
   ],
-  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW model work rules, no PII."
+  "expectedFieldTiers": {
+    "モデル就業規則": "core",
+    "令和７年 12 月版": "core",
+    "第２章 採用、異動等": "core",
+    "第７章 定年、退職及び解雇": "core",
+    "第１９条（労働時間及び休憩時間）": "core",
+    "第４０条（割増賃金）": "core",
+    "第５７条（無期労働契約への転換）": "core"
+  },
+  "expectedValues": [
+    {
+      "field": "モデル就業規則",
+      "expectedValue": "令和7年版",
+      "tier": "core"
+    },
+    {
+      "field": "第6条（採用手続）",
+      "expectedValue": "従業員として採用する",
+      "tier": "extended"
+    },
+    {
+      "field": "試用期間",
+      "expectedValue": "3か月以内",
+      "tier": "core"
+    },
+    {
+      "field": "附則",
+      "expectedValue": "令和7年4月1日から施行する",
+      "tier": "core"
+    }
+  ],
+  "expectedTableCells": [
+    {
+      "tableId": "p3-t1",
+      "rowLabel": "第7条",
+      "columnLabel": "見出し",
+      "expectedValue": "試用期間",
+      "tier": "core"
+    },
+    {
+      "tableId": "p3-t1",
+      "rowLabel": "第7条",
+      "columnLabel": "備考",
+      "expectedValue": "3か月以内",
+      "tier": "core"
+    }
+  ],
+  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW model work rules, no PII. Core structured expectations target source-document chapter and rule values."
 }

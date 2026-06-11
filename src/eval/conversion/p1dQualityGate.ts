@@ -96,6 +96,14 @@ export type P1dSafetyObservations = {
   redactionMarkers: Record<string, number>;
 };
 
+export type P1dDeterministicZeroCheck = {
+  metric: 'falseMaskedTokenCount' | 'emptyChunkCount' | 'oversizedChunkCount';
+  expected: 0;
+  actual: number;
+  passed: boolean;
+  ciBlockerCandidate: true;
+};
+
 export type P1dFixtureQualityResult = {
   documentId: string;
   fixturePath: string;
@@ -144,6 +152,7 @@ export type P1dQualityReport = {
     emptyChunkCount: number;
     oversizedChunkCount: number;
     textDensityWarningCount: number;
+    deterministicZeroChecks: P1dDeterministicZeroCheck[];
   };
   metricsPolicy: {
     stableEvalUsesCommittedSidecarsOnly: true;
@@ -411,6 +420,19 @@ function averageMeasuredRate(
   );
 }
 
+function deterministicZeroCheck(
+  metric: P1dDeterministicZeroCheck['metric'],
+  actual: number
+): P1dDeterministicZeroCheck {
+  return {
+    metric,
+    expected: 0,
+    actual,
+    passed: actual === 0,
+    ciBlockerCandidate: true,
+  };
+}
+
 export function evaluateP1dFixture<TChunk extends P1dEvalChunk>(
   input: P1dFixtureInput<TChunk>
 ): P1dFixtureQualityResult {
@@ -507,6 +529,21 @@ export function buildP1dQualityReport(
   skippedFixtures: readonly P1dSkippedFixture[],
   generatedAt = new Date().toISOString()
 ): P1dQualityReport {
+  const falseMaskedTokenCount = fixtures.reduce(
+    (sum, fixture) =>
+      sum + fixture.metrics.safetyObservations.falseMaskedTokenCount,
+    0
+  );
+  const emptyChunkCount = fixtures.reduce(
+    (sum, fixture) => sum + fixture.metrics.chunkReadiness.emptyChunkCount,
+    0
+  );
+  const oversizedChunkCount = fixtures.reduce(
+    (sum, fixture) =>
+      sum + fixture.metrics.chunkReadiness.oversizedChunkCount,
+    0
+  );
+
   return {
     schemaVersion: P1D_QUALITY_REPORT_SCHEMA_VERSION,
     generatedAt,
@@ -536,30 +573,24 @@ export function buildP1dQualityReport(
         fixtures,
         (fixture) => fixture.metrics.locatorCoverage
       ),
-      falseMaskedTokenCount: fixtures.reduce(
-        (sum, fixture) =>
-          sum + fixture.metrics.safetyObservations.falseMaskedTokenCount,
-        0
-      ),
+      falseMaskedTokenCount,
       redactionMarkerCount: fixtures.reduce(
         (sum, fixture) =>
           sum + fixture.metrics.safetyObservations.redactionMarkerCount,
         0
       ),
-      emptyChunkCount: fixtures.reduce(
-        (sum, fixture) => sum + fixture.metrics.chunkReadiness.emptyChunkCount,
-        0
-      ),
-      oversizedChunkCount: fixtures.reduce(
-        (sum, fixture) =>
-          sum + fixture.metrics.chunkReadiness.oversizedChunkCount,
-        0
-      ),
+      emptyChunkCount,
+      oversizedChunkCount,
       textDensityWarningCount: fixtures.reduce(
         (sum, fixture) =>
           sum + fixture.metrics.textDensityWarnings.length,
         0
       ),
+      deterministicZeroChecks: [
+        deterministicZeroCheck('falseMaskedTokenCount', falseMaskedTokenCount),
+        deterministicZeroCheck('emptyChunkCount', emptyChunkCount),
+        deterministicZeroCheck('oversizedChunkCount', oversizedChunkCount),
+      ],
     },
     metricsPolicy: {
       stableEvalUsesCommittedSidecarsOnly: true,

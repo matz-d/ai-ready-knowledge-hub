@@ -132,6 +132,7 @@ tmp/p1d-quality-report.json
 | `locatorCoverage` | stable | field / value / table cell に page / row / sheet / slide locator が付く割合 | 全 subtype | DocumentIR / KnowledgeChunk locator |
 | `emptyChunkCount` | stable | 空 chunk 数 | conversion / chunking | KnowledgeChunk |
 | `oversizedChunkCount` | stable | Firestore 500 KiB 上限や prompt budget 上危険な chunk 数 | PDF、XLSX、CSV | KnowledgeChunk |
+| `deterministicZeroChecks` | stable | LLM variance のないゼロ期待 metrics の blocker 候補。初期は report-only | false masking / chunk readiness | P1-D summary |
 | `largeMixedPdfExtractionStatus` | live/local | 大きめ混在 PDF の text extraction 状態 | 統合報告書 | local PDF extraction result |
 | `largeMixedPdfFailureReasons` | live/local | `table_failed`、`oversized`、`too_many_chunks` など status と直交する失敗理由 | 統合報告書 | local PDF extraction result |
 

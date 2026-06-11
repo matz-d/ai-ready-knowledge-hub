@@ -259,6 +259,29 @@ describe('P1-D quality gate stable metrics', () => {
     expect(report.summary.coreFieldRecallAverage).toBeNull();
     expect(report.summary.valuePrecisionAverage).toBeNull();
     expect(report.summary.tableCellRecallAverage).toBeNull();
+    expect(report.summary.deterministicZeroChecks).toEqual([
+      {
+        metric: 'falseMaskedTokenCount',
+        expected: 0,
+        actual: 0,
+        passed: true,
+        ciBlockerCandidate: true,
+      },
+      {
+        metric: 'emptyChunkCount',
+        expected: 0,
+        actual: 0,
+        passed: true,
+        ciBlockerCandidate: true,
+      },
+      {
+        metric: 'oversizedChunkCount',
+        expected: 0,
+        actual: 0,
+        passed: true,
+        ciBlockerCandidate: true,
+      },
+    ]);
     expect(report.metricsPolicy.ciBlocker).toBe(false);
   });
 });
