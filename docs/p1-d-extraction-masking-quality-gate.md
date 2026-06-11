@@ -213,3 +213,4 @@ pnpm tsx scripts/runP1dMixedPdfCheck.ts <local-annual-report.pdf>
 - P1-D は品質評価の確立を優先し、巨大 PDF / XLSX / CSV の分割実装は P1-E に送る。
 - scan-pdf の再実行は重複作業ではなく、モデル変更後の drift 確認として扱う。
 - `pnpm eval:p1d:quality` は初期段階では report-only。CI blocker 化は metrics と fixture が安定した後に判断する。
+- 空白だけの DocumentIR block は KnowledgeChunk にしない。empty chunk は extraction result の証跡ではなく Context Package へ渡せないノイズとして扱う。

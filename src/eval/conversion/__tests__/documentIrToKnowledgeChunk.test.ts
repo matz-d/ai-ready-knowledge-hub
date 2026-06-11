@@ -213,6 +213,27 @@ describe('documentIrToKnowledgeChunks', () => {
     expect(chunks[0].text).toBe('kept');
   });
 
+  it('drops whitespace-only renderable blocks', () => {
+    const ir = buildIr([
+      paragraphBlock('p1-b1', 'kept'),
+      paragraphBlock('p1-empty', '   \n\t  '),
+      {
+        blockId: 'p1-h1-empty',
+        kind: 'heading',
+        text: '  ',
+        locator: { pageNumber: 1 },
+      },
+    ]);
+    const chunks = documentIrToKnowledgeChunks({
+      ...defaultOptions(),
+      documentIr: ir,
+    });
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].id).toBe(`${DOC_ID}:p1-b1`);
+    expect(chunks[0].text).toBe('kept');
+  });
+
   it('emits subtype-correct sourceType for every subtype', () => {
     const cases: Array<{
       subtype: DocumentSourceSubtype;
