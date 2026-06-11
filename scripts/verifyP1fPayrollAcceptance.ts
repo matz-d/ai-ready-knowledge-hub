@@ -302,7 +302,7 @@ async function main(): Promise<void> {
   const payload = await loadJobPayload(finalJob);
   const checks = checksFromPayload(payload);
   const allPass = checks.every((c) => c.pass);
-  const bundleFiles = payload.sourceBundle?.files.map((f) => f.name) ?? [];
+  const bundleFiles = payload.sourceBundle?.files.map((f) => f.fileName) ?? [];
 
   console.log('\n--- P1-F payroll acceptance checks ---');
   for (const check of checks) {
