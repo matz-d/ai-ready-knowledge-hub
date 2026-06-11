@@ -648,6 +648,53 @@ describe('runStrategistOrchestrator', () => {
     expect(strategistFlowStub).toHaveBeenCalledTimes(1);
   });
 
+  it('surfaces batch progress exceptions so async jobs can release the lease and retry', async () => {
+    const strategistFlowStub = vi.fn(async ({ chunkInputs }) => ({
+      included: chunkInputs.map(({ chunk: row }: { chunk: KnowledgeChunk }) => ({
+        docId: row.docId,
+        chunkId: row.id,
+        rationale: 'include',
+        confidence: 0.8,
+      })),
+      excluded: [],
+      missing: [],
+      humanReviewQuestions: [],
+    }));
+    const injected = deps({
+      documents: [inventoryDoc()],
+      chunksByDocId: {
+        'doc-1': [
+          chunk({ id: 'chunk-1' }),
+          chunk({ id: 'chunk-2' }),
+        ],
+      },
+      strategistFlow:
+        strategistFlowStub as unknown as RunStrategistOrchestratorDeps['strategistFlow'],
+    });
+    const progressError = new Error('firestore unavailable');
+
+    await expect(
+      runStrategistOrchestrator(
+        {
+          purpose: 'test',
+          coverage: 'full',
+          enforceSyncBudget: false,
+          inputBudget: {
+            ...DEFAULT_STRATEGIST_INPUT_BUDGET,
+            maxChunks: 1,
+          },
+        },
+        {
+          ...injected,
+          onBatchProgress: vi.fn(async () => {
+            throw progressError;
+          }),
+        },
+      ),
+    ).rejects.toThrow('firestore unavailable');
+    expect(strategistFlowStub).toHaveBeenCalledTimes(1);
+  });
+
   describe('docIds strict resolution', () => {
     it('resolves only the requested docIds and ignores the inventory limit list', async () => {
       const target = inventoryDoc({ id: 'doc-target', fileName: 'target.md' });

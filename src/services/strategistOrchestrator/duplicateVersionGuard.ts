@@ -32,18 +32,18 @@ const VERSION_MARKER_PATTERNS: RegExp[] = [
   /\(改訂版?\)/gi,
   /\(新版\)/gi,
   /\(旧版\)/gi,
-  /[_\-\s]*旧版?/gu,
-  /[_\-\s]*新版?/gu,
+  /(?:^|[_\-\s(（])旧版(?=$|[_\-\s)）.])/gu,
+  /(?:^|[_\-\s(（])新版(?=$|[_\-\s)）.])/gu,
   /[_\-\s]v(\d+)/gi,
   /版(\d+)/g,
   /[_\-\s](20\d{2})/g,
   /[_\-\.](old|draft|new|latest|current)/gi,
-  /^旧/u,
-  /^新/u,
 ];
 
-const WEAK_FILENAME_HINT = /旧|old|draft|superseded|廃止|archive/i;
-const STRONG_FILENAME_HINT = /新|latest|current|改訂|rev\d/i;
+const WEAK_FILENAME_HINT =
+  /(?:^|[_\-\s(（])旧版(?=$|[_\-\s)）.])|old|draft|superseded|廃止|archive/iu;
+const STRONG_FILENAME_HINT =
+  /(?:^|[_\-\s(（])新(?:版)?(?:$|[_\-\s)）.])|latest|current|改訂|rev\d/iu;
 
 /**
  * 明らかな version family を filename から推定する。
@@ -74,37 +74,17 @@ export function extractVersionFamilyStem(fileName: string): VersionFamilyStem | 
   return { stem, hasVersionMarker };
 }
 
-function parentForDoc(
-  docId: string,
+function buildParentByDocId(
   joinedByKey: JoinedParentLookup,
-): StrategistOrchestratorParent | null {
+): Map<string, StrategistOrchestratorParent> {
+  const parents = new Map<string, StrategistOrchestratorParent>();
   for (const [key, joined] of joinedByKey) {
     const [joinedDocId] = key.split('\u0000');
-    if (joinedDocId === docId) {
-      return joined.parent;
+    if (joinedDocId && !parents.has(joinedDocId)) {
+      parents.set(joinedDocId, joined.parent);
     }
   }
-  return null;
-}
-
-function obviousVersionFamily(
-  left: StrategistOrchestratorParent,
-  right: StrategistOrchestratorParent,
-): boolean {
-  const leftFamily = extractVersionFamilyStem(left.fileName);
-  const rightFamily = extractVersionFamilyStem(right.fileName);
-  if (!leftFamily || !rightFamily || leftFamily.stem !== rightFamily.stem) {
-    return false;
-  }
-
-  const freshnessDiffers =
-    left.freshness !== right.freshness &&
-    (left.freshness === 'current' ||
-      right.freshness === 'current' ||
-      left.freshness === 'superseded_candidate' ||
-      right.freshness === 'superseded_candidate');
-
-  return leftFamily.hasVersionMarker || rightFamily.hasVersionMarker || freshnessDiffers;
+  return parents;
 }
 
 /**
@@ -153,15 +133,18 @@ export function scoreDocumentVersionStrength(
 }
 
 function buildHumanReviewQuestion(params: {
-  weakerFileName: string;
+  weakerFileNames: string[];
   strongerFileName: string;
   relatedChunkIds: string[];
 }): HumanReviewQuestion {
+  const weakerNames = params.weakerFileNames
+    .map((fileName) => `「${fileName}」`)
+    .join('、');
   return {
     question:
       `関連する複数バージョンの文書が検出されました。` +
-      `「${params.weakerFileName}」の内容をこの目的で使用してよいですか？` +
-      `より新しい候補として「${params.strongerFileName}」も含まれています。`,
+      `${weakerNames}の内容をこの目的で使用してよいですか？` +
+      `最も新しい候補として「${params.strongerFileName}」も含まれています。`,
     relatedChunkIds: params.relatedChunkIds,
   };
 }
@@ -176,9 +159,42 @@ function buildHumanConfirmationRef(ref: IncludedChunkRef): HumanConfirmationRequ
   };
 }
 
+type VersionFamilyMember = {
+  docId: string;
+  refs: IncludedChunkRef[];
+  parent: StrategistOrchestratorParent;
+  family: VersionFamilyStem;
+  score: number;
+};
+
+function hasVersionFreshnessSignal(members: readonly VersionFamilyMember[]): boolean {
+  const freshnessValues = new Set(
+    members.map((member) => member.parent.freshness).filter(Boolean),
+  );
+  if (freshnessValues.size <= 1) {
+    return false;
+  }
+  return (
+    freshnessValues.has('current') ||
+    freshnessValues.has('superseded_candidate')
+  );
+}
+
+function shouldInspectVersionFamily(
+  members: readonly VersionFamilyMember[],
+): boolean {
+  if (members.length < 2) {
+    return false;
+  }
+  return (
+    members.some((member) => member.family.hasVersionMarker) ||
+    hasVersionFreshnessSignal(members)
+  );
+}
+
 /**
  * full-coverage merge 後の included について、明らかな duplicate/version family
- * だけを決定論的に検出し、弱い側を human_confirmation_required へ回す。
+ * だけを決定論的に検出し、family 内の弱い側をまとめて human_confirmation_required へ回す。
  *
  * - stale / superseded と断言する auto-exclude はしない（uncertain conflict は human review）
  * - 新しい chunk / doc id は発明しない
@@ -199,56 +215,60 @@ export function applyDuplicateVersionAmbiguityGuard(
   }
 
   const docIds = Array.from(includedByDoc.keys());
-  const parents = new Map<string, StrategistOrchestratorParent>();
+  const parents = buildParentByDocId(input.joinedByKey);
+  const membersByFamily = new Map<string, VersionFamilyMember[]>();
   for (const docId of docIds) {
-    const parent = parentForDoc(docId, input.joinedByKey);
-    if (parent) {
-      parents.set(docId, parent);
+    const parent = parents.get(docId);
+    const family = parent ? extractVersionFamilyStem(parent.fileName) : null;
+    const refs = includedByDoc.get(docId) ?? [];
+    if (!parent || !family || refs.length === 0) {
+      continue;
     }
+    const existing = membersByFamily.get(family.stem) ?? [];
+    existing.push({
+      docId,
+      refs,
+      parent,
+      family,
+      score: scoreDocumentVersionStrength(parent),
+    });
+    membersByFamily.set(family.stem, existing);
   }
 
   const routedToReview = new Set<string>();
   const humanReviewQuestions: HumanReviewQuestion[] = [];
 
-  for (let leftIndex = 0; leftIndex < docIds.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 1; rightIndex < docIds.length; rightIndex += 1) {
-      const leftDocId = docIds[leftIndex]!;
-      const rightDocId = docIds[rightIndex]!;
-      const leftParent = parents.get(leftDocId);
-      const rightParent = parents.get(rightDocId);
-      if (!leftParent || !rightParent) {
-        continue;
-      }
-      if (!obviousVersionFamily(leftParent, rightParent)) {
-        continue;
-      }
+  for (const members of membersByFamily.values()) {
+    if (!shouldInspectVersionFamily(members)) {
+      continue;
+    }
+    const strongestScore = Math.max(...members.map((member) => member.score));
+    const strongestMembers = members.filter(
+      (member) => member.score === strongestScore,
+    );
+    if (strongestMembers.length !== 1) {
+      continue;
+    }
+    const weakerMembers = members.filter((member) => member.score < strongestScore);
+    if (weakerMembers.length === 0) {
+      continue;
+    }
 
-      const leftScore = scoreDocumentVersionStrength(leftParent);
-      const rightScore = scoreDocumentVersionStrength(rightParent);
-      if (leftScore === rightScore) {
-        continue;
-      }
-
-      const weakerDocId = leftScore < rightScore ? leftDocId : rightDocId;
-      const strongerParent = leftScore < rightScore ? rightParent : leftParent;
-      const weakerParent = leftScore < rightScore ? leftParent : rightParent;
-      const weakerRefs = includedByDoc.get(weakerDocId) ?? [];
-      if (weakerRefs.length === 0) {
-        continue;
-      }
-
-      for (const ref of weakerRefs) {
+    for (const member of weakerMembers) {
+      for (const ref of member.refs) {
         routedToReview.add(`${ref.docId}\u0000${ref.chunkId}`);
       }
-
-      humanReviewQuestions.push(
-        buildHumanReviewQuestion({
-          weakerFileName: weakerParent.fileName,
-          strongerFileName: strongerParent.fileName,
-          relatedChunkIds: weakerRefs.map((ref) => ref.chunkId),
-        }),
-      );
     }
+
+    humanReviewQuestions.push(
+      buildHumanReviewQuestion({
+        weakerFileNames: weakerMembers.map((member) => member.parent.fileName),
+        strongerFileName: strongestMembers[0]!.parent.fileName,
+        relatedChunkIds: weakerMembers.flatMap((member) =>
+          member.refs.map((ref) => ref.chunkId),
+        ),
+      }),
+    );
   }
 
   if (routedToReview.size === 0) {

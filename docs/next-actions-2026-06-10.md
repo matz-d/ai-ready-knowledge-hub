@@ -67,7 +67,7 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
   - excluded / restricted / pending masking は source file として出さない。
 
 **候補実装**:
-- `fflate` などの client zip library を使う。
+- 公開3日以内の依存追加を避けるため、client zip は STORE method の最小 writer を自前実装する。
 - 依存追加時は `pnpm` と `pnpm-workspace.yaml` の `minimumReleaseAge: 4320` を守る。
 - 既存 API result は `markdown` だけなので、UI zip 化には次のどちらかが必要:
   - **P1-A の推奨**: API result に source bundle payload を追加する。

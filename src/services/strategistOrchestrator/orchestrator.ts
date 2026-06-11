@@ -167,7 +167,10 @@ export type RunStrategistOrchestratorDeps = {
   listChunks?: (documentId: string) => Promise<KnowledgeChunk[]>;
   strategistFlow?: typeof strategistFlow;
   safetyGate?: typeof runSafetyGate;
-  /** full coverage バッチ進捗（job progress 用。失敗しても job を落とさない） */
+  /**
+   * full coverage バッチ進捗（async job では lease renewal も兼ねる）。
+   * false は stale attempt / lease loss として中断し、例外は transient failure として呼び出し側へ返す。
+   */
   onBatchProgress?: (progress: {
     batchesCompleted: number;
     batchesTotal: number;
@@ -458,9 +461,10 @@ async function runFullCoverageStrategist(params: {
           throw progressError;
         }
         console.warn(
-          '[strategistOrchestrator] onBatchProgress failed (ignored)',
+          '[strategistOrchestrator] onBatchProgress failed',
           progressError,
         );
+        throw progressError;
       }
     }
   }

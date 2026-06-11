@@ -37,8 +37,8 @@ P1-F Stage 2 の本体と主要 hardening は実装済み。
 **Chosen approach**（LLM reduce / batch 前 grouping ではない）:
 - full-coverage merge 後に、**決定論的 duplicate/version ambiguity guard**（`duplicateVersionGuard.ts`）を適用する。
 - filename / title / year / version / freshness / `updatedAt` は **弱いヒント** のみ。authoritative truth として auto-exclude しない。
-- 明らかな version family が推定でき、かつ強弱に差がある場合のみ、**弱い側の既存 included 参照**を `human_confirmation_required` に降格し、確認質問を追加する（stale / superseded と断言する auto-exclude はしない）。
-- 推定できない・同点の場合は no-op。chunk id / doc id は発明しない。
+- 明らかな version family が推定でき、かつ **family 内で最強スコアが 1 件に定まる**場合のみ、弱い側の既存 included 参照を `human_confirmation_required` に降格し、**family あたり 1 件**の確認質問を追加する（stale / superseded と断言する auto-exclude はしない）。
+- 推定できない場合、または **family 内で最強スコアが同点**（正本が一意に決まらない）場合は no-op。旧 pairwise 実装より保守的だが、「除外は断言・送信は予測」に整合する。chunk id / doc id は発明しない。
 
 **Product principle**: exclusion は断言、送信は予測。不確実な stale/version conflict は human review。
 
@@ -52,5 +52,5 @@ P1-F Stage 2 の本体と主要 hardening は実装済み。
 
 - Cloud Tasks `dispatchDeadline` と Cloud Run timeout が multi-batch job に耐えるか live config を確認する。
 - Gemini quota / latency 監視を `docs/setup-gcp.md` または運用 docs に追記する。
-- 給与計算シナリオをデブサーバーで再実行し、truncation 警告ゼロと bundle 内容を evidence 化する。
+- [x] 給与計算シナリオをデブサーバーで再実行し、truncation 警告ゼロと bundle 内容を evidence 化する（2026-06-10、`scripts/verifyP1fPayrollAcceptance.ts`、job `b77d9982-6323-4a70-98d3-975a80a307b2`、evidence: `docs/phase-4-ux-evidence/p1f-payroll-acceptance-2026-06-10.md`）。
 - Stage 3 として `purposeTerms` の CJK bigram 対応を検討する。

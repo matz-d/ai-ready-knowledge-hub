@@ -185,7 +185,7 @@ partitionStrategistBatches(candidates, purpose, config) → { batches: BudgetCan
 
 #### 2-7. Done 条件
 
-- 今回の給与計算シナリオ（30文書）をデブサーバーで再実行し、**truncation 警告が出ず**、`給与計算チェックリスト.md` を含む妥当な included が bundle に入ること（手動 evidence を `docs/phase-4-ux-evidence/` へ）
+- [x] 今回の給与計算シナリオ（30文書）をデブサーバーで再実行し、**truncation 警告が出ず**、`給与計算チェックリスト.md` を含む妥当な included が bundle に入ること（evidence: `docs/phase-4-ux-evidence/p1f-payroll-acceptance-2026-06-10.md`、job `b77d9982-6323-4a70-98d3-975a80a307b2`、65-file bundle、11 batches、~596s）
 - 同期経路（狭い docIds）の挙動が不変であること
 
 ### Stage 3: purposeTerms 日本語対応（後続、半日）
