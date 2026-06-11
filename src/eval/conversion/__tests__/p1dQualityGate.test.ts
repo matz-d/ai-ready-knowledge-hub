@@ -42,6 +42,7 @@ describe('P1-D quality gate stable metrics', () => {
     const expected = P1dExpectedFixtureSchema.parse({
       documentId: 'synthetic-form',
       expectedFields: ['Synthetic Form', 'Salary'],
+      expectedFieldTiers: { 'Synthetic Form': 'core' },
       expectedValues: [{ field: 'Salary', expectedValue: 'JPY 280,000' }],
       expectedTableCells: [
         { rowLabel: 'Salary', expectedValue: 'JPY 280,000' },
@@ -70,6 +71,7 @@ describe('P1-D quality gate stable metrics', () => {
     });
 
     expect(result.metrics.fieldRecall.rate).toBe(1);
+    expect(result.metrics.coreFieldRecall.rate).toBe(1);
     expect(result.metrics.valuePrecision.rate).toBe(1);
     expect(result.metrics.tableCellRecall.rate).toBe(1);
     expect(result.metrics.locatorCoverage.rate).toBe(1);
@@ -148,6 +150,52 @@ describe('P1-D quality gate stable metrics', () => {
     ]);
   });
 
+  it('keeps full field recall and core field recall as separate signals', () => {
+    const expected = P1dExpectedFixtureSchema.parse({
+      documentId: 'tiered-fields',
+      expectedFields: ['Synthetic Form', 'Missing Core Field', 'Salary'],
+      expectedFieldTiers: {
+        'Synthetic Form': 'core',
+        'Missing Core Field': 'core',
+      },
+    });
+
+    const result = evaluateP1dFixture({
+      documentId: 'tiered-fields',
+      fixturePath: 'sample-data/document-conversion/official-doc-pdf/tiered-fields.document-ir.json',
+      sourceSubtype: 'official-doc-pdf',
+      isPublicDocument: true,
+      documentIr: testDocumentIr(),
+      expected,
+      chunks: [
+        {
+          text: 'Synthetic Form',
+          locator: { kind: 'pdf', page: 1 },
+          structureType: 'paragraph',
+        },
+        {
+          text: 'Salary JPY 280,000',
+          locator: { kind: 'pdf', page: 1 },
+          structureType: 'table',
+        },
+      ],
+    });
+
+    expect(expected.expectedFields).toEqual([
+      'Synthetic Form',
+      'Missing Core Field',
+      'Salary',
+    ]);
+    expect(expected.expectedFieldTiers).toEqual({
+      'Synthetic Form': 'core',
+      'Missing Core Field': 'core',
+    });
+    expect(result.metrics.fieldRecall.expectedCount).toBe(3);
+    expect(result.metrics.fieldRecall.rate).toBe(2 / 3);
+    expect(result.metrics.coreFieldRecall.expectedCount).toBe(2);
+    expect(result.metrics.coreFieldRecall.rate).toBe(0.5);
+  });
+
   it('keeps unmeasured structured metrics explicit when expected sidecar is absent', () => {
     const result = evaluateP1dFixture({
       documentId: 'no-expected',
@@ -160,6 +208,7 @@ describe('P1-D quality gate stable metrics', () => {
 
     expect(result.hasExpectedSidecar).toBe(false);
     expect(result.metrics.fieldRecall.measured).toBe(false);
+    expect(result.metrics.coreFieldRecall.rate).toBeNull();
     expect(result.metrics.fieldRecall.rate).toBeNull();
     expect(result.metrics.valuePrecision.rate).toBeNull();
     expect(result.metrics.tableCellRecall.rate).toBeNull();
@@ -207,6 +256,7 @@ describe('P1-D quality gate stable metrics', () => {
     expect(report.summary.evaluatedFixtureCount).toBe(1);
     expect(report.summary.skippedFixtureCount).toBe(1);
     expect(report.summary.fieldRecallAverage).toBe(1);
+    expect(report.summary.coreFieldRecallAverage).toBeNull();
     expect(report.summary.valuePrecisionAverage).toBeNull();
     expect(report.summary.tableCellRecallAverage).toBeNull();
     expect(report.metricsPolicy.ciBlocker).toBe(false);

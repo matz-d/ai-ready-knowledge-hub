@@ -13,6 +13,7 @@ Implemented:
 - `falseMaskedTokenCount` is scoped to public-document fixtures only; non-public synthetic PII fixtures contribute to neutral `redactionMarkerCount`.
 - Locator coverage now reports `notFound` and `unlocated` separately, so missing content and missing evidence locators are not conflated.
 - Structured `expectedValues` / `expectedTableCells` are now present for the first P1-D public blank-form sidecars.
+- `expectedFieldTiers` now separates `core` field recall from broad `extended` recall without breaking the existing `expectedFields: string[]` golden sidecar contract.
 - `mhlw-labor-conditions-notice-blank-scan` now has committed P1-D DocumentIR and expected sidecars.
 - scan-pdf DocumentIR sidecars are raw OCR baselines. They intentionally do not hand-add `tableIndex` / `rowIndex` locators that the scan-pdf pipeline does not emit.
 - `tmp/` and `local-data/` are ignored; detailed generated JSON reports stay local, while summary evidence is recorded in this doc.
@@ -36,7 +37,7 @@ Latest verification:
 Remaining P1-D gaps before treating the quality gate as mature:
 
 - Continue structured `expectedValues` and `expectedTableCells` coverage across the remaining committed sidecars, choosing values from source-document intent rather than only values already present in the sidecar.
-- Add tiered expected semantics (`core` / `extended`) so future blocker candidates can focus on core fields while the full recall signal remains visible.
+- Continue tiering expected fields across the remaining committed sidecars so future blocker candidates can focus on core fields while the full recall signal remains visible.
 - Keep public curator over-restriction live-only via the existing curator classification eval; do not create stable curator output sidecars.
 - Consider an early deterministic blocker tier for zero-variance metrics such as public `falseMaskedTokenCount`, `oversizedChunkCount`, and `emptyChunkCount`.
 - Add live drift scripts only after stable fixture semantics are stronger.
@@ -57,7 +58,9 @@ Result:
 - reportOnly: `true`
 - evaluatedFixtureCount: `9`
 - skippedFixtureCount: `1`
+- schemaVersion: `2`
 - fieldRecallAverage: `0.5891289016289016`
+- coreFieldRecallAverage: `0.8333333333333334`
 - valuePrecisionAverage: `1`
 - tableCellRecallAverage: `1`
 - locatorCoverageAverage: `0.6051869176869177`
@@ -78,6 +81,7 @@ Notes:
 - The low official-doc field recall is an intentional visibility gap from the current committed sidecars and should guide P1-D fixture/expected refinement.
 - `falseMaskedTokenCount` is measured only for fixtures marked as public documents; non-public synthetic PII fixtures contribute to neutral `redactionMarkerCount` instead.
 - `locatorCoverageAverage` is now independent from `fieldRecallAverage` because structured value/table expectations add locator-bearing evidence checks beyond field recall.
+- `coreFieldRecallAverage` is separated from full `fieldRecallAverage`; initial core coverage is measured for the public blank-form fixtures while un-tiered fixtures remain `measured: false` for core recall.
 - `valuePrecisionAverage` and `tableCellRecallAverage` are measured from the first structured sidecars and should be broadened across the remaining fixtures before blocker thresholds are introduced.
 - The scan-pdf sidecars preserve raw OCR behavior: table blocks can exist (`kind: "table"`) without table row locators. That absence is a real P1-E / drift-design signal, not something to patch into the sidecar by hand.
 

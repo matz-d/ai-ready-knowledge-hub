@@ -5,11 +5,14 @@ import { evalContextPackageReadiness } from './heuristic/evalContextPackageReadi
 import { evalCoverage } from './heuristic/evalCoverage';
 import { evalSemanticRetention, normalizeForSubstringMatch } from './golden';
 
-export const P1D_QUALITY_REPORT_SCHEMA_VERSION = 1 as const;
+export const P1D_QUALITY_REPORT_SCHEMA_VERSION = 2 as const;
+
+const P1dExpectedTierSchema = z.enum(['core', 'extended']);
 
 const P1dExpectedValueSchema = z.object({
   field: z.string().min(1),
   expectedValue: z.string().min(1),
+  tier: P1dExpectedTierSchema.optional().default('extended'),
 });
 
 const P1dExpectedTableCellSchema = z.object({
@@ -17,11 +20,16 @@ const P1dExpectedTableCellSchema = z.object({
   rowLabel: z.string().min(1).optional(),
   columnLabel: z.string().min(1).optional(),
   expectedValue: z.string().min(1),
+  tier: P1dExpectedTierSchema.optional().default('extended'),
 });
 
 export const P1dExpectedFixtureSchema = z.object({
   documentId: z.string().min(1),
-  expectedFields: z.array(z.string()).optional().default([]),
+  expectedFields: z.array(z.string().min(1)).optional().default([]),
+  expectedFieldTiers: z
+    .record(z.string().min(1), P1dExpectedTierSchema)
+    .optional()
+    .default({}),
   expectedValues: z.array(P1dExpectedValueSchema).optional().default([]),
   expectedTableCells: z
     .array(P1dExpectedTableCellSchema)
@@ -31,6 +39,11 @@ export const P1dExpectedFixtureSchema = z.object({
 });
 
 export type P1dExpectedFixture = z.infer<typeof P1dExpectedFixtureSchema>;
+export type P1dExpectedTier = z.infer<typeof P1dExpectedTierSchema>;
+export type P1dExpectedField = {
+  field: string;
+  tier: P1dExpectedTier;
+};
 export type P1dExpectedValue = z.infer<typeof P1dExpectedValueSchema>;
 export type P1dExpectedTableCell = z.infer<
   typeof P1dExpectedTableCellSchema
@@ -91,6 +104,7 @@ export type P1dFixtureQualityResult = {
   hasExpectedSidecar: boolean;
   metrics: {
     fieldRecall: P1dMeasuredRatio;
+    coreFieldRecall: P1dMeasuredRatio;
     valuePrecision: P1dMeasuredRatio;
     tableCellRecall: P1dMeasuredRatio;
     locatorCoverage: P1dLocatorCoverage;
@@ -121,6 +135,7 @@ export type P1dQualityReport = {
     evaluatedFixtureCount: number;
     skippedFixtureCount: number;
     fieldRecallAverage: number | null;
+    coreFieldRecallAverage: number | null;
     valuePrecisionAverage: number | null;
     tableCellRecallAverage: number | null;
     locatorCoverageAverage: number | null;
@@ -203,6 +218,37 @@ function evaluateExpectedValues(
   );
 }
 
+function expectedFieldItems(expected: P1dExpectedFixture): P1dExpectedField[] {
+  return expected.expectedFields.map((field) => ({
+    field,
+    tier: expected.expectedFieldTiers[field] ?? 'extended',
+  }));
+}
+
+function expectedFieldTextsByTier(
+  expected: P1dExpectedFixture,
+  tier: P1dExpectedTier
+): string[] {
+  return expectedFieldItems(expected)
+    .filter((field) => field.tier === tier)
+    .map((field) => field.field);
+}
+
+function evaluateFieldRecall(
+  chunks: readonly P1dEvalChunk[],
+  expectedFields: readonly string[]
+): P1dMeasuredRatio {
+  const { semanticRetention } = evalSemanticRetention({
+    chunks,
+    expectedFields,
+  });
+  return measuredRatio(
+    expectedFields.length,
+    expectedFields.length - semanticRetention.missingExpectedFields.length,
+    semanticRetention.missingExpectedFields
+  );
+}
+
 function evaluateExpectedTableCells(
   chunks: readonly MatchableChunk[],
   expectedTableCells: readonly P1dExpectedTableCell[]
@@ -247,10 +293,10 @@ function evaluateLocatorCoverage(
   expected: P1dExpectedFixture
 ): P1dLocatorCoverage {
   const expectedItems: LocatorExpectedItem[] = [
-    ...expected.expectedFields.map((field) => ({
-      label: field,
+    ...expectedFieldItems(expected).map((field) => ({
+      label: field.field,
       findChunk: (candidateChunks: readonly MatchableChunk[]) => {
-        const normalizedField = normalizeForSubstringMatch(field);
+        const normalizedField = normalizeForSubstringMatch(field.field);
         return findBestMatchingChunk(candidateChunks, (chunk) =>
           chunk.normalizedText.includes(normalizedField)
         );
@@ -377,15 +423,13 @@ export function evaluateP1dFixture<TChunk extends P1dEvalChunk>(
       expectedFields: [],
     });
 
-  const { semanticRetention } = evalSemanticRetention({
-    chunks: input.chunks,
-    expectedFields: expectedForMetrics.expectedFields,
-  });
-  const fieldRecall = measuredRatio(
-    expectedForMetrics.expectedFields.length,
-    expectedForMetrics.expectedFields.length -
-      semanticRetention.missingExpectedFields.length,
-    semanticRetention.missingExpectedFields
+  const fieldRecall = evaluateFieldRecall(
+    input.chunks,
+    expectedForMetrics.expectedFields
+  );
+  const coreFieldRecall = evaluateFieldRecall(
+    input.chunks,
+    expectedFieldTextsByTier(expectedForMetrics, 'core')
   );
 
   const valuePrecision = evaluateExpectedValues(
@@ -417,6 +461,11 @@ export function evaluateP1dFixture<TChunk extends P1dEvalChunk>(
   if (expectedForMetrics.expectedValues.length === 0) {
     notes.push('expectedValues not defined; valuePrecision not measured');
   }
+  if (
+    expectedFieldTextsByTier(expectedForMetrics, 'core').length === 0
+  ) {
+    notes.push('core expectedFields not defined; coreFieldRecall not measured');
+  }
   if (expectedForMetrics.expectedTableCells.length === 0) {
     notes.push('expectedTableCells not defined; tableCellRecall not measured');
   }
@@ -429,6 +478,7 @@ export function evaluateP1dFixture<TChunk extends P1dEvalChunk>(
     hasExpectedSidecar: expected !== undefined,
     metrics: {
       fieldRecall,
+      coreFieldRecall,
       valuePrecision,
       tableCellRecall,
       locatorCoverage,
@@ -469,6 +519,10 @@ export function buildP1dQualityReport(
       fieldRecallAverage: averageMeasuredRate(
         fixtures,
         (fixture) => fixture.metrics.fieldRecall
+      ),
+      coreFieldRecallAverage: averageMeasuredRate(
+        fixtures,
+        (fixture) => fixture.metrics.coreFieldRecall
       ),
       valuePrecisionAverage: averageMeasuredRate(
         fixtures,
@@ -515,8 +569,8 @@ export function buildP1dQualityReport(
     fixtures: [...fixtures],
     skippedFixtures: [...skippedFixtures],
     deferredMetrics: [
-      'publicDirectRate requires curator sidecars or live curator execution',
-      'overRestrictedCount requires curator sidecars or live curator execution',
+      'publicDirectRate belongs to live curator classification eval',
+      'overRestrictedCount belongs to live curator classification eval',
       'Cloud DLP false-positive redaction drift belongs to live drift check',
       'largeMixedPdfExtractionStatus belongs to local/live mixed PDF check',
       'largeMixedPdfFailureReasons belongs to local/live mixed PDF check',

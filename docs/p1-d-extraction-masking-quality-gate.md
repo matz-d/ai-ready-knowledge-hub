@@ -126,6 +126,7 @@ tmp/p1d-quality-report.json
 | `falseMaskedTokenCount` | stable if masker sidecar exists / otherwise live | 公開文書で不要に `[REDACTED:*]` された token 数 | 公的空欄様式、公開ガイド | Masker/DLP output sidecar または live DLP run |
 | `overRestrictedCount` | live | 公開文書が `Confidential` / `Restricted` または non-direct に寄った件数 | Curator / candidate selection | live curator run |
 | `fieldRecall` | stable | 期待 key field が抽出結果に存在する割合 | 帳票、規程、統合報告書 | `expectedFields` / structured expected |
+| `coreFieldRecall` | stable | `expectedFieldTiers` で `core` 指定された重要 field の recall。将来の blocker 候補 | 帳票、公開様式 | `expectedFields` + `expectedFieldTiers` |
 | `valuePrecision` | stable | key に対応する value が正しい粒度で保持された割合 | 帳票、表、財務数値 | structured expected |
 | `tableCellRecall` | stable | 期待 table cell / row / column 関係が保持された割合 | 源泉徴収票、確定申告書、統合報告書 | structured expected |
 | `locatorCoverage` | stable | field / value / table cell に page / row / sheet / slide locator が付く割合 | 全 subtype | DocumentIR / KnowledgeChunk locator |
