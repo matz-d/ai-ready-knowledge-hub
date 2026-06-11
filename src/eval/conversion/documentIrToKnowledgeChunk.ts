@@ -312,7 +312,7 @@ function finaliseChunk(
 }
 
 /**
- * Adapt every renderable block on every page into one or more
+ * Adapt every non-empty renderable block on every page into one or more
  * {@link KnowledgeChunk}s.
  *
  * Returned chunks satisfy {@link KnowledgeChunkSchema} and, given a matching
@@ -346,6 +346,7 @@ export function documentIrToKnowledgeChunks(
     for (const block of page.blocks) {
       const structureType = documentIrBlockToStructureType(block.kind);
       if (structureType === null) continue;
+      if (block.text.trim().length === 0) continue;
 
       const baseLocator = buildLocator(
         block,

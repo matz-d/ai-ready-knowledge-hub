@@ -1,0 +1,58 @@
+{
+  "documentId": "nta-withholding-form-blank-scan",
+  "expectedFields": [
+    "令和 年分 給与所得の源泉徴収票",
+    "支払を受ける者",
+    "住所又は居所",
+    "個人番号",
+    "氏名",
+    "種別",
+    "支払金額",
+    "給与所得控除後の金額",
+    "所得控除の額の合計額",
+    "源泉徴収税額",
+    "控除対象扶養親族等",
+    "生命保険料の金額の内訳",
+    "住宅借入金等特別控除の額の内訳",
+    "支払者"
+  ],
+  "expectedFieldTiers": {
+    "令和 年分 給与所得の源泉徴収票": "core",
+    "支払を受ける者": "core",
+    "支払金額": "core",
+    "源泉徴収税額": "core",
+    "支払者": "core"
+  },
+  "expectedValues": [
+    {
+      "field": "令和 年分",
+      "expectedValue": "給与所得の源泉徴収票"
+    },
+    {
+      "field": "支払を受ける者",
+      "expectedValue": "氏名"
+    },
+    {
+      "field": "支払者",
+      "expectedValue": "氏名又は名称"
+    }
+  ],
+  "expectedTableCells": [
+    {
+      "tableId": "p1-ocr3",
+      "columnLabel": "支払金額",
+      "expectedValue": "円"
+    },
+    {
+      "tableId": "p1-ocr3",
+      "columnLabel": "給与所得控除後の金額",
+      "expectedValue": "円"
+    },
+    {
+      "tableId": "p1-ocr3",
+      "columnLabel": "源泉徴収税額",
+      "expectedValue": "円"
+    }
+  ],
+  "notes": "Source and license follow sample-data/document-conversion/README.md: NTA public blank withholding slip scan, no filled-in PII. Structured expectations target stable OCR labels and blank-form currency-unit cells only."
+}

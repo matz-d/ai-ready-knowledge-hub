@@ -1,0 +1,80 @@
+{
+  "documentId": "mhlw-labor-conditions-notice-blank-scan",
+  "expectedFields": [
+    "(一般労働者用;常用、有期雇用型)",
+    "労働条件通知書",
+    "事業場名称・所在地",
+    "使用者職氏名",
+    "契約期間",
+    "期間の定めなし、期間の定めあり",
+    "契約の更新の有無",
+    "契約の更新は次により判断する。",
+    "更新上限の有無",
+    "無期転換申込権が発生しない期間",
+    "就業の場所",
+    "従事すべき業務の内容",
+    "始業、終業の時刻",
+    "休憩時間",
+    "所定時間外労働の有無",
+    "休日",
+    "休暇",
+    "年次有給休暇",
+    "時間単位年休"
+  ],
+  "expectedFieldTiers": {
+    "労働条件通知書": "core",
+    "契約期間": "core",
+    "期間の定めなし、期間の定めあり": "core",
+    "就業の場所": "core",
+    "従事すべき業務の内容": "core",
+    "休憩時間": "core",
+    "休日": "core",
+    "休暇": "core"
+  },
+  "expectedValues": [
+    {
+      "field": "契約期間",
+      "expectedValue": "期間の定めなし"
+    },
+    {
+      "field": "就業の場所",
+      "expectedValue": "雇入れ直後"
+    },
+    {
+      "field": "休憩時間",
+      "expectedValue": "分"
+    },
+    {
+      "field": "時間単位年休",
+      "expectedValue": "有・無"
+    }
+  ],
+  "expectedTableCells": [
+    {
+      "tableId": "p1-ocr6",
+      "rowLabel": "契約期間",
+      "expectedValue": "期間の定めなし"
+    },
+    {
+      "tableId": "p1-ocr7",
+      "rowLabel": "就業の場所",
+      "expectedValue": "雇入れ直後"
+    },
+    {
+      "tableId": "p1-ocr9",
+      "rowLabel": "休憩時間",
+      "expectedValue": "分"
+    },
+    {
+      "tableId": "p1-ocr10",
+      "rowLabel": "休日",
+      "expectedValue": "国民の祝日"
+    },
+    {
+      "tableId": "p1-ocr11",
+      "rowLabel": "休暇",
+      "expectedValue": "時間単位年休"
+    }
+  ],
+  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW public blank labor conditions notice scan, no PII. DocumentIR is the committed stable OCR baseline copied from poc/document-conversion/output/scan-pdf."
+}
