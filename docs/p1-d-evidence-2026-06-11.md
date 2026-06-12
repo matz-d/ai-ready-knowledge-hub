@@ -36,7 +36,7 @@ pnpm eval:p1d:mixed-pdf -- local-data/annual-report-doc-2025-viewing-ja.pdf --ou
 Latest verification:
 
 - `pnpm typecheck`: green.
-- `pnpm test`: `80` test files / `861` tests passed.
+- `pnpm test`: `82` test files / `874` tests passed（2026-06-12 時点）。
 - `pnpm build`: green.
 - `pnpm tsx scripts/runP1dQualityGate.ts --ci`: exit `0` with all deterministic zero checks passing.
 - `pnpm eval:p1d:quality -- --out tmp/p1d-quality-report.json` on 2026-06-12: `9` evaluated / `1` skipped, schemaVersion `4`, all deterministic zero checks passing.

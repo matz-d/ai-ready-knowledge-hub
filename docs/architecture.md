@@ -93,7 +93,7 @@ Masker の `recommendedSensitivity === 'Restricted'` を文書メタデータへ
 - `src/agents/masker/upgrade.ts` … `applyMaskerUpgrade` / `isBlockedForAi` / `needsMaskerEvaluation` 等
 - `src/lib/inventory.ts` … W1 `inventory.snapshot.json` を **読み取り時** に `InventoryDocument` へ変換（JSON 改変なし）
 - `src/lib/contextPackageInput.ts` … `ContextPackageExportInput` 組み立て（Restricted・未マスク機密の二重防止）
-- `src/agents/strategist/types.ts` … 将来の Strategist 戻り値の型スタブ
+- `src/agents/strategist/schema.ts` … Strategist 入出力の Zod schema と型
 - 検証: `npm run context:demo`（CLI）、トップ画面の W1 適用デモ（Firestore ライブ同期ではない）
 
 ### Phase 4-UX: Purpose-Driven Candidate Selection（2026-06-03 追加）

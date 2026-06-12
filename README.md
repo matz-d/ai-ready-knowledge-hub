@@ -16,9 +16,9 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 
 ---
 
-## 現在のステータス (2026-06-10)
+## 現在のステータス (2026-06-12)
 
-**フェーズ**: Phase 4-UX MVP **実装済み**。purpose 入力から候補文書を metadata-only で提示し、include / exclude / needs_review、Safety Review、生成前 Preview を経て Context Package を生成する導線まで到達した。Phase 3-H-3 の PDF 3 subtype 本線統合、Masker PDF 本線、Context Package 非同期 job 化、Production Hardening（#15 job GC / stuck-running recovery、#16 large result GCS offload）の production smoke と issue close も完了済み。NotebookLM delivery E2E では単一 `.md` より source 分割 bundle が正しい渡し方だと実証済み。次は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) の順に、Phase 4-UX ブラウザ手動通し、NotebookLM 用 bundle zip UI、Extraction & Masking Quality Gate、大きなファイルの事前分割へ進む。
+**フェーズ**: Phase 4-UX MVP、NotebookLM source bundle（P1-A/B）、P1-F async full-coverage strategist、P1-C デモ docs 更新、**P1-D Extraction & Masking Quality Gate 成熟化**まで完了。stable eval（`pnpm eval:p1d:quality --ci`）は CI blocker、live masker drift check（`pnpm eval:p1d:masker-drift`）も合格証跡あり。次は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) の **P1-E**（大ファイル preflight / table fallback / chunk locator enrichment）へ進む。
 
 ### 完了済み
 
@@ -54,8 +54,11 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 - **Phase 3-H-3 subtype 3 / M6 (scan-pdf 本線)**: `pdf-conversion-subtype-3` flag（**`m-grow-ai.com` のみ**）、`scanPdfDocumentExtractor`（Gemini OCR、timeout 60s / 入力 5 MiB、pre-flight fail-closed）、`unmaskablePiiFindings` 記録、scan-pdf golden sidecar、CI health gate 必須化、live smoke 証跡 `docs/phase-3-h-3-scan-pdf-live-smoke.md`（2026-05-21）。DoD 正本は `docs/phase-3-h-3-direction.md` §8.3。
 - **Phase 4-UX MVP (purpose-driven candidate selection)**: `src/services/candidateSelection/` の deterministic ranking / classification、`POST /api/context-package/candidates`、候補選択 UI、Safety Review、Pre-generation Preview を実装。候補 API は metadata-only の助言レイヤで、本文・chunk・GCS・`aiSafeContent`・LLM を読まない。
 - **Context Package Production Hardening**: async job の cancel / stale-running sweeper / terminal TTL と、large result の GCS offload を実装し、production smoke 完了。GitHub issue #15/#16 は close 済み。
+- **P1-A/B NotebookLM source bundle**: API result に `sourceBundle.files`、`ContextPackageForm` に zip download 導線。delivery E2E 5/5 PASS。
+- **P1-F async full-coverage strategist**: batched strategist で truncation ゼロ。review 残タスクは [docs/p1-f-review-follow-up-tasks.md](docs/p1-f-review-follow-up-tasks.md)。
+- **P1-D Extraction & Masking Quality Gate**: schema v4、deterministic zero checks（CI blocker）、live Cloud DLP drift check。証跡は [docs/p1-d-evidence-2026-06-11.md](docs/p1-d-evidence-2026-06-11.md)。
 
-### コードの位置 (Phase 4-UX / Production Hardening 時点)
+### コードの位置 (P1-D 完了時点)
 
 ```
 src/
@@ -66,7 +69,6 @@ src/
     masker/{maskingSchema,simpleMasker,cloudDlpMasker,provider,pipelineSchema,pipelineFlow,upgrade,maskKnowledgeChunk}.ts
     strategist/{schema,prompt,flow}.ts    # chunk 選別 LLM（Vertex AI + Genkit）
     strategist/safetyGate.ts             # 決定論的 PII フィルタ（LLM を呼ばない）
-    strategist/types.ts
   services/
     candidateSelection/
       selectCandidates.ts                # purpose → candidate docs facade（metadata-only）
@@ -80,7 +82,8 @@ src/
   lib/
     exportContextPackage.ts              # A9 Markdown export 純関数
     storage.ts / firestore.ts / documents.ts
-    uploadOrchestrator.ts                # GCS / Firestore / Curator / Masker の副作用順序
+    uploadOrchestrator/                  # GCS / Firestore / Curator / Masker の副作用順序（分割済み）
+    conversion/documentIrToKnowledgeChunk.ts  # DocumentIR → KnowledgeChunk 本線変換
     importedSnapshotOrchestrator.ts      # Sheets / Docs import の副作用順序
     inventory.ts / inventoryFirestoreAdapter.ts
     contextPackageInput.ts / contextPackageFirestoreAdapter.ts
@@ -273,10 +276,7 @@ sample-data/
 
 直近の作業順は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) を正とする。背景となる未決論点・Ingest 起票の詳細は [docs/open-questions.md](docs/open-questions.md)（次フェーズ表 + §Ingest 拡張）。
 
-- **P0 Phase 4-UX 手動通し**: purpose 入力 → candidates API → Safety Review → Preview acknowledgement → async Context Package 生成 → result → copy/download をブラウザで確認・記録する。
-- **P1 NotebookLM 用 source bundle zip UI**: 単一 `.md` は維持しつつ、`exportContextPackageSourceBundle()` を UI の secondary export に載せる。
-- **P1 Extraction & Masking Quality Gate**: 公開文書 over-mask、日本式公的文書の構造化データ精度（field / value / table / locator）、大きめ/混在資料、下流 QA の最小 eval を切る。
-- **P1 大きなファイルの事前分割**: XLSX / CSV / PDF の near-limit・巨大 chunk・token limit failure に対し、sheet / row group / page group 単位の分割方針を実装する。
+- **P1-E 大きなファイルの事前分割 / table fallback / locator enrichment**: [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) の T1 preflight 計測から着手。P1-D handoff（mixed PDF `table_failed`、scan invoice table loss、label/value 分断）を入力にする。
 - **P2 Phase 3-F**: 動画シナリオを source bundle 前提へ更新し、Dashboard refresh 後の画面に合わせる。
 - **P2 運用補強**: enqueue 二重 submit の挙動確認と簡易 SLO 1枚。
 - **P3 cleanup / Ingest 判断**: 不要 CSS 削除、Drive folder bulk / local directory batch / standalone images の product 判断。
