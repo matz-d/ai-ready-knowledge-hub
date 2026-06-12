@@ -35,6 +35,7 @@
     "curator:ui": "genkit start -- tsx scripts/runCurator.ts",
     "eval:curator:classification": "tsx scripts/runCuratorClassificationEval.ts",
     "eval:p1d:quality": "tsx scripts/runP1dQualityGate.ts",
+    "eval:p1d:masker-drift": "tsx scripts/runP1dMaskerDriftCheck.ts",
     "eval:p1d:mixed-pdf": "tsx scripts/runP1dMixedPdfCheck.ts",
     "knip": "knip"
   },

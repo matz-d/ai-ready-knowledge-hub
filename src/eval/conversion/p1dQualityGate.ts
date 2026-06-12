@@ -5,7 +5,7 @@ import { evalContextPackageReadiness } from './heuristic/evalContextPackageReadi
 import { evalCoverage } from './heuristic/evalCoverage';
 import { evalSemanticRetention, normalizeForSubstringMatch } from './golden';
 
-export const P1D_QUALITY_REPORT_SCHEMA_VERSION = 3 as const;
+export const P1D_QUALITY_REPORT_SCHEMA_VERSION = 4 as const;
 
 const P1dExpectedTierSchema = z.enum(['core', 'extended']);
 
@@ -23,6 +23,13 @@ const P1dExpectedTableCellSchema = z.object({
   tier: P1dExpectedTierSchema.optional().default('extended'),
 });
 
+const P1D_NOT_APPLICABLE = 'not_applicable' as const;
+
+const P1dExpectedTableCellsSchema = z.union([
+  z.literal(P1D_NOT_APPLICABLE),
+  z.array(P1dExpectedTableCellSchema),
+]);
+
 export const P1dExpectedFixtureSchema = z
   .object({
     documentId: z.string().min(1),
@@ -32,10 +39,7 @@ export const P1dExpectedFixtureSchema = z
       .optional()
       .default({}),
     expectedValues: z.array(P1dExpectedValueSchema).optional().default([]),
-    expectedTableCells: z
-      .array(P1dExpectedTableCellSchema)
-      .optional()
-      .default([]),
+    expectedTableCells: P1dExpectedTableCellsSchema.optional(),
     notes: z.string().optional(),
   })
   .superRefine((expected, ctx) => {
@@ -49,6 +53,17 @@ export const P1dExpectedFixtureSchema = z
         });
       }
     }
+    expected.expectedValues.forEach((value, index) => {
+      const normalizedValue = normalizeForSubstringMatch(value.expectedValue);
+      if (normalizedValue.length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['expectedValues', index, 'expectedValue'],
+          message:
+            'expectedValues[].expectedValue must normalize to at least 2 characters',
+        });
+      }
+    });
   });
 
 export type P1dExpectedFixture = z.infer<typeof P1dExpectedFixtureSchema>;
@@ -61,6 +76,14 @@ export type P1dExpectedValue = z.infer<typeof P1dExpectedValueSchema>;
 export type P1dExpectedTableCell = z.infer<
   typeof P1dExpectedTableCellSchema
 >;
+export type P1dExpectedTableCells = z.infer<
+  typeof P1dExpectedTableCellsSchema
+>;
+
+export type P1dTableCellRecallStatus =
+  | 'measured'
+  | 'not_applicable'
+  | 'undefined';
 
 export type P1dEvalChunk = {
   id?: string;
@@ -135,6 +158,7 @@ export type P1dFixtureQualityResult = {
     coreFieldRecall: P1dMeasuredRatio;
     valuePrecision: P1dMeasuredRatio;
     tableCellRecall: P1dMeasuredRatio;
+    tableCellRecallStatus: P1dTableCellRecallStatus;
     locatorCoverage: P1dLocatorCoverage;
     chunkLocatorCoverage: number;
     pageCoverage: number;
@@ -165,6 +189,8 @@ export type P1dQualityReport = {
     coreFieldRecallAverage: number | null;
     valuePrecisionAverage: number | null;
     tableCellRecallAverage: number | null;
+    tableCellRecallNotApplicableCount: number;
+    tableCellRecallUndefinedCount: number;
     locatorCoverageAverage: number | null;
     falseMaskedTokenCount: number;
     redactionMarkerCount: number;
@@ -300,6 +326,37 @@ function evaluateExpectedValues(
   );
 }
 
+const WEAK_UNIT_ONLY_VALUES = new Set([
+  '円',
+  '分',
+  '日',
+  '月',
+  '年',
+  '時',
+  '時間',
+  '以内',
+]);
+
+function weakExpectedValueNotes(
+  expectedValues: readonly P1dExpectedValue[]
+): string[] {
+  const notes: string[] = [];
+  for (const expected of expectedValues) {
+    const normalizedValue = normalizeForSubstringMatch(expected.expectedValue);
+    if (
+      normalizedValue.length >= 2 &&
+      normalizedValue.length <= 3 &&
+      (/^\d+$/u.test(normalizedValue) ||
+        WEAK_UNIT_ONLY_VALUES.has(normalizedValue))
+    ) {
+      notes.push(
+        `weak_expected_value: ${expected.field}: ${expected.expectedValue}`
+      );
+    }
+  }
+  return notes;
+}
+
 function expectedFieldItems(expected: P1dExpectedFixture): P1dExpectedField[] {
   return expected.expectedFields.map((field) => ({
     field,
@@ -372,6 +429,56 @@ function evaluateExpectedTableCells(
   );
 }
 
+function expectedTableCellsArray(
+  expected: P1dExpectedFixture
+): readonly P1dExpectedTableCell[] {
+  return Array.isArray(expected.expectedTableCells)
+    ? expected.expectedTableCells
+    : [];
+}
+
+function tableCellRecallStatus(
+  expected: P1dExpectedFixture
+): P1dTableCellRecallStatus {
+  if (expected.expectedTableCells === P1D_NOT_APPLICABLE) {
+    return 'not_applicable';
+  }
+  if (
+    expected.expectedTableCells === undefined ||
+    expected.expectedTableCells.length === 0
+  ) {
+    return 'undefined';
+  }
+  return 'measured';
+}
+
+function documentIrHasTable(documentIr: DocumentIr): boolean {
+  return documentIr.pages.some((page) =>
+    page.blocks.some((block) => block.kind === 'table')
+  );
+}
+
+function validateNotApplicableTableCells(options: {
+  documentId: string;
+  expected: P1dExpectedFixture;
+  documentIr: DocumentIr;
+  chunks: readonly P1dEvalChunk[];
+}): void {
+  if (options.expected.expectedTableCells !== P1D_NOT_APPLICABLE) return;
+
+  if (documentIrHasTable(options.documentIr)) {
+    throw new Error(
+      `${options.documentId}.expected.json declares expectedTableCells as not_applicable, but DocumentIR contains table blocks`
+    );
+  }
+
+  if (options.chunks.some((chunk) => chunk.structureType === 'table')) {
+    throw new Error(
+      `${options.documentId}.expected.json declares expectedTableCells as not_applicable, but chunks contain table structureType`
+    );
+  }
+}
+
 function evaluateLocatorCoverage(
   chunks: readonly MatchableChunk[],
   expected: P1dExpectedFixture
@@ -399,7 +506,7 @@ function evaluateLocatorCoverage(
         );
       },
     })),
-    ...expected.expectedTableCells.map((cell) => ({
+    ...expectedTableCellsArray(expected).map((cell) => ({
       label: [cell.tableId, cell.rowLabel, cell.columnLabel, cell.expectedValue]
         .filter((value): value is string => value !== undefined)
         .join(' / '),
@@ -533,6 +640,12 @@ export function evaluateP1dFixture<TChunk extends P1dEvalChunk>(
       documentId: input.documentId,
       expectedFields: [],
     });
+  validateNotApplicableTableCells({
+    documentId: input.documentId,
+    expected: expectedForMetrics,
+    documentIr: input.documentIr,
+    chunks: input.chunks,
+  });
 
   const fieldRecall = evaluateFieldRecall(
     input.chunks,
@@ -547,9 +660,10 @@ export function evaluateP1dFixture<TChunk extends P1dEvalChunk>(
     chunks,
     expectedForMetrics.expectedValues
   );
+  const tableStatus = tableCellRecallStatus(expectedForMetrics);
   const tableCellRecall = evaluateExpectedTableCells(
     chunks,
-    expectedForMetrics.expectedTableCells
+    expectedTableCellsArray(expectedForMetrics)
   );
   const locatorCoverage = evaluateLocatorCoverage(chunks, expectedForMetrics);
   const { coverage } = evalCoverage({
@@ -572,12 +686,15 @@ export function evaluateP1dFixture<TChunk extends P1dEvalChunk>(
   if (expectedForMetrics.expectedValues.length === 0) {
     notes.push('expectedValues not defined; valuePrecision not measured');
   }
+  notes.push(...weakExpectedValueNotes(expectedForMetrics.expectedValues));
   if (
     expectedFieldTextsByTier(expectedForMetrics, 'core').length === 0
   ) {
     notes.push('core expectedFields not defined; coreFieldRecall not measured');
   }
-  if (expectedForMetrics.expectedTableCells.length === 0) {
+  if (tableStatus === 'not_applicable') {
+    notes.push('expectedTableCells not applicable; source has no tables');
+  } else if (tableStatus === 'undefined') {
     notes.push('expectedTableCells not defined; tableCellRecall not measured');
   }
 
@@ -592,6 +709,7 @@ export function evaluateP1dFixture<TChunk extends P1dEvalChunk>(
       coreFieldRecall,
       valuePrecision,
       tableCellRecall,
+      tableCellRecallStatus: tableStatus,
       locatorCoverage,
       chunkLocatorCoverage,
       pageCoverage: coverage.pageCoverage,
@@ -657,6 +775,13 @@ export function buildP1dQualityReport(
         fixtures,
         (fixture) => fixture.metrics.tableCellRecall
       ),
+      tableCellRecallNotApplicableCount: fixtures.filter(
+        (fixture) =>
+          fixture.metrics.tableCellRecallStatus === 'not_applicable'
+      ).length,
+      tableCellRecallUndefinedCount: fixtures.filter(
+        (fixture) => fixture.metrics.tableCellRecallStatus === 'undefined'
+      ).length,
       locatorCoverageAverage: averageMeasuredRate(
         fixtures,
         (fixture) => fixture.metrics.locatorCoverage
@@ -691,7 +816,7 @@ export function buildP1dQualityReport(
     deferredMetrics: [
       'publicDirectRate belongs to live curator classification eval',
       'overRestrictedCount belongs to live curator classification eval',
-      'stable falseMaskedTokenCount is a public sidecar redaction-marker tripwire; real over-mask measurement requires masker-output sidecars or live drift checks',
+      'stable falseMaskedTokenCount is a public sidecar redaction-marker tripwire; real over-mask measurement belongs to live drift checks',
       'Cloud DLP false-positive redaction drift belongs to live drift check',
       'largeMixedPdfExtractionStatus belongs to local/live mixed PDF check',
       'largeMixedPdfFailureReasons belongs to local/live mixed PDF check',

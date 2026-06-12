@@ -11,5 +11,53 @@
     "1234-5678-9012",
     "2026-04-01"
   ],
-  "notes": "2026-05-21: mainline extractScanPdfFromBuffer で再生成した sidecar と整合。氏名・住所・電話・メール・従業員ID・口座・マイナンバー風値・開始日を recall baseline として選定。"
+  "expectedFieldTiers": {
+    "Synthetic Employment Information Form": "core",
+    "XXXX Taro": "core",
+    "1-2-3 XXXX-cho, Shibuya-ku, Tokyo": "core",
+    "090-1234-5678": "core",
+    "taro.xxxx@example.test": "core",
+    "Mizuho Bank 0001 / 1234567": "core",
+    "1234-5678-9012": "core",
+    "2026-04-01": "core"
+  },
+  "expectedValues": [
+    {
+      "field": "Employee name",
+      "expectedValue": "XXXX Taro",
+      "tier": "core"
+    },
+    {
+      "field": "Address",
+      "expectedValue": "1-2-3 XXXX-cho, Shibuya-ku, Tokyo",
+      "tier": "core"
+    },
+    {
+      "field": "Phone",
+      "expectedValue": "090-1234-5678",
+      "tier": "core"
+    },
+    {
+      "field": "Email",
+      "expectedValue": "taro.xxxx@example.test",
+      "tier": "core"
+    },
+    {
+      "field": "Bank account",
+      "expectedValue": "Mizuho Bank 0001 / 1234567",
+      "tier": "core"
+    },
+    {
+      "field": "My Number-like",
+      "expectedValue": "1234-5678-9012",
+      "tier": "core"
+    },
+    {
+      "field": "Start date",
+      "expectedValue": "2026-04-01",
+      "tier": "core"
+    }
+  ],
+  "expectedTableCells": "not_applicable",
+  "notes": "2026-05-21: mainline extractScanPdfFromBuffer で再生成した sidecar と整合。氏名・住所・電話・メール・従業員ID・口座・マイナンバー風値・開始日を recall baseline として選定。P1-D valuePrecision intentionally checks label/value pairing; current OCR emits labels and values as separate blocks, so misses are a real structure signal."
 }

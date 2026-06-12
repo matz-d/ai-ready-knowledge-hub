@@ -1,15 +1,38 @@
 {
   "documentId": "synthetic-employment-context-with-pii",
   "expectedFields": [
-    "Synthetic Employment Context Package Seed",
-    "FOR EVALUATION ONLY - NO REAL CUSTOMER DATA",
-    "Document subtype: official-doc-pdf",
-    "Use case: Test PII detection and masking before AI handoff.",
-    "Employer: Example Accounting Office LLC",
-    "Contract type: Fixed-term office assistant",
-    "Monthly salary: JPY 280,000",
-    "Start date: 2026-04-01",
-    "PII policy note: every personal field in this PDF is invented for fixture testing."
+    "雇用契約コンテキスト（合成データ）",
+    "本資料は学習目的のための合成データである",
+    "氏名・住所・電話番号は架空である",
+    "氏名: 山田 太郎（架空）",
+    "電話: 03-1234-5678（架空）",
+    "住所: 東京都千代田区サンプル町1-2-3",
+    "署名欄（画像）"
   ],
-  "notes": "Local synthetic fixture. Expected fields intentionally include only non-PII information that should remain after masking; PII recall belongs to M3 piiDetectionRecall."
+  "expectedFieldTiers": {
+    "雇用契約コンテキスト（合成データ）": "core",
+    "本資料は学習目的のための合成データである": "core",
+    "氏名: 山田 太郎（架空）": "core",
+    "電話: 03-1234-5678（架空）": "core",
+    "住所: 東京都千代田区サンプル町1-2-3": "core"
+  },
+  "expectedValues": [
+    {
+      "field": "氏名",
+      "expectedValue": "山田 太郎",
+      "tier": "core"
+    },
+    {
+      "field": "電話",
+      "expectedValue": "03-1234-5678",
+      "tier": "core"
+    },
+    {
+      "field": "住所",
+      "expectedValue": "東京都千代田区サンプル町1-2-3",
+      "tier": "core"
+    }
+  ],
+  "expectedTableCells": "not_applicable",
+  "notes": "Local synthetic Japanese employment fixture. Expected fields include synthetic PII-bearing labels so P1-D can measure value retention before masker-output sidecars add true masking recall."
 }

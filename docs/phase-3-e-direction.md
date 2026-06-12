@@ -142,7 +142,7 @@ ingress が受理する想定 JSON は、少なくとも次を **必須** とす
 | `schemaVersion` | number | はい | 契約版。初期案は `1`。後から breaking change するときに増やす。 |
 | `processingProfile` | object | はい | §3.2 の `ProcessingProfile` と一致すること。`profileName` は必ず `'cloud-sanitized-ingress'`。`ingressBoundary` / `sanitizationStage` / `inferenceScope` は §3.3 の preset と一致すること。 |
 | `correlationId` | string | はい | **1 回の取り込み試行**を顧客側証跡と当社側 `AuditEvent` で結ぶ識別子。推奨は UUID v4。不透明な高エントロピー文字列でもよいが、衝突耐性とログ検索可能性を満たすこと。 |
-| `ruleSetVersion` | string | はい | Edge で適用した DLP / マスキングルール束の版（例: `dlp-ruleset-2026-05-15-v1`）。§7 の方針と整合する命名でよい。 |
+| `ruleSetVersion` | string | はい | Edge で適用した DLP / マスキングルール束の版（例: Phase 3-E 初期値 `dlp-ruleset-2026-05-15-v1`、P1-D 成熟化後の現在値 `dlp-ruleset-2026-06-12-v1`）。§7 の方針と整合する命名でよい。 |
 | `maskingMetrics` | object | はい | `detected` / `replaced` / `falsePositiveReviewed`（数値）。§6.1 `ProcessingRecord` の最小形と同じ意味。 |
 | `chunks` | array | はい | 当社側ストレージに載せる **マスク済みテキスト** の単位。各要素は少なくとも `text: string`（マスク後本文）を持つ。locator・metadata は Phase 3-G 以降で `KnowledgeChunk` 相当へ拡張可能。空配列は「受理しても意味がない」ため契約上は許容しない（バリデーションで弾く想定）。 |
 | `boundaryEvidence` | object | はい | 下記「境界証跡」を満たすオブジェクト。 |
@@ -252,8 +252,8 @@ Phase 3-E では `cloudDlpMasker` に次の設定を持たせる。
 | `minLikelihood` | Phase 3-E の実装値は `POSSIBLE`。過剰検出が強い場合に `LIKELY` へ上げる余地は後続検証で扱う。 |
 | replacement token | DLP 既定の `[INFO_TYPE]` ではなく、`[REDACTED:<INFO_TYPE>]` に固定する。例: `[REDACTED:PERSON_NAME]`。 |
 | infoTypes | 既存 `EMAIL_ADDRESS` / `PHONE_NUMBER` / `PERSON_NAME` / `LOCATION` / `STREET_ADDRESS` / `DATE_OF_BIRTH` / `CREDIT_CARD_NUMBER` / `JAPAN_INDIVIDUAL_NUMBER` / `JAPAN_BANK_ACCOUNT` を初期正本にする。 |
-| ruleSetVersion | DLP config bundle として `dlp-ruleset-2026-05-15-v1` を明示する。 |
-| custom dictionary | Phase 3-E では設計候補まで。顧客名 / 担当者名 / 支店名などは後続で tenant override として扱う。 |
+| ruleSetVersion | Phase 3-E 初期 config bundle は `dlp-ruleset-2026-05-15-v1`。P1-D 成熟化後の現在 bundle は `dlp-ruleset-2026-06-12-v1`。 |
+| custom dictionary / infoTypes | Phase 3-E では設計候補まで。P1-D では synthetic masked name / My Number-like value 用 custom infoTypes を Cloud DLP provider に追加済み。顧客名 / 担当者名 / 支店名などは後続で tenant override として扱う。 |
 
 ### 7.2 LLM との役割分担
 
@@ -296,7 +296,7 @@ Phase 3-E は次を満たしたら完了とする。
 ### 9.1 完了確認 (2026-05-18)
 
 - `ProcessingProfile` preset は docs / `src/lib/processingProfile.ts` / `document.export` AuditEvent で一致している。
-- Cloud DLP provider は `minLikelihood=POSSIBLE`、replacement token `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-05-15-v1` で固定済み。
+- Cloud DLP provider は Phase 3-E 時点で `minLikelihood=POSSIBLE`、replacement token `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-05-15-v1` で固定済み。P1-D 成熟化で現在の `ruleSetVersion` は `dlp-ruleset-2026-06-12-v1`。
 - `local-only` / ブラウザ WASM DLP / strict local only は MVP 採用ではなく、不採用・スコープ外の判断としてのみ残っている。
 - Cloud DLP live smoke は ADC を使って実行済み。`顧問契約書_実案件サンプル.txt` で 25 spans を検出し、`JAPAN_BANK_ACCOUNT` も rule hit に含まれる。
 - `pnpm test`、`pnpm typecheck`、`pnpm build` は通過済み。

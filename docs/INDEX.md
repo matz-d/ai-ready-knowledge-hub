@@ -14,6 +14,7 @@
 | [production-readiness.md](production-readiness.md) | 本番 readiness チェックリスト |
 | [p1-d-extraction-masking-quality-gate.md](p1-d-extraction-masking-quality-gate.md) | P1-D 品質ゲート設計 |
 | [p1-d-evidence-2026-06-11.md](p1-d-evidence-2026-06-11.md) | P1-D 証跡 |
+| [p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) | P1-E large file / table fallback / locator enrichment 方針 |
 | [p1-f-full-coverage-strategist.md](p1-f-full-coverage-strategist.md) | P1-F async full-coverage strategist |
 | [p1-f-review-follow-up-tasks.md](p1-f-review-follow-up-tasks.md) | P1-F レビュー残タスク |
 | [decisions.md](decisions.md) | 意思決定ログ（D1〜 + Phase 別採用判断） |

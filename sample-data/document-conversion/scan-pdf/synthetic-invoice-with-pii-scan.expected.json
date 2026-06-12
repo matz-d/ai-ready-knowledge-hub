@@ -12,5 +12,68 @@
     "¥1,133,000",
     "123456789012"
   ],
-  "notes": "2026-05-21: mainline extractScanPdfFromBuffer (gemini-2.5-flash) で再生成した sidecar から recall baseline を選定。旧 expected（印刷元 PDF 向け INV-2025 表記）は本線 OCR と未整合だったため更新。"
+  "expectedFieldTiers": {
+    "請求書": "core",
+    "請求書番号: SYN-INV-2026-0501": "core",
+    "発行日: 2026年5月21日": "core",
+    "株式会社サンプル製作所 御中": "core",
+    "月次顧問契約料 (2026年5月分)": "core",
+    "請求合計": "core",
+    "¥1,133,000": "core",
+    "123456789012": "core"
+  },
+  "expectedValues": [
+    {
+      "field": "請求書番号",
+      "expectedValue": "SYN-INV-2026-0501",
+      "tier": "core"
+    },
+    {
+      "field": "発行日",
+      "expectedValue": "2026年5月21日",
+      "tier": "core"
+    },
+    {
+      "field": "経理担当",
+      "expectedValue": "齋藤 試花",
+      "tier": "core"
+    },
+    {
+      "field": "住所",
+      "expectedValue": "東京都千代田区サンプル町1-2-3 サンプルビル4F",
+      "tier": "core"
+    },
+    {
+      "field": "請求合計",
+      "expectedValue": "¥1,133,000",
+      "tier": "core"
+    }
+  ],
+  "expectedTableCells": [
+    {
+      "rowLabel": "月次顧問契約料 (2026年5月分)",
+      "columnLabel": "金額",
+      "expectedValue": "¥385,000",
+      "tier": "core"
+    },
+    {
+      "rowLabel": "決算書作成・申告準備",
+      "columnLabel": "金額",
+      "expectedValue": "¥440,000",
+      "tier": "core"
+    },
+    {
+      "rowLabel": "年末調整資料レビュー",
+      "columnLabel": "金額",
+      "expectedValue": "¥125,000",
+      "tier": "core"
+    },
+    {
+      "rowLabel": "給与支払報告書整理支援",
+      "columnLabel": "金額",
+      "expectedValue": "¥80,000",
+      "tier": "core"
+    }
+  ],
+  "notes": "2026-05-21: mainline extractScanPdfFromBuffer (gemini-2.5-flash) で再生成した sidecar から recall baseline を選定。旧 expected（印刷元 PDF 向け INV-2025 表記）は本線 OCR と未整合だったため更新。P1-D table cells use source-document intent; current OCR emits invoice rows as image_text blocks, so tableCellRecall exposes missing table structure."
 }

@@ -29,7 +29,7 @@ export type CloudDlpMaskerOptions = {
   location?: string;
 };
 
-export const CLOUD_DLP_RULE_SET_VERSION = 'dlp-ruleset-2026-05-15-v1';
+export const CLOUD_DLP_RULE_SET_VERSION = 'dlp-ruleset-2026-06-12-v1';
 export const CLOUD_DLP_MIN_LIKELIHOOD = 'POSSIBLE' as const;
 
 const DLP_INFO_TYPES = [
@@ -44,6 +44,23 @@ const DLP_INFO_TYPES = [
   'JAPAN_BANK_ACCOUNT',
 ] as const;
 
+const CUSTOM_DLP_INFO_TYPES = [
+  {
+    name: 'AIKH_SYNTHETIC_MASKED_PERSON_NAME',
+    pattern: String.raw`\bX{2,}\s+[A-Z][a-z]+\b`,
+    spanType: 'PERSON_NAME',
+  },
+  {
+    name: 'AIKH_JP_MYNUMBER_LIKE',
+    pattern: String.raw`(?:\b\d{12}\b|\b\d{4}-\d{4}-\d{4}\b)`,
+    spanType: 'JP_MYNUMBER',
+  },
+] as const satisfies readonly {
+  name: string;
+  pattern: string;
+  spanType: MaskedSpanType;
+}[];
+
 const INFO_TYPE_TO_SPAN_TYPE: Record<string, MaskedSpanType> = {
   EMAIL_ADDRESS: 'EMAIL',
   PHONE_NUMBER: 'PHONE',
@@ -54,6 +71,12 @@ const INFO_TYPE_TO_SPAN_TYPE: Record<string, MaskedSpanType> = {
   CREDIT_CARD_NUMBER: 'CREDIT_CARD_NUMBER',
   JAPAN_INDIVIDUAL_NUMBER: 'JP_MYNUMBER',
   JAPAN_BANK_ACCOUNT: 'BANK_ACCOUNT',
+  ...Object.fromEntries(
+    CUSTOM_DLP_INFO_TYPES.map((infoType) => [
+      infoType.name,
+      infoType.spanType,
+    ])
+  ),
 };
 
 function createCloudDlpClient(sdkClient: DlpServiceClient): CloudDlpClient {
@@ -136,10 +159,20 @@ export async function applyCloudDlpMask(
   const location = options.location ?? process.env.GOOGLE_CLOUD_LOCATION ?? 'global';
   const parent = `projects/${projectId}/locations/${location}`;
   const infoTypes = DLP_INFO_TYPES.map((name) => ({ name }));
+  const transformationInfoTypes = [
+    ...infoTypes,
+    ...CUSTOM_DLP_INFO_TYPES.map((infoType) => ({ name: infoType.name })),
+  ];
+  const customInfoTypes = CUSTOM_DLP_INFO_TYPES.map((infoType) => ({
+    infoType: { name: infoType.name },
+    likelihood: CLOUD_DLP_MIN_LIKELIHOOD,
+    regex: { pattern: infoType.pattern },
+  }));
   const client = options.client ?? createCloudDlpClient(new DlpServiceClient());
   const item = { value: input.content };
   const inspectConfig = {
     infoTypes,
+    customInfoTypes,
     minLikelihood: CLOUD_DLP_MIN_LIKELIHOOD,
     includeQuote: false,
   };
@@ -162,7 +195,7 @@ export async function applyCloudDlpMask(
     inspectConfig,
     deidentifyConfig: {
       infoTypeTransformations: {
-        transformations: DLP_INFO_TYPES.map((name) => ({
+        transformations: transformationInfoTypes.map(({ name }) => ({
           infoTypes: [{ name }],
           primitiveTransformation: {
             replaceConfig: {

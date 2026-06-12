@@ -878,12 +878,16 @@ sample-data/
 ### Phase 3-E の境界
 
 **触る領域:**
-- Cloud DLP provider: `minLikelihood=POSSIBLE`, replacement token `[REDACTED:<INFO_TYPE>]`, `ruleSetVersion=dlp-ruleset-2026-05-15-v1`
+- Cloud DLP provider: `minLikelihood=POSSIBLE`, replacement token `[REDACTED:<INFO_TYPE>]`, Phase 3-E initial `ruleSetVersion=dlp-ruleset-2026-05-15-v1`
 - ProcessingProfile / TCB docs
 - AuditEvent shape の拡張方針
 - `document.export` の purposeBinding
 - DLP / Masker eval の最小設計
 - Document Conversion Eval の評価契約（Q8 を参照）
+
+**P1-D amendment (2026-06-12):**
+- Current Cloud DLP provider bundle is `ruleSetVersion=dlp-ruleset-2026-06-12-v1`.
+- P1-D live masker drift added custom infoTypes for synthetic masked names and My Number-like values after the first live run exposed `piiLeakCount = 3`; the follow-up live run passed with `piiLeakCount = 0`.
 
 **触らない領域:**
 - Edge Sanitizer 実装

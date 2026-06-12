@@ -247,7 +247,7 @@ sample-data/
 - **scan-pdf fail-closed**: Gemini OCR timeout / quota / schema 失敗は pre-flight で HTTP 400。`document` / `chunk` / `document.convert` AuditEvent は作らない。本線 upload 上限は **5 MiB**（PoC runner の 30 MiB とは別）。
 - **Safety gate**: Strategist へ渡す前に決定論的ルールで chunk を除外（Restricted / blocked / masking 未完了 / クロス顧客機密）。LLM に依存しない。
 - **Masking defense-in-depth**: `requires_masking` chunk に `maskedText` がない場合、`toContextPackage` は raw text を fallback で出さず throw する。
-- **Cloud DLP**: Masker provider として導入済み。Phase 3-E の固定値は `minLikelihood=POSSIBLE`、replacement token は `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-05-15-v1`。未指定は `simple-rule` fallback、`MASKER_PROVIDER=cloud-dlp` で明示。
+- **Cloud DLP**: Masker provider として導入済み。現在の固定値は `minLikelihood=POSSIBLE`、replacement token は `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-06-12-v1`。P1-D で synthetic masked name / My Number-like value 用の custom infoTypes を追加済み。未指定は `simple-rule` fallback、`MASKER_PROVIDER=cloud-dlp` で明示。
 - **Malformed document**: `listInventoryDocumentsFromFirestore` は parse エラーの document を skip-and-warn し、全体を落とさない。
 - **Sheets / Docs 共有**: Google Workspace import の対象は、UI に表示される service account email への reader 共有が必要。
 - **データ保管**: GCS `asia-northeast1`、raw object は `raw/{docId}/`、masked object は `masked/{docId}/`。chunk 本文（`maskedText` 含む）は Firestore subcollection に inline 保存。
@@ -264,7 +264,7 @@ sample-data/
 ### Phase 3-E 完了確認 (2026-05-18)
 
 - docs / 型 / AuditEvent / Cloud DLP provider の用語と preset 値が一致: `cloud-managed = tenant-cloud / post-ingress / shared-cloud`、`cloud-sanitized-ingress = tenant-edge / pre-ingress / shared-cloud`。
-- Cloud DLP 固定値が一致: `minLikelihood=POSSIBLE`、replacement token `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-05-15-v1`。
+- Cloud DLP 固定値が一致: Phase 3-E 初期値は `ruleSetVersion=dlp-ruleset-2026-05-15-v1`。P1-D 成熟化後の現在値は `minLikelihood=POSSIBLE`、replacement token `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-06-12-v1`。
 - `local-only` / ブラウザ WASM DLP / strict local only は MVP 不採用またはスコープ外としてのみ記述。
 - Cloud DLP live smoke 済み: `顧問契約書_実案件サンプル.txt` で 25 spans（`PERSON_NAME` / `STREET_ADDRESS` / `LOCATION` / `PHONE_NUMBER` / `JAPAN_BANK_ACCOUNT`）を検出。
 - `pnpm test` / `pnpm typecheck` / `pnpm build` 通過。

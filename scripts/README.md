@@ -27,6 +27,7 @@
 | `runConversionEvalForCi.ts` | （CI: `.github/workflows/conversion-eval.yml`） | conversion eval 本番 CI エントリ |
 | `runCuratorClassificationEval.ts` | `pnpm eval:curator:classification` | Curator 分類 precision eval |
 | `runP1dQualityGate.ts` | `pnpm eval:p1d:quality` | P1-D extraction/masking quality gate |
+| `runP1dMaskerDriftCheck.ts` | `pnpm eval:p1d:masker-drift` | P1-D Cloud DLP masker drift check（live・任意） |
 | `runP1dMixedPdfCheck.ts` | `pnpm eval:p1d:mixed-pdf` | P1-D mixed PDF local check |
 | `exportConversionEvalSamples.ts` | （直接実行） | Firestore から conversion eval サンプル export |
 
