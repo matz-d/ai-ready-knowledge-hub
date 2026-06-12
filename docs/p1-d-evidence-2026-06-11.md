@@ -49,7 +49,7 @@ Remaining P1-D gaps before treating the quality gate as mature:
 - Next time scan fixtures are regenerated, replace placeholder names such as `XXXX Taro` with realistic synthetic names so the scan path also evaluates normal `PERSON_NAME` detection instead of only the placeholder-name custom infoType.
 - Decide whether `chunkLocatorCoverage` should follow the measured/null convention for zero-chunk fixtures instead of reporting `0`.
 - Clean up duplicate GitHub Actions setup with a composite action only if another conversion-eval job is added.
-- Implement P1-E T1/T2/T3 from [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md), using `table_failed`, scan-pdf label/value separation, and invoice table loss as handoff cases.
+- Continue P1-E from [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md): T1 preflight / row-window / page-group manifest, local T3 scan label/value enrichment, and local T2 scan visual table fallback are implemented; scan OCR prompt/model changes remain a separate live-drift workstream.
 
 ## Stable Quality Report
 
@@ -70,11 +70,11 @@ Result:
 - schemaVersion: `4`
 - fieldRecallAverage: `0.7002400127400128`
 - coreFieldRecallAverage: `0.8373015873015873`
-- valuePrecisionAverage: `0.8666666666666667`
-- tableCellRecallAverage: `0.5714285714285714`
+- valuePrecisionAverage: `1`
+- tableCellRecallAverage: `0.7142857142857143`
 - tableCellRecallNotApplicableCount: `2`
 - tableCellRecallUndefinedCount: `0`
-- locatorCoverageAverage: `0.6563514543165705`
+- locatorCoverageAverage: `0.734202331509553`
 - falseMaskedTokenCount: `0`
 - redactionMarkerCount: `0`
 - emptyChunkCount: `0`
@@ -93,10 +93,10 @@ Notes:
 - `falseMaskedTokenCount` is measured only for fixtures marked as public documents; non-public synthetic PII fixtures contribute to neutral `redactionMarkerCount` instead. Because stable chunks are built directly from committed DocumentIR sidecars and the masker does not run, this blocker is a sidecar-hygiene check; real over-mask measurement belongs to live drift checks.
 - `locatorCoverageAverage` is now independent from `fieldRecallAverage` because structured value/table expectations add locator-bearing evidence checks beyond field recall.
 - `coreFieldRecallAverage` is separated from full `fieldRecallAverage`; core coverage is now measured for public blank-form, public guide, synthetic PII, and slide sidecars.
-- `valuePrecisionAverage` and `tableCellRecallAverage` are measured from structured sidecars. Table cell recall intentionally includes source-intent row/column relationships, so the current `0.5714285714285714` exposes row-only / image-text-only table structure gaps.
+- `valuePrecisionAverage` and `tableCellRecallAverage` are measured from structured sidecars. Table cell recall intentionally includes source-intent row/column relationships, so remaining misses expose row-only / image-text-only table structure gaps in non-invoice fixtures.
 - no-table fixtures now use `expectedTableCells: "not_applicable"` and are counted separately from authoring gaps (`tableCellRecallNotApplicableCount = 2`, `tableCellRecallUndefinedCount = 0`).
-- `synthetic-employment-form-scan` has field/core recall `1`, but value precision `0` because OCR emits labels and values as separate chunks; this is an intended structure signal, not a sidecar typo.
-- `synthetic-invoice-with-pii-scan` has table cell recall `0` for invoice line items because the visual table is emitted as `image_text` blocks; this is a P1-E table fallback input.
+- `synthetic-employment-form-scan` now has field/core/value precision `1` after P1-E T3 label/value enrichment duplicated adjacent same-line values onto label chunks during conversion. The committed sidecar remains raw OCR; the improvement is in the mainline `DocumentIR -> KnowledgeChunk` adapter.
+- `synthetic-invoice-with-pii-scan` now has value precision, table cell recall, and locator coverage `1` after P1-E T2 scan visual table fallback synthesized additional table chunks from bbox-aligned `image_text` rows. The committed sidecar remains raw OCR; the improvement is in the mainline `DocumentIR -> KnowledgeChunk` adapter.
 - `synthetic-context-package-deck` now measures slide table retention and passes field/core/value/table/locator checks at `1`.
 - Deterministic zero checks pass for public `falseMaskedTokenCount`, `emptyChunkCount`, and `oversizedChunkCount`, and are enforced as CI blockers via `pnpm tsx scripts/runP1dQualityGate.ts --ci` in the `p1d-stable-zero` job.
 - The scan-pdf sidecars preserve raw OCR behavior: table blocks can exist (`kind: "table"`) without table row locators. That absence is a real P1-E / drift-design signal, not something to patch into the sidecar by hand.

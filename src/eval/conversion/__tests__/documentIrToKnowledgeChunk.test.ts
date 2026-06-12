@@ -194,6 +194,170 @@ describe('documentIrToKnowledgeChunks', () => {
     );
   });
 
+  it('duplicates adjacent scan-pdf form values onto the label chunk', () => {
+    const ir = buildIr(
+      [
+        {
+          blockId: 'p1-ocr3',
+          kind: 'paragraph',
+          text: 'Employee name',
+          locator: { pageNumber: 1, bbox: [218, 160, 340, 175] },
+        },
+        {
+          blockId: 'p1-ocr4',
+          kind: 'image_text',
+          text: 'XXXX Taro',
+          locator: { pageNumber: 1, bbox: [385, 155, 500, 180] },
+        },
+      ],
+      'scan-pdf'
+    );
+
+    const chunks = documentIrToKnowledgeChunks({
+      ...defaultOptions(),
+      documentIr: ir,
+    });
+
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0].text).toBe('Employee name\nXXXX Taro');
+    expect(chunks[0].structureType).toBe('paragraph');
+    expect(chunks[0].locator).toEqual({
+      kind: 'pdf',
+      page: 1,
+      paragraphId: 'p1-ocr3',
+    });
+    expect(chunks[0].extractionWarnings ?? []).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('scanLabelValueLink=p1-ocr4'),
+      ])
+    );
+    expect(chunks[1].text).toBe('XXXX Taro');
+    expect(chunks[1].structureType).toBe('imageText');
+  });
+
+  it('does not duplicate adjacent values for official PDF chunks', () => {
+    const ir = buildIr([
+      paragraphBlock('p1-b1', 'Employee name', {
+        locator: { pageNumber: 1, bbox: [218, 160, 340, 175] },
+      }),
+      paragraphBlock('p1-b2', 'XXXX Taro', {
+        locator: { pageNumber: 1, bbox: [385, 155, 500, 180] },
+      }),
+    ]);
+
+    const chunks = documentIrToKnowledgeChunks({
+      ...defaultOptions(),
+      documentIr: ir,
+    });
+
+    expect(chunks.map((chunk) => chunk.text)).toEqual([
+      'Employee name',
+      'XXXX Taro',
+    ]);
+  });
+
+  it('synthesizes scan-pdf visual image text rows into table chunks', () => {
+    const ir = buildIr(
+      [
+        {
+          blockId: 'p1-ocr15',
+          kind: 'image_text',
+          text: '請求項目',
+          locator: { pageNumber: 1, bbox: [190, 340, 250, 353] },
+        },
+        {
+          blockId: 'p1-ocr16',
+          kind: 'image_text',
+          text: '金額',
+          locator: { pageNumber: 1, bbox: [730, 340, 770, 353] },
+        },
+        {
+          blockId: 'p1-ocr17',
+          kind: 'image_text',
+          text: '月次顧問契約料 (2026年5月分)',
+          locator: { pageNumber: 1, bbox: [190, 370, 400, 383] },
+        },
+        {
+          blockId: 'p1-ocr18',
+          kind: 'image_text',
+          text: '¥385,000',
+          locator: { pageNumber: 1, bbox: [710, 370, 770, 383] },
+        },
+      ],
+      'scan-pdf'
+    );
+
+    const chunks = documentIrToKnowledgeChunks({
+      ...defaultOptions(),
+      documentIr: ir,
+    });
+
+    const tableChunks = chunks.filter(
+      (chunk) => chunk.structureType === 'table'
+    );
+    expect(tableChunks).toHaveLength(1);
+    expect(tableChunks[0].text).toBe(
+      '請求項目\t金額\n月次顧問契約料 (2026年5月分)\t¥385,000'
+    );
+    expect(tableChunks[0].locator).toEqual({
+      kind: 'pdf',
+      page: 1,
+      paragraphId: 'table-0-row-1',
+    });
+    expect(tableChunks[0].extractionWarnings ?? []).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('scanTableFallback=visual image_text rows'),
+      ])
+    );
+  });
+
+  it('does not synthesize scan-pdf visual tables when table blocks already exist', () => {
+    const ir = buildIr(
+      [
+        {
+          blockId: 'p1-t0-r0',
+          kind: 'table',
+          text: '請求項目\t金額',
+          locator: { pageNumber: 1, tableIndex: 0, rowIndex: 0 },
+        },
+        {
+          blockId: 'p1-ocr15',
+          kind: 'image_text',
+          text: '請求項目',
+          locator: { pageNumber: 1, bbox: [190, 340, 250, 353] },
+        },
+        {
+          blockId: 'p1-ocr16',
+          kind: 'image_text',
+          text: '金額',
+          locator: { pageNumber: 1, bbox: [730, 340, 770, 353] },
+        },
+        {
+          blockId: 'p1-ocr17',
+          kind: 'image_text',
+          text: '月次顧問契約料 (2026年5月分)',
+          locator: { pageNumber: 1, bbox: [190, 370, 400, 383] },
+        },
+        {
+          blockId: 'p1-ocr18',
+          kind: 'image_text',
+          text: '¥385,000',
+          locator: { pageNumber: 1, bbox: [710, 370, 770, 383] },
+        },
+      ],
+      'scan-pdf'
+    );
+
+    const chunks = documentIrToKnowledgeChunks({
+      ...defaultOptions(),
+      documentIr: ir,
+    });
+
+    expect(
+      chunks.filter((chunk) => chunk.structureType === 'table')
+    ).toHaveLength(1);
+  });
+
   it('drops note blocks', () => {
     const ir = buildIr([
       paragraphBlock('p1-b1', 'kept'),

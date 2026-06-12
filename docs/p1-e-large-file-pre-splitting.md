@@ -166,9 +166,15 @@ For scan OCR prompt/model behavior changes, also run the P1-D live drift check d
 - Follow-up slice: CSV / XLSX large-table extraction now uses the preflight result to produce a sheet/file summary chunk plus row-window chunks (`500` data rows per window). Window locators use the actual data row range, for example `A2:B501`, while the header is repeated in chunk text as context.
 - Follow-up slice: official PDF extraction now builds a page-group split plan for large PDFs (`25` pages per group). Production upload keeps the full extracted text for chunk hashing / Masker input, but sends a bounded page-group manifest to Curator through `pdfCuratorContent` to reduce token-limit failures. Because the manifest is sampled, its `direct` classification is not trusted: `page_group_manifest` input mode forces `Confidential / requires_masking`, so Masker still sees the full extracted text before any AI-readable terminal.
 - Remaining T1 gap: CSV / XLSX chunk extraction now uses row windows, but upload-time Curator input is still full normalized markdown. A future slice should add a table manifest for Curator input, with the same fail-closed rule as PDF if the manifest is sampled.
-- Not yet changed: scan OCR table prompt/postprocess and scan label/value locator enrichment.
+- T3 first slice: scan-pdf `DocumentIR -> KnowledgeChunk` conversion now duplicates an adjacent same-line form value onto the label chunk when both blocks have bbox evidence. The original value chunk remains unchanged, and the label chunk records `scanLabelValueLink=<blockId>` in `extractionWarnings`.
+  - This fixed the P1-D `synthetic-employment-form-scan` label/value handoff case without weakening P1-D matching rules or editing committed sidecars.
+  - `pnpm eval:p1d:quality -- --out tmp/p1d-quality-report.json` now reports `synthetic-employment-form-scan` `valuePrecision = 1` (`7/7`).
+- T2 scan visual table fallback first slice: scan-pdf `DocumentIR -> KnowledgeChunk` conversion now synthesizes additional `table` chunks from bbox-aligned `image_text` rows when OCR did not emit native table blocks. The original OCR chunks remain unchanged, and synthesized rows record `scanTableFallback=visual image_text rows synthesized as table chunk`.
+  - This fixed the P1-D `synthetic-invoice-with-pii-scan` invoice handoff case without changing the Gemini OCR prompt or regenerating committed sidecars.
+  - `pnpm eval:p1d:quality -- --out tmp/p1d-quality-report.json` now reports `synthetic-invoice-with-pii-scan` `valuePrecision = 1` (`5/5`) and `tableCellRecall = 1` (`4/4`).
+- Not yet changed: scan OCR prompt/model behavior. Keep prompt changes as a separate PR because they require before/after live drift evidence.
 
-### Review follow-ups before T3
+### Review follow-ups before scan OCR prompt changes
 
 Non-blocking items to keep visible for the team:
 
@@ -178,4 +184,4 @@ Non-blocking items to keep visible for the team:
 
 Recommended PR boundary:
 
-- Cut a PR before starting T3. The current slice contains T1 preflight, CSV/XLSX row-window chunking, PDF page-group curator manifest, and T2 official-PDF table fail-soft with fail-closed compensation. T3 label/value enrichment and scan OCR table prompt changes should be a follow-up PR because they affect scan-pdf structure and require separate P1-D live drift evidence.
+- Cut a PR before scan OCR prompt changes. The current slice contains T1 preflight, CSV/XLSX row-window chunking, PDF page-group curator manifest, T2 official-PDF table fail-soft with fail-closed compensation, local T3 label/value enrichment, and local T2 scan visual table fallback. These conversion-adapter changes do not call Gemini or regenerate scan sidecars. Scan OCR prompt/model changes should be a follow-up PR because they affect model output and require separate P1-D live drift evidence.
