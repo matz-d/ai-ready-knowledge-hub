@@ -44,6 +44,14 @@ async function createLargeSheetWorkbookBuffer(rowCount: number): Promise<Buffer>
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
+async function createWideLowRowWorkbookBuffer(): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('横長明細');
+  sheet.addRow(['顧客名', '長文メモ']);
+  sheet.addRow(['Acme', 'a'.repeat(100_001)]);
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
 describe('extractXlsx', () => {
   it('extracts chunks by sheet used range and sets spreadsheet locator', async () => {
     const content = await createWorkbookBuffer();
@@ -132,5 +140,27 @@ describe('extractXlsx', () => {
     expect(chunks[1].text).toContain('## 明細 rows 2-501');
     expect(chunks[1].text).toContain('| 顧客名 | 数量 |');
     expect(chunks[1].extractionWarnings).toContain('rowWindow=2-501');
+  });
+
+  it('splits a low-row sheet when preflight recommends row groups from estimated chars', async () => {
+    const { chunks, preflightReport } = await extractXlsx({
+      ...baseInput,
+      content: await createWideLowRowWorkbookBuffer(),
+    });
+
+    expect(preflightReport).toMatchObject({
+      fileType: 'xlsx',
+      rowCount: 2,
+      maxSheetRows: 2,
+      recommendedSplitUnit: 'row_group',
+      suggestedRowGroupSize: 500,
+    });
+    expect(preflightReport.reasons).toContain('estimatedChars>100000');
+    expect(chunks).toHaveLength(2);
+    expect(chunks.map((chunk) => chunk.locator)).toEqual([
+      { kind: 'spreadsheet', sheetName: '横長明細', range: 'A1:B2' },
+      { kind: 'spreadsheet', sheetName: '横長明細', range: 'A2:B2' },
+    ]);
+    expect(chunks[1].extractionWarnings).toContain('rowWindow=2-2');
   });
 });

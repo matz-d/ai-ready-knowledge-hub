@@ -350,7 +350,6 @@ export async function extractXlsx(input: {
   const chunks = sheets.flatMap((sheet) => {
     const shouldSplitSheetRows =
       preflightReport.recommendedSplitUnit === 'row_group' &&
-      sheet.rows.length > (preflightReport.suggestedRowGroupSize ?? 500) &&
       sheet.rows.length > 1;
 
     if (!shouldSplitSheetRows) {
