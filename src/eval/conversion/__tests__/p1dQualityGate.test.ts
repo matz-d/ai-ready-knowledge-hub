@@ -209,6 +209,115 @@ describe('P1-D quality gate stable metrics', () => {
     ).toThrow(/expectedFieldTiers key must also exist in expectedFields/);
   });
 
+  it('rejects one-character expectedValues after normalization', () => {
+    expect(() =>
+      P1dExpectedFixtureSchema.parse({
+        documentId: 'weak-value-hard-fail',
+        expectedValues: [{ field: 'Currency', expectedValue: '円' }],
+      })
+    ).toThrow(
+      /expectedValues\[\]\.expectedValue must normalize to at least 2 characters/
+    );
+  });
+
+  it('warns on weak short expectedValues without failing the sidecar', () => {
+    const result = evaluateP1dFixture({
+      documentId: 'weak-value-note',
+      fixturePath: 'sample-data/document-conversion/official-doc-pdf/weak-value-note.document-ir.json',
+      sourceSubtype: 'official-doc-pdf',
+      isPublicDocument: true,
+      documentIr: testDocumentIr(),
+      expected: P1dExpectedFixtureSchema.parse({
+        documentId: 'weak-value-note',
+        expectedValues: [{ field: 'Article', expectedValue: '12' }],
+      }),
+      chunks: [
+        {
+          text: 'Article 12',
+          locator: { kind: 'pdf', page: 1 },
+          structureType: 'paragraph',
+        },
+      ],
+    });
+
+    expect(result.metrics.valuePrecision.rate).toBe(1);
+    expect(result.notes).toContain('weak_expected_value: Article: 12');
+  });
+
+  it('treats tableCellRecall not_applicable as distinct from undefined', () => {
+    const documentIr = parseDocumentIr({
+      schemaVersion: 1,
+      source: {
+        fileName: 'synthetic-note.pdf',
+        mediaType: 'application/pdf',
+        sourceKind: 'poc',
+        sourceSubtype: 'official-doc-pdf',
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: 'p1-note',
+              kind: 'paragraph',
+              text: 'Synthetic note',
+              locator: { pageNumber: 1 },
+            },
+          ],
+        },
+      ],
+    });
+    const result = evaluateP1dFixture({
+      documentId: 'no-table-source',
+      fixturePath: 'sample-data/document-conversion/official-doc-pdf/no-table-source.document-ir.json',
+      sourceSubtype: 'official-doc-pdf',
+      isPublicDocument: true,
+      documentIr,
+      expected: P1dExpectedFixtureSchema.parse({
+        documentId: 'no-table-source',
+        expectedTableCells: 'not_applicable',
+      }),
+      chunks: [
+        {
+          text: 'Synthetic note',
+          locator: { kind: 'pdf', page: 1 },
+          structureType: 'paragraph',
+        },
+      ],
+    });
+
+    expect(result.metrics.tableCellRecall.rate).toBeNull();
+    expect(result.metrics.tableCellRecallStatus).toBe('not_applicable');
+    expect(result.notes).toContain(
+      'expectedTableCells not applicable; source has no tables'
+    );
+  });
+
+  it('rejects not_applicable table cells when source evidence contains tables', () => {
+    const expected = P1dExpectedFixtureSchema.parse({
+      documentId: 'table-source-conflict',
+      expectedTableCells: 'not_applicable',
+    });
+
+    expect(() =>
+      evaluateP1dFixture({
+        documentId: 'table-source-conflict',
+        fixturePath: 'sample-data/document-conversion/official-doc-pdf/table-source-conflict.document-ir.json',
+        sourceSubtype: 'official-doc-pdf',
+        isPublicDocument: true,
+        documentIr: testDocumentIr(),
+        expected,
+        chunks: [
+          {
+            text: 'Synthetic Form',
+            locator: { kind: 'pdf', page: 1 },
+            structureType: 'paragraph',
+          },
+        ],
+      })
+    ).toThrow(/declares expectedTableCells as not_applicable/);
+  });
+
   it('uses tableId to scope table-cell matching when table identity is available', () => {
     const chunks = [
       {
@@ -364,6 +473,8 @@ describe('P1-D quality gate stable metrics', () => {
     expect(report.summary.coreFieldRecallAverage).toBeNull();
     expect(report.summary.valuePrecisionAverage).toBeNull();
     expect(report.summary.tableCellRecallAverage).toBeNull();
+    expect(report.summary.tableCellRecallNotApplicableCount).toBe(0);
+    expect(report.summary.tableCellRecallUndefinedCount).toBe(1);
     expect(report.summary.deterministicZeroChecks).toEqual([
       {
         metric: 'falseMaskedTokenCount',

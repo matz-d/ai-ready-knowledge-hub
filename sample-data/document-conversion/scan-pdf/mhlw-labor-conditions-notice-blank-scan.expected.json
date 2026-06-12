@@ -42,7 +42,7 @@
     },
     {
       "field": "休憩時間",
-      "expectedValue": "分"
+      "expectedValue": "( ) 分"
     },
     {
       "field": "時間単位年休",

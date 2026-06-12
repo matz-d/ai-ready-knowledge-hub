@@ -110,6 +110,7 @@ export {
   type P1dEvalChunk,
   type P1dExpectedFixture,
   type P1dExpectedTableCell,
+  type P1dExpectedTableCells,
   type P1dExpectedValue,
   type P1dFixtureInput,
   type P1dFixtureQualityResult,
@@ -118,6 +119,7 @@ export {
   type P1dQualityReport,
   type P1dSafetyObservations,
   type P1dSkippedFixture,
+  type P1dTableCellRecallStatus,
 } from './p1dQualityGate';
 export {
   buildP1dMixedPdfHandoffCases,
@@ -132,3 +134,16 @@ export {
   type P1dMixedPdfFailureReason,
   type P1dMixedPdfHandoffCase,
 } from './p1dMixedPdfCheck';
+export {
+  buildP1dMaskerDriftReport,
+  countPiiLeaks,
+  measureMaskedValueRetention,
+  P1D_MASKER_DRIFT_FIXTURES,
+  P1D_MASKER_DRIFT_REPORT_SCHEMA_VERSION,
+  P1D_MASKER_DLP_INFO_TYPES,
+  type P1dMaskerDriftFixtureResult,
+  type P1dMaskerDriftGoldenFixture,
+  type P1dMaskerDriftReport,
+  type P1dMaskerDriftRetentionResult,
+  type P1dMaskerDriftRetentionValue,
+} from './p1dMaskerDrift';

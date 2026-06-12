@@ -18,6 +18,10 @@ describe('applyCloudDlpMask', () => {
               infoType: { name: 'JAPAN_INDIVIDUAL_NUMBER' },
               location: { byteRange: { start: 31, end: 43 } },
             },
+            {
+              infoType: { name: 'AIKH_JP_MYNUMBER_LIKE' },
+              location: { byteRange: { start: 55, end: 69 } },
+            },
           ],
         },
       },
@@ -26,7 +30,7 @@ describe('applyCloudDlpMask', () => {
       {
         item: {
           value:
-            'email [REDACTED:EMAIL_ADDRESS] / mynumber [REDACTED:JAPAN_INDIVIDUAL_NUMBER]',
+            'email [REDACTED:EMAIL_ADDRESS] / mynumber [REDACTED:JAPAN_INDIVIDUAL_NUMBER] / like [REDACTED:AIKH_JP_MYNUMBER_LIKE]',
         },
       },
     ]);
@@ -34,7 +38,8 @@ describe('applyCloudDlpMask', () => {
     const result = await applyCloudDlpMask(
       {
         fileName: 'sample.txt',
-        content: 'email a@example.com / mynumber 123456789012',
+        content:
+          'email a@example.com / mynumber 123456789012 / like 1234-5678-9012',
         curatorContext: {
           sensitivity: 'Confidential',
           aiUsePolicy: 'requires_masking',
@@ -57,6 +62,18 @@ describe('applyCloudDlpMask', () => {
             { name: 'EMAIL_ADDRESS' },
             { name: 'JAPAN_INDIVIDUAL_NUMBER' },
             { name: 'JAPAN_BANK_ACCOUNT' },
+          ]),
+          customInfoTypes: expect.arrayContaining([
+            expect.objectContaining({
+              infoType: { name: 'AIKH_SYNTHETIC_MASKED_PERSON_NAME' },
+              regex: { pattern: String.raw`\bX{2,}\s+[A-Z][a-z]+\b` },
+            }),
+            expect.objectContaining({
+              infoType: { name: 'AIKH_JP_MYNUMBER_LIKE' },
+              regex: {
+                pattern: String.raw`(?:\b\d{12}\b|\b\d{4}-\d{4}-\d{4}\b)`,
+              },
+            }),
           ]),
         }),
       })
@@ -91,6 +108,17 @@ describe('applyCloudDlpMask', () => {
                   },
                 },
               },
+              {
+                infoTypes: [{ name: 'AIKH_JP_MYNUMBER_LIKE' }],
+                primitiveTransformation: {
+                  replaceConfig: {
+                    newValue: {
+                      stringValue:
+                        '[REDACTED:AIKH_JP_MYNUMBER_LIKE]',
+                    },
+                  },
+                },
+              },
             ]),
           },
         }),
@@ -99,7 +127,7 @@ describe('applyCloudDlpMask', () => {
     expect(result).toEqual({
       provider: 'cloud-dlp',
       maskedContent:
-        'email [REDACTED:EMAIL_ADDRESS] / mynumber [REDACTED:JAPAN_INDIVIDUAL_NUMBER]',
+        'email [REDACTED:EMAIL_ADDRESS] / mynumber [REDACTED:JAPAN_INDIVIDUAL_NUMBER] / like [REDACTED:AIKH_JP_MYNUMBER_LIKE]',
       maskedSpans: [
         { start: 6, end: 22, type: 'EMAIL', ruleId: 'dlp:EMAIL_ADDRESS' },
         {
@@ -108,10 +136,17 @@ describe('applyCloudDlpMask', () => {
           type: 'JP_MYNUMBER',
           ruleId: 'dlp:JAPAN_INDIVIDUAL_NUMBER',
         },
+        {
+          start: 55,
+          end: 65,
+          type: 'JP_MYNUMBER',
+          ruleId: 'dlp:AIKH_JP_MYNUMBER_LIKE',
+        },
       ],
       ruleHits: {
         'dlp:EMAIL_ADDRESS': 1,
         'dlp:JAPAN_INDIVIDUAL_NUMBER': 1,
+        'dlp:AIKH_JP_MYNUMBER_LIKE': 1,
       },
       ruleSetVersion: CLOUD_DLP_RULE_SET_VERSION,
     });

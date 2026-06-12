@@ -94,14 +94,17 @@ CI gate は二段構成にする（2026-06-11 確定）。
 
 - **deterministic zero checks（CI blocker）**: `falseMaskedTokenCount`（public doc のみ）/ `emptyChunkCount` / `oversizedChunkCount`。LLM variance がなく「0 であるべき」が自明なため、`--ci` フラグ付き実行（`conversion-eval.yml` の `p1d-stable-zero` job）で fail 時に exit 1。
 - **recall 系平均（report-only 維持）**: `fieldRecall` / `coreFieldRecall` / `valuePrecision` / `tableCellRecall` / `locatorCoverage`。expected sidecar を正直に広げるたび値が動く段階なので、gate にすると「通る expected だけ書く」誘惑が生まれる。fixture 意味づけが安定した後に `coreFieldRecall` から blocker 化を検討する。
+- **table cell の未測定分類（schemaVersion 4）**: `expectedTableCells` は `TableCell[]` または `"not_applicable"`。欠落/空配列は authoring gap、`"not_applicable"` は source-document intent として表がない宣言。N/A 宣言なのに DocumentIR に `kind: "table"` block、または chunk に `structureType: "table"` があれば stable eval は fail する。
 
-現時点の stable `falseMaskedTokenCount` は、committed DocumentIR sidecar から作った direct chunk 内の `[REDACTED:*]` marker を検出する sidecar hygiene check である。masker は stable path では走らないため、本物の over-mask measurement は masker-output sidecar または live drift check を追加してから扱う。
+現時点の stable `falseMaskedTokenCount` は、committed DocumentIR sidecar から作った direct chunk 内の `[REDACTED:*]` marker を検出する sidecar hygiene check である。masker は stable path では走らないため、本物の over-mask measurement は live drift check で扱う。
 
 Fixture authoring rules:
 
 - `expectedFieldTiers` の key は必ず `expectedFields` にも含める。sidecar load 時に schema validation で失敗させる。
 - `expectedTableCells[].tableId` は、利用可能な chunk id / locator と照合する。table identity を確認しない単なる注釈としては使わない。
-- `expectedValues[].expectedValue` は、1文字の単位など弱すぎる値を避け、field/value の組み合わせが chunk 内で十分に識別的になる値を選ぶ。
+- `expectedTableCells: "not_applicable"` は、原本の意図として表がない fixture だけに使う。invoice scan のように原本には視覚表があるが OCR が `image_text` 化したケースは N/A 禁止。`tableCellRecall = 0` を正直な製品シグナルとして残し、P1-E の table fallback へ渡す。
+- `expectedValues[].expectedValue` は、sidecar に偶然残っている文字列ではなく source-document intent から選ぶ。`field` + `expectedValue` の組が同一 chunk 内で十分に識別的になる値を選ぶ。
+- `expectedValues[].expectedValue` は正規化後 1 文字なら schema validation で失敗する。2〜3文字の数字のみ・単位のみは `weak_expected_value` note を出す。これは `evaluateExpectedValues` が field と value を同一 chunk 内の独立 substring として照合するため、弱すぎる値が偽 pass になりやすいからである。
 
 初期コマンド案:
 
@@ -136,12 +139,12 @@ tmp/p1d-quality-report.json
 | Metric | Layer | 意味 | 主な対象 | 入力 |
 |---|---|---|---|---|
 | `publicDirectRate` | live | 公開文書が `Public` / `Internal` + `direct` に留まる割合 | 公的空欄様式、公開ガイド | live curator run |
-| `falseMaskedTokenCount` | stable if masker sidecar exists / otherwise live | 公開文書で不要に `[REDACTED:*]` された token 数 | 公的空欄様式、公開ガイド | Masker/DLP output sidecar または live DLP run |
+| `falseMaskedTokenCount` | stable hygiene / live drift | stable では公開 sidecar に `[REDACTED:*]` が混入していないことの tripwire。実 over-mask は live drift で測る | 公的空欄様式、公開ガイド | committed sidecar / live DLP run |
 | `overRestrictedCount` | live | 公開文書が `Confidential` / `Restricted` または non-direct に寄った件数 | Curator / candidate selection | live curator run |
 | `fieldRecall` | stable | 期待 key field が抽出結果に存在する割合 | 帳票、規程、統合報告書 | `expectedFields` / structured expected |
 | `coreFieldRecall` | stable | `expectedFieldTiers` で `core` 指定された重要 field の recall。将来の blocker 候補 | 帳票、公開様式 | `expectedFields` + `expectedFieldTiers` |
 | `valuePrecision` | stable | key に対応する value が正しい粒度で保持された割合 | 帳票、表、財務数値 | structured expected |
-| `tableCellRecall` | stable | 期待 table cell / row / column 関係が保持された割合 | 源泉徴収票、確定申告書、統合報告書 | structured expected |
+| `tableCellRecall` | stable | 期待 table cell / row / column 関係が保持された割合。`expectedTableCells: "not_applicable"` は分母から除外し、欠落/空配列は authoring gap として別カウント | 源泉徴収票、確定申告書、統合報告書 | structured expected |
 | `locatorCoverage` | stable | field / value / table cell に page / row / sheet / slide locator が付く割合 | 全 subtype | DocumentIR / KnowledgeChunk locator |
 | `emptyChunkCount` | stable | 空 chunk 数 | conversion / chunking | KnowledgeChunk |
 | `oversizedChunkCount` | stable | Firestore 500 KiB 上限や prompt budget 上危険な chunk 数 | PDF、XLSX、CSV | KnowledgeChunk |
