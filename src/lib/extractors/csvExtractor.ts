@@ -12,6 +12,8 @@ import {
 import {
   buildCsvPreflightReport,
   formatPreflightWarning,
+  renderTableManifest,
+  tableManifestPreviewRowLimit,
   type DocumentPreflightReport,
 } from './preflight';
 
@@ -19,6 +21,12 @@ export type CsvExtractionResult = {
   /** Curator/masker input: normalized markdown table for the whole document. */
   normalizedMarkdown: string;
   chunks: KnowledgeChunk[];
+  preflightReport: DocumentPreflightReport;
+};
+
+export type CsvCuratorInput = {
+  content: string;
+  inputMode: 'full_text' | 'table_manifest';
   preflightReport: DocumentPreflightReport;
 };
 
@@ -339,6 +347,61 @@ export function extractCsv(input: {
   return {
     normalizedMarkdown,
     chunks,
+    preflightReport,
+  };
+}
+
+export function buildCsvCuratorInput(input: {
+  fileName: string;
+  content: string;
+}): CsvCuratorInput {
+  const { rows: rawRows } = parseCsvRecords(input.content);
+  const colCount =
+    rawRows.length === 0
+      ? 0
+      : rawRows.reduce((max, row) => Math.max(max, row.length), 0);
+  const rowCount = rawRows.length;
+  const normalizedRows =
+    colCount === 0
+      ? []
+      : rawRows.map((row) => {
+          const padded = [...row];
+          while (padded.length < colCount) {
+            padded.push('');
+          }
+          return padded.slice(0, colCount);
+        });
+  const normalizedMarkdown = rowsToMarkdownTable(normalizedRows);
+  const range = usedRangeA1Notation(rowCount, colCount);
+  const preflightReport = buildCsvPreflightReport({
+    rowCount,
+    columnCount: colCount,
+    estimatedChars: normalizedMarkdown.length,
+  });
+
+  const content = renderTableManifest({
+    fileName: input.fileName,
+    preflightReport,
+    fallbackText: input.content,
+    sheets: [
+      {
+        sheetName: DEFAULT_SHEET_NAME,
+        rowCount,
+        columnCount: colCount,
+        range,
+        previewMarkdown: rowsToMarkdownTable(
+          normalizedRows.slice(0, tableManifestPreviewRowLimit())
+        ),
+      },
+    ],
+  });
+
+  return {
+    content,
+    inputMode:
+      preflightReport.recommendedSplitUnit === 'none'
+        ? 'full_text'
+        : 'table_manifest',
     preflightReport,
   };
 }

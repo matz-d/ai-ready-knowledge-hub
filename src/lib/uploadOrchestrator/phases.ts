@@ -23,6 +23,7 @@ import {
 import { recordPhaseFailure } from './audit';
 import { safeDeleteMaskedObject } from './cleanup';
 import type {
+  CuratorInputMode,
   MaskerSummary,
   OrchestrateResult,
   RunCuratorAndMaskerLifecycleArgs,
@@ -41,6 +42,26 @@ export class MaskerPhaseError extends Error {
     this.name = 'MaskerPhaseError';
   }
 }
+
+const TABLE_MANIFEST_FORCE_MASKING_REASON =
+  'Large table was classified from a sampled table manifest; direct AI use is not trusted until full-source masking runs.';
+
+function applyCuratorInputModeSafety(
+  result: CuratorOutputResult,
+  curatorInputMode: CuratorInputMode
+): CuratorOutputResult {
+  if (curatorInputMode !== 'table_manifest' || result.aiUsePolicy !== 'direct') {
+    return result;
+  }
+
+  return {
+    ...result,
+    sensitivity: 'Confidential',
+    aiUsePolicy: 'requires_masking',
+    rationale: `${result.rationale}\n${TABLE_MANIFEST_FORCE_MASKING_REASON}`,
+  };
+}
+
 export async function runCuratorAndMaskerLifecycle(
   args: RunCuratorAndMaskerLifecycleArgs
 ): Promise<OrchestrateResult> {
@@ -50,7 +71,8 @@ export async function runCuratorAndMaskerLifecycle(
     curatorOutput = await runCuratorPhase({
       docRef: args.docRef,
       displayName: args.displayName,
-      content: args.content,
+      content: args.curatorContent ?? args.content,
+      curatorInputMode: args.curatorInputMode ?? 'full_text',
       contentSha256: args.contentSha256,
       sourceKind: args.sourceKind,
       externalSource: args.externalSource,
@@ -135,15 +157,20 @@ async function runCuratorPhase(args: {
   docRef: DocumentReference;
   displayName: string;
   content: string;
+  curatorInputMode: CuratorInputMode;
   contentSha256: string;
   sourceKind: FirestoreInitialDocumentDraft['sourceKind'];
   externalSource: FirestoreInitialDocumentDraft['externalSource'];
 }): Promise<{ result: CuratorOutputResult; completedAt: Date }> {
   try {
-    const result = await curatorFlow({
+    const rawResult = await curatorFlow({
       fileName: args.displayName,
       content: args.content,
     });
+    const result = applyCuratorInputModeSafety(
+      rawResult,
+      args.curatorInputMode
+    );
     const completedAt = new Date();
     const nextStatus = terminalStatusForCuratorPolicy(result.aiUsePolicy);
     assertFirestoreInvariants({

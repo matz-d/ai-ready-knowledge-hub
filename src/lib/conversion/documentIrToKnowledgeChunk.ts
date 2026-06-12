@@ -323,7 +323,17 @@ function buildScanImageTextTableBlocks(input: {
   pageNumber: number;
   blocks: readonly DocumentIrBlock[];
 }): DocumentIrBlock[] {
-  if (input.blocks.some((block) => block.kind === 'table')) return [];
+  const nativeTableRows = new Set(
+    input.blocks
+      .filter((block) => block.kind === 'table')
+      .map((block) => block.text.trim())
+      .filter((text) => text.length > 0)
+  );
+  const maxNativeTableIndex = input.blocks.reduce((max, block) => {
+    if (block.kind !== 'table') return max;
+    const tableIndex = block.locator?.tableIndex;
+    return tableIndex === undefined ? max : Math.max(max, tableIndex);
+  }, -1);
 
   const positioned = input.blocks.flatMap((block): PositionedScanBlock[] => {
     const text = block.text.trim();
@@ -336,7 +346,7 @@ function buildScanImageTextTableBlocks(input: {
   );
 
   const tableBlocks: DocumentIrBlock[] = [];
-  let tableIndex = 0;
+  let tableIndex = maxNativeTableIndex + 1;
 
   for (let rowIndex = 0; rowIndex < rows.length - 1; rowIndex += 1) {
     const headerRow = rows[rowIndex];
@@ -361,10 +371,11 @@ function buildScanImageTextTableBlocks(input: {
 
     for (let dataIndex = 0; dataIndex < dataRows.length; dataIndex += 1) {
       const dataCells = dataRows[dataIndex].cells.map((cell) => cell.text);
-      const rowText = [
-        headerCells.join('\t'),
-        dataCells.join('\t'),
-      ].join('\n');
+      const dataRowText = dataCells.join('\t');
+      if (nativeTableRows.has(dataRowText)) {
+        continue;
+      }
+      const rowText = [headerCells.join('\t'), dataRowText].join('\n');
       tableBlocks.push({
         blockId: `p${input.pageNumber}-scan-table${tableIndex}-r${dataIndex + 1}`,
         kind: 'table',

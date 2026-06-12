@@ -14,6 +14,7 @@ import {
   UnsupportedMimeTypeError,
   exportDataToBuffer,
   fetchSheetsSnapshot,
+  googleSheetsWorkspaceImportAdapter,
   parseGoogleSheetsInput,
   xlsxBufferToNormalizedContent,
 } from '../googleSheetsSnapshotImporter';
@@ -258,5 +259,33 @@ describe('xlsxBufferToNormalizedContent', () => {
     const md = await xlsxBufferToNormalizedContent(buf);
     expect(md).toContain('## Sheet1');
     expect(md).toContain('| A | B |');
+  });
+});
+
+describe('googleSheetsWorkspaceImportAdapter', () => {
+  it('builds table manifest Curator input for large exported sheets', async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('明細');
+    sheet.addRow(['顧客名', '数量']);
+    for (let i = 0; i < 1001; i += 1) {
+      sheet.addRow([`Acme ${i}`, i]);
+    }
+    const buf = Buffer.from(await workbook.xlsx.writeBuffer());
+
+    const curatorInput =
+      await googleSheetsWorkspaceImportAdapter.toCuratorInput?.({
+        fileName: '料金表.xlsx',
+        bytes: buf,
+        normalizedContent: 'FULL MARKDOWN',
+      });
+
+    expect(curatorInput).toEqual(
+      expect.objectContaining({
+        inputMode: 'table_manifest',
+        content: expect.stringContaining('Table preflight manifest'),
+      })
+    );
+    expect(curatorInput?.content).toContain('| Acme 3 | 3 |');
+    expect(curatorInput?.content).not.toContain('Acme 1000');
   });
 });

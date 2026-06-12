@@ -311,7 +311,7 @@ describe('documentIrToKnowledgeChunks', () => {
     );
   });
 
-  it('does not synthesize scan-pdf visual tables when table blocks already exist', () => {
+  it('synthesizes missing scan-pdf visual rows even when native table blocks exist on the page', () => {
     const ir = buildIr(
       [
         {
@@ -353,9 +353,67 @@ describe('documentIrToKnowledgeChunks', () => {
       documentIr: ir,
     });
 
-    expect(
-      chunks.filter((chunk) => chunk.structureType === 'table')
-    ).toHaveLength(1);
+    const tableChunks = chunks.filter((chunk) => chunk.structureType === 'table');
+    expect(tableChunks).toHaveLength(2);
+    expect(tableChunks[1].text).toBe(
+      '請求項目\t金額\n月次顧問契約料 (2026年5月分)\t¥385,000'
+    );
+    expect(tableChunks[1].locator).toEqual({
+      kind: 'pdf',
+      page: 1,
+      paragraphId: 'table-1-row-1',
+    });
+  });
+
+  it('does not duplicate scan-pdf visual rows already emitted as native table blocks', () => {
+    const ir = buildIr(
+      [
+        {
+          blockId: 'p1-t0-r0',
+          kind: 'table',
+          text: '請求項目\t金額',
+          locator: { pageNumber: 1, tableIndex: 0, rowIndex: 0 },
+        },
+        {
+          blockId: 'p1-t0-r1',
+          kind: 'table',
+          text: '月次顧問契約料 (2026年5月分)\t¥385,000',
+          locator: { pageNumber: 1, tableIndex: 0, rowIndex: 1 },
+        },
+        {
+          blockId: 'p1-ocr15',
+          kind: 'image_text',
+          text: '請求項目',
+          locator: { pageNumber: 1, bbox: [190, 340, 250, 353] },
+        },
+        {
+          blockId: 'p1-ocr16',
+          kind: 'image_text',
+          text: '金額',
+          locator: { pageNumber: 1, bbox: [730, 340, 770, 353] },
+        },
+        {
+          blockId: 'p1-ocr17',
+          kind: 'image_text',
+          text: '月次顧問契約料 (2026年5月分)',
+          locator: { pageNumber: 1, bbox: [190, 370, 400, 383] },
+        },
+        {
+          blockId: 'p1-ocr18',
+          kind: 'image_text',
+          text: '¥385,000',
+          locator: { pageNumber: 1, bbox: [710, 370, 770, 383] },
+        },
+      ],
+      'scan-pdf'
+    );
+
+    const chunks = documentIrToKnowledgeChunks({
+      ...defaultOptions(),
+      documentIr: ir,
+    });
+
+    expect(chunks.filter((chunk) => chunk.structureType === 'table')).toHaveLength(2);
   });
 
   it('drops note blocks', () => {

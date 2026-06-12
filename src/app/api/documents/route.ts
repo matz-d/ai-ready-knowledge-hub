@@ -23,7 +23,8 @@ import {
   isAllowedMimeType,
 } from '../../../lib/documents';
 import { documentUploadSuccessBodyFromOrchestrate } from '../../../lib/documentUploadResponseMapper';
-import { xlsxToNormalizedMarkdown } from '../../../lib/extractors/xlsxExtractor';
+import { buildCsvCuratorInput } from '../../../lib/extractors/csvExtractor';
+import { buildXlsxCuratorInput } from '../../../lib/extractors/xlsxExtractor';
 import {
   buildPdfCuratorContent,
   createFirestorePdfFlagReader,
@@ -192,9 +193,17 @@ export async function POST(request: Request) {
 
   // ── Content extraction for non-PDF formats ────────────────────────────────
   let content: string;
+  let curatorContent: string | undefined;
+  let curatorInputMode: 'full_text' | 'table_manifest' | undefined;
   if (extCheck === '.xlsx') {
     try {
-      content = await xlsxToNormalizedMarkdown(buffer);
+      const tableCuratorInput = await buildXlsxCuratorInput({
+        fileName: displayName,
+        content: buffer,
+      });
+      content = tableCuratorInput.normalizedMarkdown;
+      curatorContent = tableCuratorInput.content;
+      curatorInputMode = tableCuratorInput.inputMode;
     } catch {
       return NextResponse.json(
         { error: '.xlsx ファイルを解析できませんでした。' },
@@ -213,6 +222,14 @@ export async function POST(request: Request) {
       );
     }
     content = decoded;
+    if (extCheck === '.csv') {
+      const tableCuratorInput = buildCsvCuratorInput({
+        fileName: displayName,
+        content,
+      });
+      curatorContent = tableCuratorInput.content;
+      curatorInputMode = tableCuratorInput.inputMode;
+    }
   }
 
   try {
@@ -253,7 +270,14 @@ export async function POST(request: Request) {
             auditContext: pdfAuditContext,
             conversion: pdfExtractionResult.conversion,
           }
-        : {}),
+        : {
+            ...(curatorContent !== undefined
+              ? {
+                  curatorContent,
+                  curatorInputMode: curatorInputMode ?? 'full_text',
+                }
+              : {}),
+          }),
     });
 
     // PDF chunking is handled inside orchestratePdfPath — skip replaceChunksForDoc.

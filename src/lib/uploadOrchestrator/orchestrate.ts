@@ -135,6 +135,8 @@ export async function orchestrateUploadProcessing(
     docId,
     displayName: input.displayName,
     content: input.content,
+    curatorContent: input.curatorContent,
+    curatorInputMode: input.curatorInputMode,
     contentSha256,
     sourceKind: 'upload',
     externalSource: null,

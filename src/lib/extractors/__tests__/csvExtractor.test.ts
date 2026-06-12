@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractCsv } from '../csvExtractor';
+import { buildCsvCuratorInput, extractCsv } from '../csvExtractor';
 
 const baseInput = {
   docId: 'doc-csv-1',
@@ -106,5 +106,24 @@ describe('extractCsv', () => {
     expect(chunks[1].text).toContain('## sample.csv rows 2-501');
     expect(chunks[1].text).toContain('| 顧客名 | 数量 |');
     expect(chunks[1].extractionWarnings).toContain('rowWindow=2-501');
+  });
+
+  it('builds a bounded table manifest for large CSV Curator input', () => {
+    const rows = [
+      '顧客名,数量',
+      ...Array.from({ length: 1001 }, (_, index) => `Acme ${index},${index}`),
+    ];
+
+    const result = buildCsvCuratorInput({
+      fileName: 'sales.csv',
+      content: `${rows.join('\n')}\n`,
+    });
+
+    expect(result.inputMode).toBe('table_manifest');
+    expect(result.content).toContain('Table preflight manifest');
+    expect(result.content).toContain('Recommended split unit: row_group');
+    expect(result.content).toContain('| 顧客名 | 数量 |');
+    expect(result.content).toContain('| Acme 3 | 3 |');
+    expect(result.content).not.toContain('Acme 1000');
   });
 });
