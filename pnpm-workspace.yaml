@@ -5,3 +5,13 @@ minimumReleaseAge: 4320
 
 overrides:
   postcss: ^8.5.10
+  tmp: '>=0.2.6'
+  ws: '>=8.20.1'
+  protobufjs: ^7.5.8
+  qs: '>=6.15.2'
+  '@grpc/grpc-js': '>=1.14.4'
+  uuid: '>=11.1.1'
+
+auditConfig:
+  ignoreGhsas:
+    - GHSA-q7rr-3cgh-j5r3
