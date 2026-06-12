@@ -9,21 +9,28 @@ import {
   KNOWLEDGE_CHUNK_SCHEMA_VERSION,
   type KnowledgeChunk,
 } from '../knowledgeChunkSchema';
+import {
+  buildXlsxPreflightReport,
+  formatPreflightWarning,
+  type DocumentPreflightReport,
+} from './preflight';
 
 export type XlsxExtractionResult = {
   /** Curator/masker input: normalized markdown table for the whole document. */
   normalizedMarkdown: string;
   chunks: KnowledgeChunk[];
+  preflightReport: DocumentPreflightReport;
 };
 
 export type XlsxMarkdownSheet = {
   sheetName: string;
   range: string;
+  rowCount: number;
+  columnCount: number;
+  rows: string[][];
   markdownTable: string;
   text: string;
 };
-
-const CHUNK_WARNING_THRESHOLD = 200;
 
 function normalizeCellForMarkdown(cell: string): string {
   return cell
@@ -211,6 +218,16 @@ function stableChunkId(docId: string, sheetName: string, range: string): string 
   return `${docId}:xlsx:${sheetName}:${range}`;
 }
 
+function stableChunkIdWithRole(
+  docId: string,
+  sheetName: string,
+  range: string,
+  role?: string
+): string {
+  const rolePart = role === undefined ? '' : `:${role}`;
+  return `${stableChunkId(docId, sheetName, range)}${rolePart}`;
+}
+
 async function readWorkbookFromXlsxContent(
   content: Buffer | Uint8Array
 ): Promise<ExcelJS.Workbook> {
@@ -235,10 +252,14 @@ export async function xlsxToMarkdownSheets(
     const range = normalizedUsedRangeA1(worksheet);
     const rows = rowsFromUsedRange(worksheet, range);
     const markdownTable = rowsToMarkdownTable(rows);
+    const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
 
     return {
       sheetName: effectiveSheetName,
       range,
+      rowCount: rows.length,
+      columnCount,
+      rows,
       markdownTable,
       text: chunkTextForSheet(effectiveSheetName, markdownTable),
     };
@@ -264,32 +285,54 @@ export async function extractXlsx(input: {
   const binary = toBuffer(input.content);
   const sheets = await xlsxToMarkdownSheets(binary);
   const extractorInput = binary.toString('base64');
-  const warnings =
-    sheets.length > CHUNK_WARNING_THRESHOLD
-      ? [`sheet count exceeded ${CHUNK_WARNING_THRESHOLD}; evaluate chunk strategy.`]
-      : [];
+  const preflightReport = buildXlsxPreflightReport({
+    sheetCount: sheets.length,
+    rowCount: sheets.reduce((sum, sheet) => sum + sheet.rowCount, 0),
+    columnCount: sheets.reduce(
+      (max, sheet) => Math.max(max, sheet.columnCount),
+      0
+    ),
+    maxSheetRows: sheets.reduce(
+      (max, sheet) => Math.max(max, sheet.rowCount),
+      0
+    ),
+    estimatedChars: sheets.reduce((sum, sheet) => sum + sheet.text.length, 0),
+  });
+  const preflightWarning = formatPreflightWarning(preflightReport);
+  const warnings = preflightWarning ? [preflightWarning] : [];
 
-  const chunks = sheets.map((sheet) => {
+  const buildChunk = (args: {
+    sheet: Pick<XlsxMarkdownSheet, 'sheetName'>;
+    range: string;
+    text: string;
+    warnings: string[];
+    role?: string;
+  }): KnowledgeChunk => {
     const locator = {
       kind: 'spreadsheet' as const,
-      sheetName: sheet.sheetName,
-      range: sheet.range,
+      sheetName: args.sheet.sheetName,
+      range: args.range,
     };
 
     const baseChunk: KnowledgeChunk = {
-      id: stableChunkId(input.docId, sheet.sheetName, sheet.range),
+      id: stableChunkIdWithRole(
+        input.docId,
+        args.sheet.sheetName,
+        args.range,
+        args.role
+      ),
       docId: input.docId,
       schemaVersion: KNOWLEDGE_CHUNK_SCHEMA_VERSION,
       sourceType: 'spreadsheet',
       structureType: 'table',
       locator,
       title: input.fileName,
-      text: sheet.text,
+      text: args.text,
       sensitivity: input.documentSensitivity,
       aiUsePolicy: input.documentAiUsePolicy,
       sensitivitySource: 'inherited',
       extractionProvider: 'xlsx',
-      extractionWarnings: warnings,
+      extractionWarnings: args.warnings,
       sourceHash: computeChunkSourceHash({
         extractorInput,
         locator,
@@ -302,10 +345,83 @@ export async function extractXlsx(input: {
       baseChunk,
       DEFAULT_COLUMN_SENSITIVITY_RULES
     );
+  };
+
+  const chunks = sheets.flatMap((sheet) => {
+    const shouldSplitSheetRows =
+      preflightReport.recommendedSplitUnit === 'row_group' &&
+      sheet.rows.length > 1;
+
+    if (!shouldSplitSheetRows) {
+      return [
+        buildChunk({
+          sheet,
+          range: sheet.range,
+          text: sheet.text,
+          warnings,
+        }),
+      ];
+    }
+
+    const range = decodedRangeFromA1(sheet.range);
+    const header = sheet.rows[0];
+    const rowGroupSize = preflightReport.suggestedRowGroupSize ?? 500;
+    const summaryText = [
+      `## ${sheet.sheetName}`,
+      '',
+      `Rows: ${sheet.rowCount}`,
+      `Columns: ${sheet.columnCount}`,
+      '',
+      rowsToMarkdownTable([header]),
+    ]
+      .filter((part) => part.length > 0)
+      .join('\n');
+
+    const rowWindowChunks: KnowledgeChunk[] = [
+      buildChunk({
+        sheet,
+        range: sheet.range,
+        text: summaryText,
+        warnings,
+        role: 'summary',
+      }),
+    ];
+
+    for (
+      let startIndex = 1;
+      startIndex < sheet.rows.length;
+      startIndex += rowGroupSize
+    ) {
+      const endIndexExclusive = Math.min(
+        startIndex + rowGroupSize,
+        sheet.rows.length
+      );
+      const startRow = range.startRow + startIndex;
+      const endRow = range.startRow + endIndexExclusive - 1;
+      const rowWindowRange = `${cellAddress(
+        startRow,
+        range.startColumn
+      )}:${cellAddress(endRow, range.endColumn)}`;
+      const markdownTable = rowsToMarkdownTable([
+        header,
+        ...sheet.rows.slice(startIndex, endIndexExclusive),
+      ]);
+      rowWindowChunks.push(
+        buildChunk({
+          sheet,
+          range: rowWindowRange,
+          text: `## ${sheet.sheetName} rows ${startRow}-${endRow}\n\n${markdownTable}`,
+          warnings: [...warnings, `rowWindow=${startRow}-${endRow}`],
+        })
+      );
+    }
+
+    return rowWindowChunks;
   });
 
   return {
     normalizedMarkdown: sheets.map((sheet) => sheet.text).join('\n\n'),
     chunks,
+    preflightReport,
   };
 }

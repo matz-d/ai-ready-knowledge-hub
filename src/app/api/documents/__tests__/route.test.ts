@@ -6,6 +6,7 @@ const {
   replaceChunksForDocMock,
   getKnowledgeHubBucketNameMock,
   dispatchPdfExtractionMock,
+  buildPdfCuratorContentMock,
   getFirestoreClientMock,
   curatorPhaseErrorClass,
   maskerPhaseErrorClass,
@@ -34,6 +35,7 @@ const {
     replaceChunksForDocMock: vi.fn(),
     getKnowledgeHubBucketNameMock: vi.fn(),
     dispatchPdfExtractionMock: vi.fn(),
+    buildPdfCuratorContentMock: vi.fn(),
     getFirestoreClientMock: vi.fn(),
     curatorPhaseErrorClass: CuratorPhaseErrorMock,
     maskerPhaseErrorClass: MaskerPhaseErrorMock,
@@ -60,6 +62,7 @@ vi.mock('../../../../lib/chunkRegenerator', () => ({
 }));
 
 vi.mock('../../../../lib/extractors/pdfExtractionDispatcher', () => ({
+  buildPdfCuratorContent: buildPdfCuratorContentMock,
   dispatchPdfExtraction: dispatchPdfExtractionMock,
   createFirestorePdfFlagReader: vi.fn(),
   PDF_UPLOAD_BETA_DISABLED_MESSAGE:
@@ -146,6 +149,9 @@ beforeEach(() => {
   getKnowledgeHubBucketNameMock.mockReturnValue('bucket-1');
   getFirestoreClientMock.mockReturnValue({ collection: vi.fn() });
   dispatchPdfExtractionMock.mockResolvedValue(defaultPdfDispatchSuccess);
+  buildPdfCuratorContentMock.mockImplementation(
+    (result: { textContent: string }) => result.textContent
+  );
   replaceChunksForDocMock.mockResolvedValue(undefined);
   orchestrateUploadProcessingMock.mockResolvedValue({
     kind: 'curated',
@@ -782,12 +788,41 @@ describe('POST /api/documents', () => {
           displayName: 'sample.pdf',
           contentType: 'application/pdf',
           content: 'PDF body text',
+          pdfCuratorContent: 'PDF body text',
+          pdfCuratorInputMode: 'full_text',
           documentIr: minimalPdfExtraction.documentIr,
           sourceSubtype: 'official-doc-pdf',
           conversion: { converterId: 'pdf-parse' },
         })
       );
       expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+    });
+
+    it('passes page-group manifest as PDF Curator input while preserving full text content', async () => {
+      dispatchPdfExtractionMock.mockResolvedValue({
+        ok: true,
+        result: {
+          ...defaultPdfDispatchSuccess.result,
+          textContent: 'FULL PDF TEXT',
+          pageGroupPlan: {
+            splitUnit: 'page_group',
+            pageGroupSize: 25,
+            groups: [],
+          },
+        },
+      });
+      buildPdfCuratorContentMock.mockReturnValue('PAGE GROUP MANIFEST');
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(200);
+      expect(orchestrateUploadProcessingMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: 'FULL PDF TEXT',
+          pdfCuratorContent: 'PAGE GROUP MANIFEST',
+          pdfCuratorInputMode: 'page_group_manifest',
+        })
+      );
     });
 
     it('returns curated success with maskingPending for requires_masking PDF', async () => {

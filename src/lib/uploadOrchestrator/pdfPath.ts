@@ -43,12 +43,35 @@ import {
 import type {
   OrchestrateAuditContext,
   OrchestrateResult,
+  PdfCuratorInputMode,
   PdfConversionAudit,
 } from './types';
 
 // ─────────────────────────────────────────────────────────────────────
 // PDF path (Phase 3-H-2 M1)
 // ─────────────────────────────────────────────────────────────────────
+
+const PAGE_GROUP_MANIFEST_FORCE_MASKING_REASON =
+  'Large PDF was classified from a page-group manifest; direct AI use is not trusted until full-text masking runs.';
+
+function applyPdfCuratorInputModeSafety(
+  result: CuratorOutputResult,
+  curatorInputMode: PdfCuratorInputMode
+): CuratorOutputResult {
+  if (
+    curatorInputMode !== 'page_group_manifest' ||
+    result.aiUsePolicy !== 'direct'
+  ) {
+    return result;
+  }
+
+  return {
+    ...result,
+    sensitivity: 'Confidential',
+    aiUsePolicy: 'requires_masking',
+    rationale: `${result.rationale}\n${PAGE_GROUP_MANIFEST_FORCE_MASKING_REASON}`,
+  };
+}
 
 /**
  * PDF curator phase — mirrors `runCuratorPhase` for text documents but maps
@@ -59,13 +82,18 @@ async function runPdfCuratorPhase(args: {
   docRef: DocumentReference;
   displayName: string;
   content: string;
+  curatorInputMode: PdfCuratorInputMode;
   contentSha256: string;
 }): Promise<{ result: CuratorOutputResult; completedAt: Date }> {
   try {
-    const result = await curatorFlow({
+    const rawResult = await curatorFlow({
       fileName: args.displayName,
       content: args.content,
     });
+    const result = applyPdfCuratorInputModeSafety(
+      rawResult,
+      args.curatorInputMode
+    );
     const completedAt = new Date();
 
     // requires_masking: stay in curating until DocumentIR + Masker complete in orchestratePdfPath.
@@ -150,6 +178,8 @@ export async function orchestratePdfPath(args: {
   docId: string;
   displayName: string;
   content: string;
+  curatorContent: string;
+  curatorInputMode: PdfCuratorInputMode;
   contentSha256: string;
   storagePath: string;
   aiSafeStoragePath: string;
@@ -193,7 +223,8 @@ export async function orchestratePdfPath(args: {
     curatorOutput = await runPdfCuratorPhase({
       docRef: args.docRef,
       displayName: args.displayName,
-      content: args.content,
+      content: args.curatorContent,
+      curatorInputMode: args.curatorInputMode,
       contentSha256: args.contentSha256,
     });
   } catch (e) {

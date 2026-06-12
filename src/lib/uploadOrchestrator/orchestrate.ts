@@ -123,6 +123,8 @@ export async function orchestrateUploadProcessing(
       storagePath,
       aiSafeStoragePath,
       documentIr: input.documentIr,
+      curatorContent: input.pdfCuratorContent ?? input.content,
+      curatorInputMode: input.pdfCuratorInputMode ?? 'full_text',
       auditContext: input.auditContext,
       conversion: input.conversion ?? DEFAULT_PDF_CONVERSION_AUDIT,
     });

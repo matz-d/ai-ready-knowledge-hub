@@ -27,6 +27,7 @@ export type PdfConversionAudit = {
    */
   unmaskablePiiFindingsCount?: number;
 };
+export type PdfCuratorInputMode = 'full_text' | 'page_group_manifest';
 export type OrchestrateAuditContext = {
   tenantId: string;
   actor: AuditEventWrite['actor'];
@@ -52,6 +53,17 @@ export type OrchestrateInput = {
    * backwards compatibility with subtype 1 callers that don't pass it yet.
    */
   conversion?: PdfConversionAudit;
+  /**
+   * Optional PDF-only Curator input. Keeps `content` as the full extracted text
+   * for chunk hashing and Masker input while allowing large PDFs to classify
+   * from a page-group manifest.
+   */
+  pdfCuratorContent?: string;
+  /**
+   * Describes whether `pdfCuratorContent` is complete text or a sampled
+   * manifest. Sampled manifests are not trusted for direct AI use decisions.
+   */
+  pdfCuratorInputMode?: PdfCuratorInputMode;
 };
 
 export type MaskerSummary = {
