@@ -37,6 +37,7 @@
     "eval:p1d:quality": "tsx scripts/runP1dQualityGate.ts",
     "eval:p1d:masker-drift": "tsx scripts/runP1dMaskerDriftCheck.ts",
     "eval:p1d:mixed-pdf": "tsx scripts/runP1dMixedPdfCheck.ts",
+    "eval:scan-pdf:ocr-live-drift": "tsx scripts/runScanPdfOcrLiveDrift.ts",
     "knip": "knip"
   },
   "dependencies": {

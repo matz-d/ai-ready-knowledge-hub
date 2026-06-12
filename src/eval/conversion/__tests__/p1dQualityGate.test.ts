@@ -411,6 +411,47 @@ describe('P1-D quality gate stable metrics', () => {
     expect(result.metrics.locatorCoverage.rate).toBe(1);
   });
 
+  it('treats scan-pdf pN-ocrM table ids as page-scoped hints for OCR drift', () => {
+    const result = evaluateP1dFixture({
+      documentId: 'scan-pdf-ocr-table-id-drift',
+      fixturePath: 'sample-data/document-conversion/scan-pdf/scan-pdf-ocr-table-id-drift.document-ir.json',
+      sourceSubtype: 'scan-pdf',
+      isPublicDocument: true,
+      documentIr: testDocumentIr(),
+      expected: P1dExpectedFixtureSchema.parse({
+        documentId: 'scan-pdf-ocr-table-id-drift',
+        expectedTableCells: [
+          {
+            tableId: 'p1-ocr3',
+            rowLabel: '契約期間',
+            expectedValue: '期間の定めなし',
+          },
+          {
+            tableId: 'p2-ocr3',
+            rowLabel: '契約期間',
+            expectedValue: '期間の定めなし',
+          },
+        ],
+      }),
+      chunks: [
+        {
+          text: '契約期間\t期間の定めなし',
+          locator: { kind: 'pdf', page: 1, paragraphId: 'p1-ocr7' },
+          structureType: 'table',
+        },
+      ],
+    });
+
+    expect(result.metrics.tableCellRecall.rate).toBe(0.5);
+    expect(result.metrics.tableCellRecall.missing).toEqual([
+      'p2-ocr3 / 契約期間 / 期間の定めなし',
+    ]);
+    expect(result.metrics.locatorCoverage.locatedCount).toBe(1);
+    expect(result.metrics.locatorCoverage.notFound).toEqual([
+      'p2-ocr3 / 契約期間 / 期間の定めなし',
+    ]);
+  });
+
   it('keeps unmeasured structured metrics explicit when expected sidecar is absent', () => {
     const result = evaluateP1dFixture({
       documentId: 'no-expected',
