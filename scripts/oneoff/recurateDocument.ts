@@ -13,22 +13,22 @@
  *   そのままミラーし、direct 文書の canonical 状態に正規化する（masker ブロックは null 化）。
  *
  * 実行（live curator のため global 必須）:
- *   GOOGLE_CLOUD_LOCATION=global pnpm tsx scripts/recurateDocument.ts            # dry-run
- *   GOOGLE_CLOUD_LOCATION=global pnpm tsx scripts/recurateDocument.ts --apply    # 書き込み
- *   DOC_ID=... IR_PATH=... GOOGLE_CLOUD_LOCATION=global pnpm tsx scripts/recurateDocument.ts --apply
+ *   GOOGLE_CLOUD_LOCATION=global pnpm tsx scripts/oneoff/recurateDocument.ts            # dry-run
+ *   GOOGLE_CLOUD_LOCATION=global pnpm tsx scripts/oneoff/recurateDocument.ts --apply    # 書き込み
+ *   DOC_ID=... IR_PATH=... GOOGLE_CLOUD_LOCATION=global pnpm tsx scripts/oneoff/recurateDocument.ts --apply
  */
-import './loadEnv';
+import '../loadEnv';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { curatorFlow } from '../src/agents/curator/flow';
-import { modelId as curatorModelId } from '../src/agents/_shared/genkitClient';
-import { DOCUMENTS_COLLECTION } from '../src/lib/documents';
-import { FieldValue, getFirestoreClient } from '../src/lib/firestore';
+import { curatorFlow } from '../../src/agents/curator/flow';
+import { modelId as curatorModelId } from '../../src/agents/_shared/genkitClient';
+import { DOCUMENTS_COLLECTION } from '../../src/lib/documents';
+import { FieldValue, getFirestoreClient } from '../../src/lib/firestore';
 import {
   extractTextFromDocumentIR,
   type DocumentIR,
-} from '../src/eval/curator/publicDocClassificationGolden';
+} from '../../src/eval/curator/publicDocClassificationGolden';
 
 // 既定ターゲット = 本番で見つかった stale な over-restriction レコード。
 const DEFAULT_DOC_ID = 'd2e75082-336b-4a76-97d6-e1911eb7b664';

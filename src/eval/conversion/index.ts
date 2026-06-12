@@ -50,12 +50,15 @@ export {
   type DocumentSourceKind,
   type DocumentSourceSubtype,
 } from './documentIr';
+/**
+ * @deprecated Import from `src/lib/conversion/documentIrToKnowledgeChunk` instead.
+ */
 export {
   buildPdfParagraphId,
   documentIrBlockToStructureType,
   documentIrToKnowledgeChunks,
   type DocumentIrToKnowledgeChunkOptions,
-} from './documentIrToKnowledgeChunk';
+} from '../../lib/conversion/documentIrToKnowledgeChunk';
 export {
   evalSafetyReadiness,
   SAFETY_READINESS_HEALTH_ROLLUP_STATUS,

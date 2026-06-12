@@ -113,7 +113,7 @@ export function parseArgs(argv: string[]): CliOptions {
   return { dryRun, outputPath, limit };
 }
 
-export function timestampToIsoOrNull(value: unknown): string | null {
+function timestampToIsoOrNull(value: unknown): string | null {
   if (!value) return null;
   if (typeof value === 'string') return value;
   if (value instanceof Date) return value.toISOString();
@@ -128,7 +128,7 @@ export function timestampToIsoOrNull(value: unknown): string | null {
   return null;
 }
 
-export function parseStoredRecord(
+function parseStoredRecord(
   evalId: string,
   raw: RawConversionEval
 ): ConversionEvalRecord {
@@ -149,7 +149,7 @@ export function parseStoredRecord(
   };
 }
 
-export function toExportRow(record: ConversionEvalRecord): ExportRow {
+function toExportRow(record: ConversionEvalRecord): ExportRow {
   const result = record.result;
   return {
     evalId: record.evalId,

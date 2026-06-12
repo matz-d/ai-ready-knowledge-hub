@@ -5,21 +5,21 @@
  * POST /api/context-package/jobs/{jobId}/run on the dev server.
  *
  * Usage (repo root, .env.local loaded):
- *   pnpm tsx scripts/verifyP1fPayrollAcceptance.ts
- *   pnpm tsx scripts/verifyP1fPayrollAcceptance.ts --write-evidence
+ *   pnpm tsx scripts/oneoff/verifyP1fPayrollAcceptance.ts
+ *   pnpm tsx scripts/oneoff/verifyP1fPayrollAcceptance.ts --write-evidence
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import './loadEnv';
-import { defaultSelectedDocIds } from '../src/app/context-package/candidateSelectionUi';
+import '../loadEnv';
+import { defaultSelectedDocIds } from '../../src/app/context-package/candidateSelectionUi';
 import {
   createContextPackageJob,
   getContextPackageJob,
-} from '../src/lib/contextPackageJobs/firestoreAdapter';
-import { runContextPackageJob } from '../src/lib/contextPackageJobs/runJob';
-import { readContextPackageJobResult } from '../src/lib/contextPackageJobs/resultStorage';
-import { listInventoryDocumentsFromFirestore } from '../src/lib/inventoryFirestoreAdapter';
-import { selectCandidates } from '../src/services/candidateSelection';
+} from '../../src/lib/contextPackageJobs/firestoreAdapter';
+import { runContextPackageJob } from '../../src/lib/contextPackageJobs/runJob';
+import { readContextPackageJobResult } from '../../src/lib/contextPackageJobs/resultStorage';
+import { listInventoryDocumentsFromFirestore } from '../../src/lib/inventoryFirestoreAdapter';
+import { selectCandidates } from '../../src/services/candidateSelection';
 
 const PURPOSE =
   '新入社員向けに、月次の給与計算業務を安全に学べる NotebookLM を作りたい。公開テンプレートと社内手順だけを使い、顧客個人情報は除外したい。';

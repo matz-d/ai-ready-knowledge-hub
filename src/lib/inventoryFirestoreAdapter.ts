@@ -1,4 +1,3 @@
-import type { Timestamp } from '@google-cloud/firestore';
 import type { ResidualRiskOutputResult } from '../agents/masker/schema';
 import { DOCUMENTS_COLLECTION } from './documents';
 import { getFirestoreClient } from './firestore';
@@ -15,6 +14,7 @@ import {
   emptyPipelineStatusCounts,
   type PipelineStatusCounts,
 } from './pipelineStatusCounts';
+import { timestampToIso } from './firestoreTimestamps';
 
 const INVENTORY_TERMINAL_STATUSES = new Set<FirestoreDocumentStatus>([
   'curated',
@@ -22,15 +22,6 @@ const INVENTORY_TERMINAL_STATUSES = new Set<FirestoreDocumentStatus>([
   'ai_safe',
   'restricted',
 ]);
-
-type TimestampLike = Timestamp | Date | string | null | undefined;
-
-function timestampToIso(value: TimestampLike): string | undefined {
-  if (!value) return undefined;
-  if (typeof value === 'string') return value;
-  if (value instanceof Date) return value.toISOString();
-  return value.toDate().toISOString();
-}
 
 function serializeCuratorBlock(curator: FirestoreCuratorBlock) {
   return {
