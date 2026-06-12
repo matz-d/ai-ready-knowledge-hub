@@ -355,4 +355,4 @@ Phase 2 で chunk が持つことになる metadata は、Phase 3 の Strategist
 - `sensitivity` / `aiUsePolicy` / `sensitivitySource` / `sensitivityReason`
 - document からの継承属性: `documentType` / `businessDomain` / `freshness` / `isAuthoritativeCandidate`（chunk には保持せず、Strategist 時に document を join して取得する）
 
-Strategist 本体実装は Phase 3 で行う。Phase 2 では型シグネチャ予約のみ (`src/agents/strategist/types.ts`)。
+Strategist 本体実装は Phase 3 で行う。型は `src/agents/strategist/schema.ts` を正本とする。

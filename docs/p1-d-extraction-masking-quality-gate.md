@@ -194,29 +194,36 @@ P1-D で見つかった次の症状は、P1-E の大きなファイル事前分�
 
 ---
 
-## 8. 後続実装メモ
+## 8. 実装状況（2026-06-12 更新）
 
-最初の実装単位:
+初期実装は完了。証跡は [p1-d-evidence-2026-06-11.md](p1-d-evidence-2026-06-11.md)。
 
-1. `pnpm eval:p1d:quality` を追加する。
-2. committed fixture / sidecar だけで stable report を出す。
-3. 既存の `src/eval/conversion/` 純関数を再利用し、P1-D report に集約する。
-4. 新規実装は `valuePrecision`、`tableCellRecall`、`falseMaskedTokenCount`、`locatorCoverage` の割合化、chunk サイズ系の report 集約に絞る。
-5. public doc over-restriction は live-only として扱い、stable 用 curator sidecar は作らない。
-6. live drift check は stable eval とは別 script にする。
-7. 統合報告書は local path が存在するときだけ検証し、存在しない環境では skip する。
+実装済み:
 
-実行例の想定:
+1. `pnpm eval:p1d:quality` — committed fixture / sidecar のみで stable report。`--ci` で deterministic zero checks が blocker。
+2. `src/eval/conversion/` 純関数の再利用と P1-D report 集約（schema v4、`expectedFieldTiers`、`expectedTableCells: "not_applicable"`、weak expectedValue lint）。
+3. `pnpm eval:p1d:masker-drift` — live Cloud DLP drift check（stable eval とは別 script）。
+4. `pnpm eval:p1d:mixed-pdf` — local-only 混在 PDF 症状チェック。
+
+残タスク（P1-D 成熟化の範囲外または live-only）:
+
+- public curator over-restriction — 既存 curator classification eval を live-only で継続。
+- scan fixture 再生成時に placeholder 名を realistic synthetic 名へ差し替え（`PERSON_NAME` 評価の拡張）。
+
+実行例:
 
 ```bash
 # stable, no Vertex
-pnpm eval:p1d:quality
+pnpm eval:p1d:quality -- --out tmp/p1d-quality-report.json
 
-# optional live drift
-SCAN_PDF_GEMINI_MODEL=gemini-3.1-flash-lite pnpm tsx scripts/runP1dLiveDriftCheck.ts
+# CI blocker
+pnpm tsx scripts/runP1dQualityGate.ts --ci
+
+# optional live masker drift
+pnpm eval:p1d:masker-drift -- --out tmp/p1d-masker-drift-report.json
 
 # optional local mixed PDF check
-pnpm tsx scripts/runP1dMixedPdfCheck.ts <local-annual-report.pdf>
+pnpm eval:p1d:mixed-pdf -- local-data/annual-report-doc-2025-viewing-ja.pdf --out tmp/p1d-mixed-pdf-check.json
 ```
 
 ---

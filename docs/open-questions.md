@@ -169,7 +169,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | ~~Phase 3-H-3 subtype 2~~ | ~~slide-pdf 本線統合 + `inferenceDestination` + live smoke~~ | **完了** (2026-05-20, PR #3) |
 | ~~Phase 3-H-3 subtype 3 (M6)~~ | ~~scan-pdf 本線統合 + OCR fail-closed + `unmaskablePiiFindings` warn~~ | **完了** (2026-05-21, live smoke DoD YES) |
 | ~~Masker 本線統合（PDF 経路）~~ | ~~`requires_masking` PDF の chunk 化と Context Package 接続~~ | **完了**（2026-05-29、`D-P3-M-PDF-1` / `feat/masker-pdf-mainline`） |
-| ~~Phase 4-UX MVP~~ | ~~purpose-driven candidate selection + Safety Review + Preview~~ | **実装済み**（2026-06-03、ブラウザ手動通し待ち） |
+| ~~Phase 4-UX MVP~~ | ~~purpose-driven candidate selection + Safety Review + Preview~~ | **完了**（2026-06-03 実装、2026-06-10 ブラウザ手動通し証跡） |
 | ~~Production Hardening close-out~~ | ~~#15 job GC / stale recovery、#16 result GCS offload の production smoke と issue close~~ | **完了**（2026-06-08、#15/#16 closed） |
 | Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | 次候補 |
 | **Ingest: standalone images** | `image/jpeg` / `image/png` 等を upload ソースとして追加（scan-pdf とは別。写真・図面・スクショ単体） | 情報源拡張（下記 §Ingest 起票） |
@@ -179,7 +179,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | Phase 3-H `office-native` | `.pptx` / `.docx` 原本の conversion subtype 4 | Phase 3-H 優先 4・時間があれば |
 | Phase 3-G | `cloud-sanitized-ingress` prototype | 高セキュリティ顧客向け後続 |
 
-**次のアクション**: Production Hardening close-out と delivery E2E は完了。直近の実装・検証順は [docs/next-actions-2026-06-10.md](next-actions-2026-06-10.md) を正とする。要約すると、Phase 4-UX のブラウザ手動通し → NotebookLM 用 source bundle zip UI → Extraction & Masking Quality Gate（公開文書 over-mask + 構造化データ精度）→ 大きなファイルの事前分割 → Phase 3-F（デモ polish）へ進む。Ingest 拡張（画像単体・Drive/ローカル一括・Drive 同期）は product 判断として本書に残す。scan-pdf 公開拡大は **`unmaskablePiiFindings` 閾値再評価**を別 decision で扱う（`D-P3-H-7 Q4` 後続）。
+**次のアクション**: P0（Phase 4-UX 手動通し）、P1-A/B（source bundle）、P1-F（full-coverage strategist）、P1-C（デモ docs）、P1-D（quality gate 成熟化）は完了。直近の実装順は [docs/next-actions-2026-06-10.md](next-actions-2026-06-10.md) を正とする。**次は P1-E**（大ファイル preflight / table fallback / locator enrichment）→ P2（デモ polish / 運用補強）→ P3（cleanup / Ingest 判断）。Ingest 拡張（画像単体・Drive/ローカル一括・Drive 同期）は product 判断として本書に残す。scan-pdf 公開拡大は **`unmaskablePiiFindings` 閾値再評価**を別 decision で扱う（`D-P3-H-7 Q4` 後続）。
 
 ### Ingest 拡張（起票 2026-05-21）
 
