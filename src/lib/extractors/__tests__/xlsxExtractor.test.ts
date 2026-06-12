@@ -34,6 +34,16 @@ async function createWorkbookBuffer(sheetCount = 2): Promise<Buffer> {
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
+async function createLargeSheetWorkbookBuffer(rowCount: number): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('明細');
+  sheet.addRow(['顧客名', '数量']);
+  for (let i = 0; i < rowCount; i += 1) {
+    sheet.addRow([`Acme ${i}`, i]);
+  }
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
 describe('extractXlsx', () => {
   it('extracts chunks by sheet used range and sets spreadsheet locator', async () => {
     const content = await createWorkbookBuffer();
@@ -91,5 +101,36 @@ describe('extractXlsx', () => {
     });
 
     expect(chunks.length).toBeLessThanOrEqual(50);
+  });
+
+  it('splits a large sheet into a summary chunk and row-window chunks', async () => {
+    const { chunks, preflightReport } = await extractXlsx({
+      ...baseInput,
+      content: await createLargeSheetWorkbookBuffer(1001),
+    });
+
+    expect(chunks).toHaveLength(4);
+    expect(preflightReport).toMatchObject({
+      fileType: 'xlsx',
+      sheetCount: 1,
+      rowCount: 1002,
+      columnCount: 2,
+      maxSheetRows: 1002,
+      recommendedSplitUnit: 'row_group',
+      suggestedRowGroupSize: 500,
+    });
+    expect(preflightReport.reasons).toContain('maxSheetRows>1000');
+    expect(chunks[0].extractionWarnings).toContainEqual(
+      expect.stringContaining('preflight: fileType=xlsx')
+    );
+    expect(chunks.map((chunk) => chunk.locator)).toEqual([
+      { kind: 'spreadsheet', sheetName: '明細', range: 'A1:B1002' },
+      { kind: 'spreadsheet', sheetName: '明細', range: 'A2:B501' },
+      { kind: 'spreadsheet', sheetName: '明細', range: 'A502:B1001' },
+      { kind: 'spreadsheet', sheetName: '明細', range: 'A1002:B1002' },
+    ]);
+    expect(chunks[1].text).toContain('## 明細 rows 2-501');
+    expect(chunks[1].text).toContain('| 顧客名 | 数量 |');
+    expect(chunks[1].extractionWarnings).toContain('rowWindow=2-501');
   });
 });

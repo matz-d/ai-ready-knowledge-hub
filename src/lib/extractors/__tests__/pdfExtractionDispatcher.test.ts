@@ -23,6 +23,7 @@ vi.mock('../scanPdfDocumentExtractor', () => ({
 }));
 
 import {
+  buildPdfCuratorContent,
   dispatchPdfExtraction,
   PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE,
   PDF_SUBTYPE_PRE_FLIGHT_CONFIGS,
@@ -32,17 +33,23 @@ import {
 const minimalPdfExtraction = {
   textContent: 'PDF body text',
   documentIr: {
-    schemaVersion: 1,
+    schemaVersion: 1 as const,
     source: {
       fileName: 'sample.pdf',
       mediaType: 'application/pdf',
-      sourceKind: 'upload',
-      sourceSubtype: 'official-doc-pdf',
+      sourceKind: 'upload' as const,
+      sourceSubtype: 'official-doc-pdf' as const,
     },
     pages: [
       {
         pageNumber: 1,
-        blocks: [{ blockId: 'p1-b0', kind: 'paragraph', text: 'PDF body text' }],
+        blocks: [
+          {
+            blockId: 'p1-b0',
+            kind: 'paragraph' as const,
+            text: 'PDF body text',
+          },
+        ],
       },
     ],
   },
@@ -281,5 +288,52 @@ describe('dispatchPdfExtraction', () => {
     expect(outcome.failure.code).toBe('conflicting_flags');
     if (outcome.failure.code !== 'conflicting_flags') return;
     expect(outcome.failure.enabledFlagIds).toHaveLength(3);
+  });
+});
+
+describe('buildPdfCuratorContent', () => {
+  it('returns full extracted text when no page-group plan is present', () => {
+    expect(
+      buildPdfCuratorContent({
+        ...minimalPdfExtraction,
+        conversion: { converterId: 'pdf-parse' },
+      })
+    ).toBe('PDF body text');
+  });
+
+  it('renders a bounded page-group manifest when a large PDF split plan exists', () => {
+    const content = buildPdfCuratorContent({
+      ...minimalPdfExtraction,
+      textContent: 'FULL PDF BODY',
+      preflightReport: {
+        fileType: 'pdf',
+        pageCount: 51,
+        estimatedChars: 200000,
+        chunkEstimate: 50,
+        recommendedSplitUnit: 'page_group',
+        reasons: ['pageCount>50'],
+        suggestedPageGroupSize: 25,
+      },
+      pageGroupPlan: {
+        splitUnit: 'page_group',
+        pageGroupSize: 25,
+        groups: [
+          {
+            groupIndex: 1,
+            startPage: 1,
+            endPage: 25,
+            pageCount: 25,
+            estimatedChars: 120000,
+            preview: 'first group preview',
+          },
+        ],
+      },
+      conversion: { converterId: 'pdf-parse' },
+    });
+
+    expect(content).toContain('PDF preflight page-group manifest');
+    expect(content).toContain('### Group 1: pages 1-25');
+    expect(content).toContain('first group preview');
+    expect(content).not.toContain('FULL PDF BODY');
   });
 });

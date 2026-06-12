@@ -9,11 +9,17 @@ import {
   KNOWLEDGE_CHUNK_SCHEMA_VERSION,
   type KnowledgeChunk,
 } from '../knowledgeChunkSchema';
+import {
+  buildCsvPreflightReport,
+  formatPreflightWarning,
+  type DocumentPreflightReport,
+} from './preflight';
 
 export type CsvExtractionResult = {
   /** Curator/masker input: normalized markdown table for the whole document. */
   normalizedMarkdown: string;
   chunks: KnowledgeChunk[];
+  preflightReport: DocumentPreflightReport;
 };
 
 const DEFAULT_SHEET_NAME = 'Sheet1';
@@ -103,8 +109,156 @@ function parseCsvRecords(content: string): ParseCsvRecordsResult {
   }
 }
 
-function stableChunkId(docId: string): string {
-  return `${docId}:csv:${DEFAULT_SHEET_NAME}`;
+function stableChunkId(docId: string, range: string, role?: string): string {
+  const rolePart = role === undefined ? '' : `:${role}`;
+  return `${docId}:csv:${DEFAULT_SHEET_NAME}:${range}${rolePart}`;
+}
+
+function buildChunk(input: {
+  docId: string;
+  fileName: string;
+  text: string;
+  locator: KnowledgeChunk['locator'];
+  extractorInput: string;
+  documentSensitivity: Sensitivity;
+  documentAiUsePolicy: AiUsePolicy;
+  extractionWarnings: string[];
+  createdAt: string;
+  role?: string;
+}): KnowledgeChunk {
+  const locator = input.locator;
+  const baseChunk: KnowledgeChunk = {
+    id:
+      locator.kind === 'spreadsheet'
+        ? stableChunkId(input.docId, locator.range, input.role)
+        : `${input.docId}:csv:${input.role ?? 'chunk'}`,
+    docId: input.docId,
+    schemaVersion: KNOWLEDGE_CHUNK_SCHEMA_VERSION,
+    sourceType: 'spreadsheet',
+    structureType: 'table',
+    locator,
+    title: input.fileName,
+    text: input.text,
+    sensitivity: input.documentSensitivity,
+    aiUsePolicy: input.documentAiUsePolicy,
+    sensitivitySource: 'inherited',
+    extractionProvider: 'csv',
+    extractionWarnings: input.extractionWarnings,
+    sourceHash: computeChunkSourceHash({
+      extractorInput: input.extractorInput,
+      locator,
+    }),
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+  };
+
+  return upgradeChunkSensitivityFromColumnHeader(
+    baseChunk,
+    DEFAULT_COLUMN_SENSITIVITY_RULES
+  );
+}
+
+function buildSummaryText(input: {
+  fileName: string;
+  rowCount: number;
+  columnCount: number;
+  headerRows: string[][];
+}): string {
+  return [
+    `## ${input.fileName}`,
+    '',
+    `Rows: ${input.rowCount}`,
+    `Columns: ${input.columnCount}`,
+    '',
+    rowsToMarkdownTable(input.headerRows),
+  ]
+    .filter((part) => part.length > 0)
+    .join('\n');
+}
+
+function buildRowWindowChunks(input: {
+  docId: string;
+  fileName: string;
+  normalizedRows: string[][];
+  columnCount: number;
+  fullRange: string;
+  rowGroupSize: number;
+  documentSensitivity: Sensitivity;
+  documentAiUsePolicy: AiUsePolicy;
+  extractionWarnings: string[];
+  extractorInput: string;
+  createdAt: string;
+}): KnowledgeChunk[] {
+  const header = input.normalizedRows[0];
+  if (header === undefined || input.normalizedRows.length <= 1) {
+    return [];
+  }
+
+  const chunks: KnowledgeChunk[] = [
+    buildChunk({
+      docId: input.docId,
+      fileName: input.fileName,
+      text: buildSummaryText({
+        fileName: input.fileName,
+        rowCount: input.normalizedRows.length,
+        columnCount: input.columnCount,
+        headerRows: [header],
+      }),
+      locator: {
+        kind: 'spreadsheet',
+        sheetName: DEFAULT_SHEET_NAME,
+        range: input.fullRange,
+      },
+      extractorInput: input.extractorInput,
+      documentSensitivity: input.documentSensitivity,
+      documentAiUsePolicy: input.documentAiUsePolicy,
+      extractionWarnings: input.extractionWarnings,
+      createdAt: input.createdAt,
+      role: 'summary',
+    }),
+  ];
+
+  for (
+    let startIndex = 1;
+    startIndex < input.normalizedRows.length;
+    startIndex += input.rowGroupSize
+  ) {
+    const endIndexExclusive = Math.min(
+      startIndex + input.rowGroupSize,
+      input.normalizedRows.length
+    );
+    const startRow = startIndex + 1;
+    const endRow = endIndexExclusive;
+    const range = `A${startRow}:${excelColumnLetters(input.columnCount)}${endRow}`;
+    const markdownTable = rowsToMarkdownTable([
+      header,
+      ...input.normalizedRows.slice(startIndex, endIndexExclusive),
+    ]);
+    const text = `## ${input.fileName} rows ${startRow}-${endRow}\n\n${markdownTable}`;
+
+    chunks.push(
+      buildChunk({
+        docId: input.docId,
+        fileName: input.fileName,
+        text,
+        locator: {
+          kind: 'spreadsheet',
+          sheetName: DEFAULT_SHEET_NAME,
+          range,
+        },
+        extractorInput: input.extractorInput,
+        documentSensitivity: input.documentSensitivity,
+        documentAiUsePolicy: input.documentAiUsePolicy,
+        extractionWarnings: [
+          ...input.extractionWarnings,
+          `rowWindow=${startRow}-${endRow}`,
+        ],
+        createdAt: input.createdAt,
+      })
+    );
+  }
+
+  return chunks;
 }
 
 export function extractCsv(input: {
@@ -137,42 +291,54 @@ export function extractCsv(input: {
 
   const normalizedMarkdown = rowsToMarkdownTable(normalizedRows);
   const range = usedRangeA1Notation(rowCount, colCount);
+  const preflightReport = buildCsvPreflightReport({
+    rowCount,
+    columnCount: colCount,
+    estimatedChars: normalizedMarkdown.length,
+  });
+  const preflightWarning = formatPreflightWarning(preflightReport);
+  if (preflightWarning) {
+    extractionWarnings.push(preflightWarning);
+  }
 
-  const locator = {
-    kind: 'spreadsheet' as const,
-    sheetName: DEFAULT_SHEET_NAME,
-    range,
-  };
-
-  const baseChunk: KnowledgeChunk = {
-    id: stableChunkId(input.docId),
-    docId: input.docId,
-    schemaVersion: KNOWLEDGE_CHUNK_SCHEMA_VERSION,
-    sourceType: 'spreadsheet',
-    structureType: 'table',
-    locator,
-    title: input.fileName,
-    text: normalizedMarkdown,
-    sensitivity: input.documentSensitivity,
-    aiUsePolicy: input.documentAiUsePolicy,
-    sensitivitySource: 'inherited',
-    extractionProvider: 'csv',
-    extractionWarnings,
-    sourceHash: computeChunkSourceHash({
-      extractorInput: input.content,
-      locator,
-    }),
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  const chunk = upgradeChunkSensitivityFromColumnHeader(
-    baseChunk,
-    DEFAULT_COLUMN_SENSITIVITY_RULES
-  );
+  const shouldSplitRows =
+    preflightReport.recommendedSplitUnit === 'row_group' &&
+    normalizedRows.length > 1;
+  const chunks = shouldSplitRows
+    ? buildRowWindowChunks({
+        docId: input.docId,
+        fileName: input.fileName,
+        normalizedRows,
+        columnCount: colCount,
+        fullRange: range,
+        rowGroupSize: preflightReport.suggestedRowGroupSize ?? 500,
+        documentSensitivity: input.documentSensitivity,
+        documentAiUsePolicy: input.documentAiUsePolicy,
+        extractionWarnings,
+        extractorInput: input.content,
+        createdAt: now,
+      })
+    : [
+        buildChunk({
+          docId: input.docId,
+          fileName: input.fileName,
+          text: normalizedMarkdown,
+          locator: {
+            kind: 'spreadsheet',
+            sheetName: DEFAULT_SHEET_NAME,
+            range,
+          },
+          extractorInput: input.content,
+          documentSensitivity: input.documentSensitivity,
+          documentAiUsePolicy: input.documentAiUsePolicy,
+          extractionWarnings,
+          createdAt: now,
+        }),
+      ];
 
   return {
     normalizedMarkdown,
-    chunks: [chunk],
+    chunks,
+    preflightReport,
   };
 }

@@ -18,6 +18,12 @@ import {
   type DocumentIrBlock,
   type DocumentSourceSubtype,
 } from '../../eval/conversion/documentIr';
+import {
+  buildPdfPageGroupSplitPlan,
+  buildPdfPreflightReport,
+  type DocumentPreflightReport,
+  type PdfPageGroupSplitPlan,
+} from './preflight';
 
 // ── Inlined segmentPageText ────────────────────────────────────────────────────
 // Source: poc/document-conversion/official-doc-pdf/extract/segmentPageText.ts
@@ -118,7 +124,14 @@ export type ExtractPdfFromBufferResult = {
    * Used as `extractorInput` for KnowledgeChunk source-hash computation.
    */
   textContent: string;
+  preflightReport: DocumentPreflightReport;
+  pageGroupPlan?: PdfPageGroupSplitPlan;
+  tableExtraction: { ok: true } | { ok: false; error: string };
 };
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 /**
  * Extracts a {@link DocumentIr} from a PDF buffer.
@@ -147,28 +160,43 @@ export async function extractPdfFromBuffer(
     // Sequential — not Promise.all — to avoid DataCloneError on concurrent
     // first-callers both trying to transfer the same data.buffer.
     const textResult = await parser.getText({ pageJoiner: '' });
-    const tableResult = await parser.getTable();
+    let tableResult:
+      | {
+          pages: Array<{
+            num: number;
+            tables: Array<Array<Array<string | null>>>;
+          }>;
+        }
+      | null = null;
+    let tableExtraction: ExtractPdfFromBufferResult['tableExtraction'] = {
+      ok: true,
+    };
+
+    try {
+      tableResult = await parser.getTable();
+    } catch (error: unknown) {
+      tableExtraction = { ok: false, error: errorMessage(error) };
+    }
 
     // Build page-number → tables index for O(1) lookup.
     const tablesByPage = new Map<
       number,
       Array<{ tableIndex: number; rows: string[][] }>
     >();
-    for (const page of tableResult.pages as Array<{
-      num: number;
-      tables: Array<Array<Array<string | null>>>;
-    }>) {
-      tablesByPage.set(
-        page.num,
-        page.tables.map(
-          (rows: Array<Array<string | null>>, tableIndex: number) => ({
-            tableIndex,
-            rows: rows.map((row: Array<string | null>) =>
-              row.map((cell) => cell ?? '')
-            ),
-          })
-        )
-      );
+    if (tableResult !== null) {
+      for (const page of tableResult.pages) {
+        tablesByPage.set(
+          page.num,
+          page.tables.map(
+            (rows: Array<Array<string | null>>, tableIndex: number) => ({
+              tableIndex,
+              rows: rows.map((row: Array<string | null>) =>
+                row.map((cell) => cell ?? '')
+              ),
+            })
+          )
+        );
+      }
     }
 
     const pageTexts: string[] = [];
@@ -229,6 +257,16 @@ export async function extractPdfFromBuffer(
       return { pageNumber: page.num, blocks };
     });
 
+    const textContent = pageTexts.join('\n');
+    const preflightReport = buildPdfPreflightReport({
+      pageCount: textResult.pages.length,
+      estimatedChars: textContent.length,
+    });
+    const pageGroupPlan = buildPdfPageGroupSplitPlan({
+      pages: textResult.pages,
+      preflightReport,
+    });
+
     const documentIr: DocumentIr = {
       schemaVersion: DOCUMENT_IR_SCHEMA_VERSION,
       source: {
@@ -242,7 +280,10 @@ export async function extractPdfFromBuffer(
 
     return {
       documentIr,
-      textContent: pageTexts.join('\n'),
+      textContent,
+      preflightReport,
+      ...(pageGroupPlan !== undefined ? { pageGroupPlan } : {}),
+      tableExtraction,
     };
   } finally {
     await parser.destroy();

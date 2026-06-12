@@ -25,6 +25,7 @@ import {
 import { documentUploadSuccessBodyFromOrchestrate } from '../../../lib/documentUploadResponseMapper';
 import { xlsxToNormalizedMarkdown } from '../../../lib/extractors/xlsxExtractor';
 import {
+  buildPdfCuratorContent,
   createFirestorePdfFlagReader,
   dispatchPdfExtraction,
   PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE,
@@ -244,6 +245,11 @@ export async function POST(request: Request) {
         ? {
             documentIr: pdfExtractionResult.documentIr,
             sourceSubtype: pdfExtractionResult.documentIr.source.sourceSubtype,
+            pdfCuratorContent: buildPdfCuratorContent(pdfExtractionResult),
+            pdfCuratorInputMode:
+              pdfExtractionResult.pageGroupPlan === undefined
+                ? 'full_text'
+                : 'page_group_manifest',
             auditContext: pdfAuditContext,
             conversion: pdfExtractionResult.conversion,
           }
