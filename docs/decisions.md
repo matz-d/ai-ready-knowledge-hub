@@ -1886,6 +1886,26 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 ---
 
+## D-SEC-2: pnpm audit OTel Prometheus exporter advisory exception（2026-06-12、確定）
+
+**日付**: 2026-06-12
+**状態**: 確定。設定は `pnpm-workspace.yaml` の `auditConfig.ignoreGhsas`。
+
+**決定:** `GHSA-q7rr-3cgh-j5r3`（CVE-2026-44902）は、現時点では正式例外として `pnpm audit --prod` から除外する。
+
+**対象:** OpenTelemetry Prometheus exporter の HTTP server が malformed request で crash する advisory。`pnpm audit --prod` では `@opentelemetry/sdk-node` と `@opentelemetry/auto-instrumentations-node` の2パッケージに high として表示されるが、同一 advisory である。
+
+**受容根拠:**
+- `@opentelemetry/exporter-prometheus` は依存ツリーに存在しない（`pnpm-lock.yaml` / repo 検索で 0 件）。脆弱な Prometheus exporter 実装が production install に入らないため、直接の攻撃面がない。
+- Cloud Run は `$PORT` のアプリ HTTP server だけを外部公開する構成であり、仮に別 exporter server が追加されても外部公開には別途明示設定が必要になる。
+- Genkit `1.33.0` 時点では OpenTelemetry `sdk-node` `^0.52.0` 系に依存している。advisory の patched range は OTel SDK 2.x 系に相当する `0.217.0` 以降で、override による強制更新は telemetry 初期化や Cloud Run 起動互換性を壊すリスクが高い。
+
+**同時対応:** `pnpm-workspace.yaml` の `overrides` で、range 内または検証対象として受容した transitive dependency を patched version へ底上げする。対象は `tmp`, `ws`, `protobufjs`, `qs`, `@grpc/grpc-js`, `uuid`。`uuid` は major 跨ぎのため `pnpm test` / `pnpm build` / smoke で検証する。
+
+**解除条件:** Genkit が OTel `0.2xx` / SDK 2.x 互換の依存へ更新し、`GHSA-q7rr-3cgh-j5r3` を通常の dependency update で解消できるようになった時点で、`auditConfig.ignoreGhsas` から本 advisory を削除する。
+
+---
+
 ## 関連ドキュメント
 
 - [docs/production-readiness.md](production-readiness.md) — ゲート一覧・現在地・DoD の正本（`D-PROD-*` の状態追跡）
