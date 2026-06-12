@@ -2,13 +2,24 @@ import type { Firestore } from '@google-cloud/firestore';
 import type { DocumentIr } from '../../eval/conversion/documentIr';
 import type { PdfConversionAudit } from '../uploadOrchestrator';
 import { getFeatureFlag, isFeatureEnabled, type FeatureFlagId } from '../featureFlags';
-import { extractPdfFromBuffer } from './pdfDocumentExtractor';
+import {
+  extractPdfFromBuffer,
+  type ExtractPdfFromBufferResult,
+} from './pdfDocumentExtractor';
+import {
+  renderPdfPageGroupManifest,
+  type DocumentPreflightReport,
+  type PdfPageGroupSplitPlan,
+} from './preflight';
 import { extractSlidePdfFromBuffer } from './slidePdfDocumentExtractor';
 import { extractScanPdfFromBuffer } from './scanPdfDocumentExtractor';
 
 export type PdfExtractionResult = {
   textContent: string;
   documentIr: DocumentIr;
+  preflightReport?: DocumentPreflightReport;
+  pageGroupPlan?: PdfPageGroupSplitPlan;
+  tableExtraction?: ExtractPdfFromBufferResult['tableExtraction'];
   /** Audit metadata threaded into `document.convert` (Phase 3-H-3 §4.2). */
   conversion: PdfConversionAudit;
 };
@@ -77,6 +88,9 @@ export const PDF_SUBTYPE_PRE_FLIGHT_CONFIGS: readonly PdfSubtypePreFlightConfig[
       return {
         textContent: result.textContent,
         documentIr: result.documentIr,
+        preflightReport: result.preflightReport,
+        pageGroupPlan: result.pageGroupPlan,
+        tableExtraction: result.tableExtraction,
         conversion: { converterId: 'pdf-parse' },
       };
     },
@@ -113,6 +127,19 @@ export function createFirestorePdfFlagReader(
     const flag = await getFeatureFlag(db, flagId);
     return isFeatureEnabled(flag, tenantId);
   };
+}
+
+export function buildPdfCuratorContent(result: PdfExtractionResult): string {
+  if (result.preflightReport === undefined) {
+    return result.textContent;
+  }
+
+  return renderPdfPageGroupManifest({
+    fileName: result.documentIr.source.fileName,
+    preflightReport: result.preflightReport,
+    pageGroupPlan: result.pageGroupPlan,
+    fallbackText: result.textContent,
+  });
 }
 
 /**

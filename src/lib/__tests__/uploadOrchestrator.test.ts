@@ -608,6 +608,73 @@ describe('orchestrateUploadProcessing', () => {
       expect(maskerPipelineFlowMock).not.toHaveBeenCalled();
     });
 
+    it('uses pdfCuratorContent only for Curator while preserving full PDF text for chunks', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-page-group');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+      maskerPipelineFlowMock.mockResolvedValue(aiSafePipelineResult);
+
+      await orchestrateUploadProcessing({
+        ...pdfBaseInput,
+        content: 'FULL PDF TEXT',
+        pdfCuratorContent: 'PAGE GROUP MANIFEST',
+        pdfCuratorInputMode: 'page_group_manifest',
+      });
+
+      expect(curatorFlowMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileName: 'sample.pdf',
+          content: 'PAGE GROUP MANIFEST',
+        })
+      );
+      expect(documentIrToKnowledgeChunksMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          extractorInput: 'FULL PDF TEXT',
+        })
+      );
+      expect(replaceChunksForDocumentMock).toHaveBeenCalledWith(
+        'doc-pdf-page-group',
+        expect.any(Array),
+        expect.objectContaining({ extractorInput: 'FULL PDF TEXT' })
+      );
+    });
+
+    it('forces page-group manifest direct classifications through the Masker', async () => {
+      randomUUIDMock.mockReturnValue('doc-pdf-page-group-safe');
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+      maskerPipelineFlowMock.mockResolvedValue(aiSafePipelineResult);
+
+      const result = await orchestrateUploadProcessing({
+        ...pdfBaseInput,
+        content: 'FULL PDF TEXT',
+        pdfCuratorContent: 'PAGE GROUP MANIFEST',
+        pdfCuratorInputMode: 'page_group_manifest',
+      });
+
+      expect(result.kind).toBe('ai_safe');
+      expect(maskerPipelineFlowMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileName: 'sample.pdf',
+          content: 'FULL PDF TEXT',
+          curatorContext: expect.objectContaining({
+            sensitivity: 'Confidential',
+            aiUsePolicy: 'requires_masking',
+          }),
+        })
+      );
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'curating',
+          sensitivity: 'Confidential',
+          aiUsePolicy: 'requires_masking',
+          curator: expect.objectContaining({
+            sensitivity: 'Confidential',
+            aiUsePolicy: 'requires_masking',
+            rationale: expect.stringContaining('page-group manifest'),
+          }),
+        })
+      );
+    });
+
     it('runs Masker and writes masked chunks for requires_masking PDFs', async () => {
       randomUUIDMock.mockReturnValue('doc-pdf-mask');
       curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);

@@ -38,6 +38,7 @@ let _mockPages: MockPage[] = [];
 let _mockTablePages: MockTablePage[] = [];
 let _destroyCallCount = 0;
 let _getTextError: Error | null = null;
+let _getTableError: Error | null = null;
 
 vi.mock('pdf-parse', () => ({
   PDFParse: class MockPDFParse {
@@ -46,6 +47,7 @@ vi.mock('pdf-parse', () => ({
       return { total: _mockPages.length, pages: _mockPages };
     }
     async getTable() {
+      if (_getTableError) throw _getTableError;
       return { pages: _mockTablePages };
     }
     async destroy() {
@@ -64,6 +66,7 @@ function setMock(
   _mockTablePages = tablePagesRaw;
   _destroyCallCount = 0;
   _getTextError = null;
+  _getTableError = null;
 }
 
 function setGetTextError(err: Error): void {
@@ -76,6 +79,7 @@ beforeEach(() => {
   _mockTablePages = [];
   _destroyCallCount = 0;
   _getTextError = null;
+  _getTableError = null;
 });
 
 function makeOptions(
@@ -165,6 +169,35 @@ describe('extractPdfFromBuffer — textContent', () => {
     setMock([]);
     const { textContent } = await extractPdfFromBuffer(makeOptions());
     expect(textContent).toBe('');
+  });
+
+  it('builds a page-group split plan for large PDFs', async () => {
+    setMock(
+      Array.from({ length: 51 }, (_, index) => ({
+        num: index + 1,
+        text: `Page ${index + 1} body text.`,
+      }))
+    );
+
+    const { preflightReport, pageGroupPlan } =
+      await extractPdfFromBuffer(makeOptions());
+
+    expect(preflightReport).toMatchObject({
+      fileType: 'pdf',
+      pageCount: 51,
+      recommendedSplitUnit: 'page_group',
+      suggestedPageGroupSize: 25,
+    });
+    expect(preflightReport.reasons).toContain('pageCount>50');
+    expect(pageGroupPlan).toMatchObject({
+      splitUnit: 'page_group',
+      pageGroupSize: 25,
+      groups: [
+        expect.objectContaining({ groupIndex: 1, startPage: 1, endPage: 25 }),
+        expect.objectContaining({ groupIndex: 2, startPage: 26, endPage: 50 }),
+        expect.objectContaining({ groupIndex: 3, startPage: 51, endPage: 51 }),
+      ],
+    });
   });
 });
 
@@ -324,6 +357,30 @@ describe('extractPdfFromBuffer — table blocks', () => {
     );
     const { documentIr } = await extractPdfFromBuffer(makeOptions());
     expect(documentIr.pages[0].blocks[0].text).toBe('A\tB\tC');
+  });
+
+  it('keeps text extraction usable when table extraction fails', async () => {
+    setMock([
+      { num: 1, text: 'Page one body.' },
+      { num: 2, text: 'Page two body.' },
+    ]);
+    _getTableError = new Error('Cannot read properties of undefined');
+
+    const result = await extractPdfFromBuffer(makeOptions());
+
+    expect(result.textContent).toBe('Page one body.\nPage two body.');
+    expect(result.documentIr.pages).toHaveLength(2);
+    expect(result.documentIr.pages[0].blocks[0].kind).toBe('paragraph');
+    expect(result.tableExtraction).toEqual({
+      ok: false,
+      error: 'Cannot read properties of undefined',
+    });
+    expect(result.preflightReport).toMatchObject({
+      fileType: 'pdf',
+      pageCount: 2,
+      estimatedChars: 'Page one body.\nPage two body.'.length,
+      recommendedSplitUnit: 'none',
+    });
   });
 });
 

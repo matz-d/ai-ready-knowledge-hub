@@ -162,6 +162,11 @@ function buildExtractionWarnings(
   block: DocumentIrBlock
 ): string[] | undefined {
   const warnings: string[] = [];
+  if (block.kind === 'table' && block.metadata?.scanTableFallback === true) {
+    warnings.push(
+      'scanTableFallback=visual image_text rows synthesized as table chunk'
+    );
+  }
   if (block.kind === 'heading') {
     const level =
       (block.metadata?.headingLevel as number | undefined) ?? 1;
@@ -191,6 +196,199 @@ function buildExtractionWarnings(
     );
   }
   return warnings.length > 0 ? warnings : undefined;
+}
+
+function verticalOverlapRatio(
+  a: [number, number, number, number],
+  b: [number, number, number, number]
+): number {
+  const top = Math.max(a[1], b[1]);
+  const bottom = Math.min(a[3], b[3]);
+  const overlap = Math.max(0, bottom - top);
+  const shorterHeight = Math.max(1, Math.min(a[3] - a[1], b[3] - b[1]));
+  return overlap / shorterHeight;
+}
+
+function yCenter(bbox: [number, number, number, number]): number {
+  return (bbox[1] + bbox[3]) / 2;
+}
+
+function looksLikeFormLabel(block: DocumentIrBlock): boolean {
+  if (block.kind !== 'paragraph' && block.kind !== 'image_text') return false;
+  const text = block.text.trim();
+  if (text.length === 0 || text.length > 80) return false;
+  if (text.includes('\n')) return false;
+  if (/[。.!?！？]$/u.test(text)) return false;
+  return true;
+}
+
+function isAdjacentScanFormValue(
+  labelBlock: DocumentIrBlock,
+  valueBlock: DocumentIrBlock
+): boolean {
+  if (!looksLikeFormLabel(labelBlock)) return false;
+  if (valueBlock.kind !== 'image_text' && valueBlock.kind !== 'paragraph') {
+    return false;
+  }
+
+  const labelBox = labelBlock.locator?.bbox;
+  const valueBox = valueBlock.locator?.bbox;
+  if (!labelBox || !valueBox) return false;
+
+  const valueText = valueBlock.text.trim();
+  if (valueText.length === 0) return false;
+  if (valueText.includes('\n\n')) return false;
+
+  const isToRight = valueBox[0] > labelBox[0] && valueBox[0] >= labelBox[2];
+  if (!isToRight) return false;
+
+  const centerDistance = Math.abs(yCenter(labelBox) - yCenter(valueBox));
+  const maxCenterDistance = Math.max(
+    16,
+    Math.max(labelBox[3] - labelBox[1], valueBox[3] - valueBox[1])
+  );
+
+  return (
+    verticalOverlapRatio(labelBox, valueBox) >= 0.35 ||
+    centerDistance <= maxCenterDistance
+  );
+}
+
+function scanFormLabelValueAugmentation(
+  block: DocumentIrBlock,
+  nextBlock: DocumentIrBlock | undefined,
+  subtype: DocumentSourceSubtype
+): { text: string; warning: string } | undefined {
+  if (subtype !== 'scan-pdf') return undefined;
+  if (nextBlock === undefined) return undefined;
+  if (!isAdjacentScanFormValue(block, nextBlock)) return undefined;
+
+  return {
+    text: `${block.text.trim()}\n${nextBlock.text.trim()}`,
+    warning: `scanLabelValueLink=${nextBlock.blockId} (adjacent form value duplicated for field/value recall)`,
+  };
+}
+
+type PositionedScanBlock = {
+  block: DocumentIrBlock;
+  bbox: [number, number, number, number];
+  text: string;
+};
+
+type PositionedScanRow = {
+  cells: PositionedScanBlock[];
+  centerY: number;
+};
+
+function isNumericTableValue(text: string): boolean {
+  return /^[¥$€£]?\s*[-+]?\d[\d,]*(?:\.\d+)?(?:\s*[%％])?$/u.test(
+    text.trim()
+  );
+}
+
+function isLikelyAmountHeader(text: string): boolean {
+  return /金額|単価|数量|価格|小計|合計|amount|price|fee|total|subtotal/i.test(
+    text
+  );
+}
+
+function rowCenterY(block: PositionedScanBlock): number {
+  return yCenter(block.bbox);
+}
+
+function groupPositionedBlocksIntoRows(
+  blocks: readonly PositionedScanBlock[]
+): PositionedScanRow[] {
+  const rows: PositionedScanRow[] = [];
+  for (const block of [...blocks].sort((a, b) => rowCenterY(a) - rowCenterY(b))) {
+    const center = rowCenterY(block);
+    const match = rows.find((row) => Math.abs(row.centerY - center) <= 10);
+    if (match) {
+      match.cells.push(block);
+      match.centerY =
+        match.cells.reduce((sum, cell) => sum + rowCenterY(cell), 0) /
+        match.cells.length;
+      continue;
+    }
+    rows.push({ cells: [block], centerY: center });
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    cells: [...row.cells].sort((a, b) => a.bbox[0] - b.bbox[0]),
+  }));
+}
+
+function buildScanImageTextTableBlocks(input: {
+  pageNumber: number;
+  blocks: readonly DocumentIrBlock[];
+}): DocumentIrBlock[] {
+  if (input.blocks.some((block) => block.kind === 'table')) return [];
+
+  const positioned = input.blocks.flatMap((block): PositionedScanBlock[] => {
+    const text = block.text.trim();
+    const bbox = block.locator?.bbox;
+    if (block.kind !== 'image_text' || text.length === 0 || !bbox) return [];
+    return [{ block, bbox, text }];
+  });
+  const rows = groupPositionedBlocksIntoRows(positioned).filter(
+    (row) => row.cells.length >= 2
+  );
+
+  const tableBlocks: DocumentIrBlock[] = [];
+  let tableIndex = 0;
+
+  for (let rowIndex = 0; rowIndex < rows.length - 1; rowIndex += 1) {
+    const headerRow = rows[rowIndex];
+    const headerCells = headerRow.cells.map((cell) => cell.text);
+    const lastHeader = headerCells.at(-1);
+    if (lastHeader === undefined || !isLikelyAmountHeader(lastHeader)) {
+      continue;
+    }
+
+    const dataRows: PositionedScanRow[] = [];
+    for (let nextIndex = rowIndex + 1; nextIndex < rows.length; nextIndex += 1) {
+      const candidate = rows[nextIndex];
+      const lastCell = candidate.cells.at(-1);
+      if (lastCell === undefined || !isNumericTableValue(lastCell.text)) {
+        if (dataRows.length > 0) break;
+        continue;
+      }
+      dataRows.push(candidate);
+    }
+
+    if (dataRows.length === 0) continue;
+
+    for (let dataIndex = 0; dataIndex < dataRows.length; dataIndex += 1) {
+      const dataCells = dataRows[dataIndex].cells.map((cell) => cell.text);
+      const rowText = [
+        headerCells.join('\t'),
+        dataCells.join('\t'),
+      ].join('\n');
+      tableBlocks.push({
+        blockId: `p${input.pageNumber}-scan-table${tableIndex}-r${dataIndex + 1}`,
+        kind: 'table',
+        text: rowText,
+        locator: {
+          pageNumber: input.pageNumber,
+          tableIndex,
+          rowIndex: dataIndex + 1,
+        },
+        metadata: {
+          scanTableFallback: true,
+          sourceBlockIds: dataRows[dataIndex].cells.map(
+            (cell) => cell.block.blockId
+          ),
+          headerBlockIds: headerRow.cells.map((cell) => cell.block.blockId),
+        },
+      });
+    }
+
+    tableIndex += 1;
+    rowIndex += dataRows.length;
+  }
+
+  return tableBlocks;
 }
 
 function withParagraphIdSuffix(
@@ -343,18 +541,40 @@ export function documentIrToKnowledgeChunks(
   const chunks: KnowledgeChunk[] = [];
 
   for (const page of documentIr.pages) {
-    for (const block of page.blocks) {
+    const pageBlocks =
+      subtype === 'scan-pdf'
+        ? [
+            ...page.blocks,
+            ...buildScanImageTextTableBlocks({
+              pageNumber: page.pageNumber,
+              blocks: page.blocks,
+            }),
+          ]
+        : page.blocks;
+    for (let blockIndex = 0; blockIndex < pageBlocks.length; blockIndex += 1) {
+      const block = pageBlocks[blockIndex];
       const structureType = documentIrBlockToStructureType(block.kind);
       if (structureType === null) continue;
       if (block.text.trim().length === 0) continue;
 
+      const labelValueAugmentation = scanFormLabelValueAugmentation(
+        block,
+        pageBlocks[blockIndex + 1],
+        subtype
+      );
+      const chunkText = labelValueAugmentation?.text ?? block.text;
       const baseLocator = buildLocator(
         block,
         page.pageNumber,
         subtype,
         structureType
       );
-      const extractionWarnings = buildExtractionWarnings(block);
+      const extractionWarnings = [
+        ...(buildExtractionWarnings(block) ?? []),
+        ...(labelValueAugmentation !== undefined
+          ? [labelValueAugmentation.warning]
+          : []),
+      ];
 
       const seed: ChunkSeed = {
         docId,
@@ -369,7 +589,7 @@ export function documentIrToKnowledgeChunks(
         sensitivitySource,
         ...(sensitivityReason !== undefined ? { sensitivityReason } : {}),
         extractionProvider,
-        ...(extractionWarnings !== undefined ? { extractionWarnings } : {}),
+        ...(extractionWarnings.length > 0 ? { extractionWarnings } : {}),
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -387,12 +607,12 @@ export function documentIrToKnowledgeChunks(
         return estimateKnowledgeChunkFirestoreBytes(candidate) <= maxChunkBytes;
       };
 
-      if (fitsBase(block.text)) {
+      if (fitsBase(chunkText)) {
         chunks.push(
           finaliseChunk(
             seed,
             baseId,
-            block.text,
+            chunkText,
             baseLocator,
             extractorInput
           )
@@ -431,7 +651,7 @@ export function documentIrToKnowledgeChunks(
         return estimateKnowledgeChunkFirestoreBytes(candidate) <= maxChunkBytes;
       };
 
-      const parts = partitionText(block.text, fitsSplit);
+      const parts = partitionText(chunkText, fitsSplit);
 
       parts.forEach((part, index) => {
         const suffix = `:part-${index + 1}`;
