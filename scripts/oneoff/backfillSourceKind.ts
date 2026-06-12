@@ -1,15 +1,15 @@
-import './loadEnv';
+import '../loadEnv';
 import { FieldPath } from '@google-cloud/firestore';
-import { DOCUMENTS_COLLECTION } from '../src/lib/documents';
-import { getFirestoreClient } from '../src/lib/firestore';
+import { DOCUMENTS_COLLECTION } from '../../src/lib/documents';
+import { getFirestoreClient } from '../../src/lib/firestore';
 
 const BATCH_SIZE = 500;
 const PREVIEW_DOC_COUNT = 5;
 
 const USAGE = [
   'Usage:',
-  '  pnpm backfill:source-kind --dry-run',
-  '  pnpm backfill:source-kind --confirm',
+  '  pnpm tsx scripts/oneoff/backfillSourceKind.ts --dry-run',
+  '  pnpm tsx scripts/oneoff/backfillSourceKind.ts --confirm',
 ].join('\n');
 
 type Mode = 'dry-run' | 'confirm';

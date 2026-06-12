@@ -13,7 +13,7 @@
  *   載せないと「33,000 vs 30,000」の判別テストが成立しない）。
  * - 投入は synthetic / masked fixture のみ（Safety Invariant）。
  *
- * 実行: pnpm tsx scripts/buildDeliveryE2ePackage.ts
+ * 実行: pnpm tsx scripts/oneoff/buildDeliveryE2ePackage.ts
  * 出力: docs/delivery-e2e/2026-06-09-accounting-office.md
  */
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -24,7 +24,7 @@ import {
   exportContextPackageSourceBundle,
   type ContextPackageExportInput,
   type IncludedContextDocument,
-} from '../src/lib/exportContextPackage';
+} from '../../src/lib/exportContextPackage';
 
 const SAMPLE_DIR = join(process.cwd(), 'sample-data/accounting-office');
 const OUTPUT_PATH = join(

@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
-import './loadEnv';
+import '../loadEnv';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { extractScanPdfFromBuffer } from '../src/lib/extractors/scanPdfDocumentExtractor';
+import { extractScanPdfFromBuffer } from '../../src/lib/extractors/scanPdfDocumentExtractor';
 
 const DEFAULT_FIXTURE_PATH =
   'sample-data/document-conversion/scan-pdf/synthetic-unmaskable-pii-scan.pdf';

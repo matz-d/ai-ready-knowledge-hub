@@ -7,8 +7,8 @@
  * complete / fail は `running` + token 一致時のみ受理する（stale worker 拒否）。
  */
 import { randomUUID } from 'node:crypto';
-import type { Timestamp } from '@google-cloud/firestore';
 import { FieldValue, getFirestoreClient } from '../firestore';
+import { timestampToIso, type TimestampLike } from '../firestoreTimestamps';
 import {
   CONTEXT_PACKAGE_JOB_LEASE_MS,
   CONTEXT_PACKAGE_JOB_MAX_RETRY_DURATION_MS,
@@ -24,15 +24,7 @@ import {
   type ContextPackageJobStatus,
 } from './schema';
 
-type TimestampLike = Timestamp | Date | string | null | undefined;
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-function timestampToIso(value: TimestampLike): string | undefined {
-  if (!value) return undefined;
-  if (typeof value === 'string') return value;
-  if (value instanceof Date) return value.toISOString();
-  return value.toDate().toISOString();
-}
 
 function jobCollection() {
   return getFirestoreClient().collection(CONTEXT_PACKAGE_JOBS_COLLECTION);

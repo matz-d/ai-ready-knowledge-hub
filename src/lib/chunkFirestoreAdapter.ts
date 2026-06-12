@@ -2,6 +2,7 @@ import { Firestore, Timestamp } from '@google-cloud/firestore';
 import type { FirestoreDocumentStatus } from './firestoreSchema';
 import { DOCUMENTS_COLLECTION } from './documents';
 import { getFirestoreClient } from './firestore';
+import { timestampToIso, type TimestampLike } from './firestoreTimestamps';
 import {
   assertKnowledgeChunkInvariants,
   KnowledgeChunkSchema,
@@ -54,23 +55,6 @@ export interface ChunkFirestoreAdapter {
     chunks: KnowledgeChunk[],
     context: ChunkReplaceContext
   ): Promise<void>;
-}
-
-// ─── Timestamp helpers ────────────────────────────────────────────────────────
-
-type TimestampLike =
-  | Timestamp
-  | { toDate(): Date }
-  | Date
-  | string
-  | null
-  | undefined;
-
-function timestampToIso(value: TimestampLike): string | undefined {
-  if (!value) return undefined;
-  if (typeof value === 'string') return value;
-  if (value instanceof Date) return value.toISOString();
-  return value.toDate().toISOString();
 }
 
 // ─── Serialisation ────────────────────────────────────────────────────────────

@@ -87,7 +87,7 @@ vi.mock('../documentIrStorage', () => ({
   writeDocumentIrSnapshot: writeDocumentIrSnapshotMock,
 }));
 
-vi.mock('../../eval/conversion/documentIrToKnowledgeChunk', () => ({
+vi.mock('../conversion/documentIrToKnowledgeChunk', () => ({
   documentIrToKnowledgeChunks: documentIrToKnowledgeChunksMock,
 }));
 

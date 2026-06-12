@@ -376,4 +376,24 @@ describe('conversionEvalStorage (fake Firestore)', () => {
 
     await expect(adapter.getLatestForDocument('doc-empty')).resolves.toBeNull();
   });
+
+  it('throws a domain error when stored createdAt is an unsupported object shape', async () => {
+    const fakeDb = new FakeFirestore();
+    seedParentDoc(fakeDb);
+    const adapter = createConversionEvalStorage(fakeDb as unknown as Firestore);
+    const evalId = buildConversionEvalId(DOC_ID, REVISION_A);
+
+    fakeDb._seed(`${CONVERSION_EVAL_COLLECTION}/${evalId}`, {
+      evalId,
+      docId: DOC_ID,
+      revisionId: REVISION_A,
+      stage: 'health',
+      result: sampleHealthResult(),
+      createdAt: { notATimestamp: true },
+    });
+
+    await expect(adapter.getLatestForDocument(DOC_ID)).rejects.toThrow(
+      'conversion eval record has an unsupported createdAt value'
+    );
+  });
 });

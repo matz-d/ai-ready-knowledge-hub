@@ -3,13 +3,13 @@
  * Compare golden recall for scan-pdf fixtures: committed PoC sidecar vs fresh
  * mainline `extractScanPdfFromBuffer` (Vertex). Used for M6 golden baseline docs.
  */
-import './loadEnv';
+import '../loadEnv';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { documentIrToKnowledgeChunks } from '../src/eval/conversion/documentIrToKnowledgeChunk';
-import { parseDocumentIr, type DocumentIr } from '../src/eval/conversion/documentIr';
-import { evalSemanticRetention } from '../src/eval/conversion/golden/evalSemanticRetention';
-import { extractScanPdfFromBuffer } from '../src/lib/extractors/scanPdfDocumentExtractor';
+import { documentIrToKnowledgeChunks } from '../../src/eval/conversion/documentIrToKnowledgeChunk';
+import { parseDocumentIr, type DocumentIr } from '../../src/eval/conversion/documentIr';
+import { evalSemanticRetention } from '../../src/eval/conversion/golden/evalSemanticRetention';
+import { extractScanPdfFromBuffer } from '../../src/lib/extractors/scanPdfDocumentExtractor';
 
 const FIXTURE_ROOT = path.resolve(
   process.cwd(),

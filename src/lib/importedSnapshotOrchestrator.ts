@@ -24,6 +24,7 @@ import {
   googleSheetsWorkspaceImportAdapter,
   parseGoogleSheetsInput,
 } from './googleSheetsSnapshotImporter';
+import { timestampToDate } from './firestoreTimestamps';
 import { uploadRawObject } from './storage';
 import {
   buildImportedSnapshotInitialDocumentBody,
@@ -485,24 +486,6 @@ function maskerSummaryFromDocument(masker: FirestoreDocument['masker']): MaskerS
     completedAt: timestampToDate(masker.completedAt),
     modelId: masker.modelId,
   };
-}
-
-function timestampToDate(value: unknown): Date {
-  if (value instanceof Date) {
-    return value;
-  }
-  if (typeof value === 'string') {
-    return new Date(value);
-  }
-  if (
-    typeof value === 'object' &&
-    value !== null &&
-    'toDate' in value &&
-    typeof value.toDate === 'function'
-  ) {
-    return value.toDate();
-  }
-  throw new Error('Unexpected timestamp payload');
 }
 
 async function updateMetadataOnlyForSkippedOverwrite(

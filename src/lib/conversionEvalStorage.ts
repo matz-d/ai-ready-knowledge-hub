@@ -1,4 +1,4 @@
-import { Firestore, FieldValue, Timestamp } from '@google-cloud/firestore';
+import { Firestore, FieldValue } from '@google-cloud/firestore';
 import {
   assertConversionEvalResultStageShape,
   parseConversionEvalResult,
@@ -10,6 +10,7 @@ import {
 } from '../eval/conversion/conversionEvalStage';
 import { DOCUMENTS_COLLECTION } from './documents';
 import { getFirestoreClient } from './firestore';
+import { timestampToIso, type TimestampLike } from './firestoreTimestamps';
 
 export const CONVERSION_EVAL_COLLECTION = 'conversion_eval';
 
@@ -80,24 +81,15 @@ export function parseConversionEvalId(evalId: string): {
   };
 }
 
-type TimestampLike =
-  | Timestamp
-  | { toDate(): Date }
-  | Date
-  | string
-  | null
-  | undefined;
-
-function timestampToIso(value: TimestampLike): string {
-  if (!value) {
-    throw new Error('conversion eval record is missing createdAt');
+function requireCreatedAtIso(value: TimestampLike): string {
+  const iso = timestampToIso(value);
+  if (!iso) {
+    if (!value) {
+      throw new Error('conversion eval record is missing createdAt');
+    }
+    throw new Error('conversion eval record has an unsupported createdAt value');
   }
-  if (typeof value === 'string') return value;
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function') {
-    return value.toDate().toISOString();
-  }
-  throw new Error('conversion eval record has an unsupported createdAt value');
+  return iso;
 }
 
 function parseStoredConversionEval(
@@ -120,7 +112,7 @@ function parseStoredConversionEval(
     revisionId,
     stage,
     result,
-    createdAt: timestampToIso(raw.createdAt as TimestampLike),
+    createdAt: requireCreatedAtIso(raw.createdAt as TimestampLike),
   };
 }
 

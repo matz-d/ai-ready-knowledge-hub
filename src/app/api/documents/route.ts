@@ -3,8 +3,8 @@
  *
  * - multipart formData 解析、`file` フィールド検証
  * - サイズ / 拡張子 / MIME / UTF-8 または XLSX 解析 / バケット設定（`getKnowledgeHubBucketName()`）検証
- * - `orchestrateUploadProcessing` への委譲（GCS / Firestore / Curator / Masker の副作用順序は
- *   `src/lib/uploadOrchestrator.ts` 側の単一責務）
+ * - PDF は `dispatchPdfExtraction` へ委譲後、`orchestrateUploadProcessing` へ渡す
+ *   （GCS / Firestore / Curator / Masker の副作用順序は `src/lib/uploadOrchestrator/` 側）
  * - upload 完了後の `documents/{docId}/chunks` 同期生成
  * - 成功・失敗レスポンスの整形（Curator/Masker 段の失敗は `docId` 付き 500、その他基盤は 502）
  */
@@ -14,7 +14,6 @@ import {
   CuratorPhaseError,
   MaskerPhaseError,
   orchestrateUploadProcessing,
-  type PdfConversionAudit,
 } from '../../../lib/uploadOrchestrator';
 import { getKnowledgeHubBucketName } from '../../../lib/storage';
 import {
@@ -25,12 +24,17 @@ import {
 } from '../../../lib/documents';
 import { documentUploadSuccessBodyFromOrchestrate } from '../../../lib/documentUploadResponseMapper';
 import { xlsxToNormalizedMarkdown } from '../../../lib/extractors/xlsxExtractor';
-import { extractPdfFromBuffer } from '../../../lib/extractors/pdfDocumentExtractor';
-import { extractSlidePdfFromBuffer } from '../../../lib/extractors/slidePdfDocumentExtractor';
-import { extractScanPdfFromBuffer } from '../../../lib/extractors/scanPdfDocumentExtractor';
+import {
+  createFirestorePdfFlagReader,
+  dispatchPdfExtraction,
+  PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE,
+  PDF_EXTRACTION_FAILED_MESSAGE,
+  PDF_UPLOAD_BETA_DISABLED_MESSAGE,
+  type PdfExtractionDispatchFailure,
+  type PdfExtractionResult,
+} from '../../../lib/extractors/pdfExtractionDispatcher';
 import { replaceChunksForDoc } from '../../../lib/chunkRegenerator';
 import { auditActorFromRequest, recordAuditEvent } from '../../../lib/audit/auditEvent';
-import { getFeatureFlag, isFeatureEnabled } from '../../../lib/featureFlags';
 import { getFirestoreClient } from '../../../lib/firestore';
 
 export const runtime = 'nodejs';
@@ -45,90 +49,33 @@ const MASKER_FAILURE_CLIENT_MESSAGE =
 const CHUNK_GENERATION_FAILURE_CLIENT_MESSAGE =
   'チャンク生成に失敗しました。設定またはログを確認してください。';
 
-type PdfExtractionResult = {
-  textContent: string;
-  documentIr: Awaited<
-    ReturnType<typeof extractPdfFromBuffer>
-  >['documentIr'];
-  /** Audit metadata threaded into `document.convert` (Phase 3-H-3 §4.2). */
-  conversion: PdfConversionAudit;
-};
-
-type PdfSubtypePreFlightConfig = {
-  flagId:
-    | 'pdf-conversion-subtype-1'
-    | 'pdf-conversion-subtype-2'
-    | 'pdf-conversion-subtype-3';
-  extract: (args: { buffer: Buffer; fileName: string }) => Promise<PdfExtractionResult>;
-};
-
-/** Gemini OCR `piiFindings` only — not heuristic DLP / Masker output. */
-function countUnmaskablePiiFromGeminiOcr(
-  piiFindings: ReadonlyArray<{ maskability: 'maskable' | 'unmaskable' }>
-): number {
-  return piiFindings.filter((finding) => finding.maskability === 'unmaskable')
-    .length;
-}
-
-const PDF_SUBTYPE_PRE_FLIGHT_CONFIGS: readonly PdfSubtypePreFlightConfig[] = [
-  {
-    flagId: 'pdf-conversion-subtype-3',
-    extract: async ({ buffer, fileName }) => {
-      const result = await extractScanPdfFromBuffer({ buffer, fileName });
-      return {
-        textContent: result.textContent,
-        documentIr: result.documentIr,
-        conversion: {
-          converterId: result.conversion.converterId,
-          inferenceDestination: {
-            vendor: 'vertex',
-            region: result.conversion.region,
-            model: result.conversion.model,
-          },
-          unmaskablePiiFindingsCount: countUnmaskablePiiFromGeminiOcr(
-            result.conversion.piiFindings
-          ),
-        },
-      };
-    },
-  },
-  {
-    flagId: 'pdf-conversion-subtype-2',
-    extract: async ({ buffer, fileName }) => {
-      const result = await extractSlidePdfFromBuffer({ buffer, fileName });
-      return {
-        textContent: result.textContent,
-        documentIr: result.documentIr,
-        conversion: {
-          converterId: result.conversion.converterId,
-          inferenceDestination: {
-            vendor: 'vertex',
-            region: result.conversion.region,
-            model: result.conversion.model,
-          },
-        },
-      };
-    },
-  },
-  {
-    flagId: 'pdf-conversion-subtype-1',
-    extract: async ({ buffer, fileName }) => {
-      const result = await extractPdfFromBuffer({
-        buffer,
-        fileName,
-        sourceSubtype: 'official-doc-pdf',
+function pdfDispatchFailureResponse(
+  failure: PdfExtractionDispatchFailure,
+  tenantId: string
+): NextResponse {
+  switch (failure.code) {
+    case 'no_flag_enabled':
+      return NextResponse.json(
+        { error: PDF_UPLOAD_BETA_DISABLED_MESSAGE },
+        { status: 403 }
+      );
+    case 'conflicting_flags':
+      console.warn('[documents] conflicting PDF conversion feature flags', {
+        tenantId,
+        enabledFlagIds: failure.enabledFlagIds,
       });
-      return {
-        textContent: result.textContent,
-        documentIr: result.documentIr,
-        conversion: { converterId: 'pdf-parse' },
-      };
-    },
-  },
-] as const;
-
-const PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE =
-  'PDF 変換の feature flag が競合しています。同一テナントで PDF 変換 subtype flag (official-doc-pdf / slide-pdf / scan-pdf) を複数同時に有効にできません。';
+      return NextResponse.json(
+        { error: PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE },
+        { status: 403 }
+      );
+    case 'extraction_failed':
+      console.error('[documents] PDF extraction failed', failure.cause);
+      return NextResponse.json(
+        { error: PDF_EXTRACTION_FAILED_MESSAGE },
+        { status: 400 }
+      );
+  }
+}
 
 /** Whole mebibytes for client-facing copy (limit is defined in binary units). */
 function formatBytesAsMB(bytes: number): string {
@@ -229,49 +176,17 @@ export async function POST(request: Request) {
       tenantId = '';
     }
     const db = getFirestoreClient();
-    const enabledPdfConfigs: PdfSubtypePreFlightConfig[] = [];
-    for (const config of PDF_SUBTYPE_PRE_FLIGHT_CONFIGS) {
-      const flag = await getFeatureFlag(db, config.flagId);
-      if (isFeatureEnabled(flag, tenantId)) {
-        enabledPdfConfigs.push(config);
-      }
+    const pdfDispatchOutcome = await dispatchPdfExtraction({
+      buffer,
+      fileName: displayName,
+      isFlagEnabled: createFirestorePdfFlagReader(db, tenantId),
+    });
+
+    if (!pdfDispatchOutcome.ok) {
+      return pdfDispatchFailureResponse(pdfDispatchOutcome.failure, tenantId);
     }
 
-    if (enabledPdfConfigs.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            'PDF アップロードはベータ機能です。テナントのアクセス権を確認してください。',
-        },
-        { status: 403 }
-      );
-    }
-
-    if (enabledPdfConfigs.length > 1) {
-      console.warn('[documents] conflicting PDF conversion feature flags', {
-        tenantId,
-        enabledFlagIds: enabledPdfConfigs.map((config) => config.flagId),
-      });
-      return NextResponse.json(
-        { error: PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE },
-        { status: 403 }
-      );
-    }
-
-    const selectedPdfConfig = enabledPdfConfigs[0]!;
-
-    try {
-      pdfExtractionResult = await selectedPdfConfig.extract({
-        buffer,
-        fileName: displayName,
-      });
-    } catch (error) {
-      console.error('[documents] PDF extraction failed', error);
-      return NextResponse.json(
-        { error: 'PDF ファイルを解析できませんでした。' },
-        { status: 400 }
-      );
-    }
+    pdfExtractionResult = pdfDispatchOutcome.result;
   }
 
   // ── Content extraction for non-PDF formats ────────────────────────────────
