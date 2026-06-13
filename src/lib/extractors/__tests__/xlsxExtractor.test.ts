@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import ExcelJS from 'exceljs';
-import { extractXlsx } from '../xlsxExtractor';
+import { buildXlsxCuratorInput, extractXlsx } from '../xlsxExtractor';
 
 const baseInput = {
   docId: 'doc-xlsx-1',
@@ -162,5 +162,20 @@ describe('extractXlsx', () => {
       { kind: 'spreadsheet', sheetName: '横長明細', range: 'A2:B2' },
     ]);
     expect(chunks[1].extractionWarnings).toContain('rowWindow=2-2');
+  });
+
+  it('builds a bounded table manifest for large XLSX Curator input', async () => {
+    const result = await buildXlsxCuratorInput({
+      fileName: 'sales.xlsx',
+      content: await createLargeSheetWorkbookBuffer(1001),
+    });
+
+    expect(result.inputMode).toBe('table_manifest');
+    expect(result.content).toContain('Table preflight manifest');
+    expect(result.content).toContain('Recommended split unit: row_group');
+    expect(result.content).toContain('### 明細');
+    expect(result.content).toContain('| 顧客名 | 数量 |');
+    expect(result.content).toContain('| Acme 3 | 3 |');
+    expect(result.content).not.toContain('Acme 1000');
   });
 });

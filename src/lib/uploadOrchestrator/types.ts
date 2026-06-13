@@ -27,7 +27,14 @@ export type PdfConversionAudit = {
    */
   unmaskablePiiFindingsCount?: number;
 };
-export type PdfCuratorInputMode = 'full_text' | 'page_group_manifest';
+export type CuratorInputMode =
+  | 'full_text'
+  | 'page_group_manifest'
+  | 'table_manifest';
+export type PdfCuratorInputMode = Extract<
+  CuratorInputMode,
+  'full_text' | 'page_group_manifest'
+>;
 export type OrchestrateAuditContext = {
   tenantId: string;
   actor: AuditEventWrite['actor'];
@@ -64,6 +71,16 @@ export type OrchestrateInput = {
    * manifest. Sampled manifests are not trusted for direct AI use decisions.
    */
   pdfCuratorInputMode?: PdfCuratorInputMode;
+  /**
+   * Optional non-PDF Curator input. Keeps `content` as the full source for
+   * Masker while allowing large tables to classify from a bounded manifest.
+   */
+  curatorContent?: string;
+  /**
+   * Describes whether `curatorContent` is complete text or a sampled manifest.
+   * Sampled manifests are not trusted for direct AI use decisions.
+   */
+  curatorInputMode?: CuratorInputMode;
 };
 
 export type MaskerSummary = {
@@ -126,6 +143,8 @@ export type RunCuratorAndMaskerLifecycleArgs = {
   docId: string;
   displayName: string;
   content: string;
+  curatorContent?: string;
+  curatorInputMode?: CuratorInputMode;
   contentSha256: string;
   sourceKind: 'upload' | 'google_workspace';
   externalSource: FirestoreExternalSource | null;

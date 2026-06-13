@@ -12,6 +12,8 @@ import {
 import {
   buildXlsxPreflightReport,
   formatPreflightWarning,
+  renderTableManifest,
+  tableManifestPreviewRowLimit,
   type DocumentPreflightReport,
 } from './preflight';
 
@@ -19,6 +21,13 @@ export type XlsxExtractionResult = {
   /** Curator/masker input: normalized markdown table for the whole document. */
   normalizedMarkdown: string;
   chunks: KnowledgeChunk[];
+  preflightReport: DocumentPreflightReport;
+};
+
+export type XlsxCuratorInput = {
+  normalizedMarkdown: string;
+  content: string;
+  inputMode: 'full_text' | 'table_manifest';
   preflightReport: DocumentPreflightReport;
 };
 
@@ -274,18 +283,10 @@ export async function xlsxToNormalizedMarkdown(
     .join('\n\n');
 }
 
-export async function extractXlsx(input: {
-  docId: string;
-  fileName: string;
-  content: Buffer | Uint8Array;
-  documentSensitivity: Sensitivity;
-  documentAiUsePolicy: AiUsePolicy;
-}): Promise<XlsxExtractionResult> {
-  const now = new Date().toISOString();
-  const binary = toBuffer(input.content);
-  const sheets = await xlsxToMarkdownSheets(binary);
-  const extractorInput = binary.toString('base64');
-  const preflightReport = buildXlsxPreflightReport({
+function buildXlsxPreflightReportFromSheets(
+  sheets: readonly XlsxMarkdownSheet[]
+): DocumentPreflightReport {
+  return buildXlsxPreflightReport({
     sheetCount: sheets.length,
     rowCount: sheets.reduce((sum, sheet) => sum + sheet.rowCount, 0),
     columnCount: sheets.reduce(
@@ -298,6 +299,53 @@ export async function extractXlsx(input: {
     ),
     estimatedChars: sheets.reduce((sum, sheet) => sum + sheet.text.length, 0),
   });
+}
+
+export async function buildXlsxCuratorInput(input: {
+  fileName: string;
+  content: Buffer | Uint8Array;
+}): Promise<XlsxCuratorInput> {
+  const sheets = await xlsxToMarkdownSheets(input.content);
+  const normalizedMarkdown = sheets.map((sheet) => sheet.text).join('\n\n');
+  const preflightReport = buildXlsxPreflightReportFromSheets(sheets);
+  const content = renderTableManifest({
+    fileName: input.fileName,
+    preflightReport,
+    fallbackText: normalizedMarkdown,
+    sheets: sheets.map((sheet) => ({
+      sheetName: sheet.sheetName,
+      rowCount: sheet.rowCount,
+      columnCount: sheet.columnCount,
+      range: sheet.range,
+      previewMarkdown: rowsToMarkdownTable(
+        sheet.rows.slice(0, tableManifestPreviewRowLimit())
+      ),
+    })),
+  });
+
+  return {
+    normalizedMarkdown,
+    content,
+    inputMode:
+      preflightReport.recommendedSplitUnit === 'none'
+        ? 'full_text'
+        : 'table_manifest',
+    preflightReport,
+  };
+}
+
+export async function extractXlsx(input: {
+  docId: string;
+  fileName: string;
+  content: Buffer | Uint8Array;
+  documentSensitivity: Sensitivity;
+  documentAiUsePolicy: AiUsePolicy;
+}): Promise<XlsxExtractionResult> {
+  const now = new Date().toISOString();
+  const binary = toBuffer(input.content);
+  const sheets = await xlsxToMarkdownSheets(binary);
+  const extractorInput = binary.toString('base64');
+  const preflightReport = buildXlsxPreflightReportFromSheets(sheets);
   const preflightWarning = formatPreflightWarning(preflightReport);
   const warnings = preflightWarning ? [preflightWarning] : [];
 

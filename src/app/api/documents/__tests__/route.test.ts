@@ -96,6 +96,17 @@ async function createWorkbookBuffer(): Promise<Buffer> {
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
+async function createLargeWorkbookBuffer(): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('明細');
+  sheet.addRow(['顧客名', '数量']);
+  for (let i = 0; i < 1001; i += 1) {
+    sheet.addRow([`Acme ${i}`, i]);
+  }
+
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
 function toBlobPart(buffer: Buffer): BlobPart {
   const arrayBuffer = new ArrayBuffer(buffer.byteLength);
   const view = new Uint8Array(arrayBuffer);
@@ -313,6 +324,52 @@ describe('POST /api/documents', () => {
     expect(uploadInput.content).toContain('| 顧客名 | 数量 |');
     expect(uploadInput.content).toContain('| Acme | 10 |');
     expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-1');
+  });
+
+  it('passes a bounded table manifest as large .xlsx Curator input', async () => {
+    const workbookBuffer = await createLargeWorkbookBuffer();
+    const file = new File([toBlobPart(workbookBuffer)], 'sales.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    const response = await POST(buildRequestWithFile(file));
+
+    expect(response.status).toBe(200);
+    const uploadInput = orchestrateUploadProcessingMock.mock.calls[0]?.[0];
+    expect(uploadInput).toEqual(
+      expect.objectContaining({
+        content: expect.stringContaining('Acme 1000'),
+        curatorInputMode: 'table_manifest',
+        curatorContent: expect.stringContaining('Table preflight manifest'),
+      })
+    );
+    expect(uploadInput.curatorContent).toContain('Recommended split unit: row_group');
+    expect(uploadInput.curatorContent).toContain('| Acme 3 | 3 |');
+    expect(uploadInput.curatorContent).not.toContain('Acme 1000');
+  });
+
+  it('passes a bounded table manifest as large .csv Curator input', async () => {
+    const rows = [
+      '顧客名,数量',
+      ...Array.from({ length: 1001 }, (_, index) => `Acme ${index},${index}`),
+    ];
+    const file = new File([`${rows.join('\n')}\n`], 'sales.csv', {
+      type: 'text/csv',
+    });
+
+    const response = await POST(buildRequestWithFile(file));
+
+    expect(response.status).toBe(200);
+    const uploadInput = orchestrateUploadProcessingMock.mock.calls[0]?.[0];
+    expect(uploadInput).toEqual(
+      expect.objectContaining({
+        content: expect.stringContaining('Acme 1000'),
+        curatorInputMode: 'table_manifest',
+        curatorContent: expect.stringContaining('Table preflight manifest'),
+      })
+    );
+    expect(uploadInput.curatorContent).toContain('| Acme 3 | 3 |');
+    expect(uploadInput.curatorContent).not.toContain('Acme 1000');
   });
 
   it('fills .xlsx contentType from extension when MIME type is empty', async () => {
