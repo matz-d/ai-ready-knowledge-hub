@@ -1,0 +1,30 @@
+{
+  "documentId": "mhlw-labor-conditions-notice-general.table-assist",
+  "expectedFields": [],
+  "expectedValues": [],
+  "expectedTableCells": [
+    {
+      "rowLabel": "契約期間",
+      "expectedValue": "期間の定めなし、期間の定めあり",
+      "tier": "core"
+    },
+    {
+      "rowLabel": "就業の場所",
+      "expectedValue": "雇入れ直後",
+      "tier": "core"
+    },
+    {
+      "rowLabel": "休 日",
+      "expectedValue": "定例日"
+    },
+    {
+      "rowLabel": "賃 金",
+      "expectedValue": "基本賃金"
+    },
+    {
+      "rowLabel": "退職に関する事項",
+      "expectedValue": "定年制"
+    }
+  ],
+  "notes": "Compare-only table-assist expected set derived from the public MHLW labor conditions notice PDF. This sidecar is loaded only by the official-doc-pdf compare harness via the *.table-assist.expected.json pattern and is not a stable P1-D fixture."
+}

@@ -1,0 +1,30 @@
+{
+  "documentId": "mhlw-r07-model-work-rules.table-assist",
+  "expectedFields": [],
+  "expectedValues": [],
+  "expectedTableCells": [
+    {
+      "rowLabel": "第７章 定年、退職及び解雇",
+      "expectedValue": "６８",
+      "tier": "core"
+    },
+    {
+      "rowLabel": "３１日の場合",
+      "expectedValue": "１７７．１時間",
+      "tier": "core"
+    },
+    {
+      "rowLabel": "３１日の場合",
+      "expectedValue": "１９４．８時間"
+    },
+    {
+      "rowLabel": "7 時間 15 分",
+      "expectedValue": "※85日"
+    },
+    {
+      "rowLabel": "自動車運転の業務",
+      "expectedValue": "年９６０時間以下"
+    }
+  ],
+  "notes": "Compare-only table-assist expected set derived from visible tables in the public MHLW R07 model work rules PDF. This sidecar is loaded only by the official-doc-pdf compare harness via the *.table-assist.expected.json pattern and is not a stable P1-D fixture."
+}

@@ -87,6 +87,33 @@ The unmaskable fixture is safety-only by design. It has no committed
 signal under test is only whether live OCR continues to emit at least one
 unmaskable finding.
 
+## Current Submission Policy
+
+For submission work, keep the current scan-pdf live drift baseline fixed instead
+of regenerating sidecars opportunistically.
+
+This is a deliberate quality policy, not a waiver of safety:
+
+- The PII direction checks are green, including the safety-only unmaskable probe.
+- Extraction failures and deterministic zero failures are `0`.
+- The full live drift red state is caused by live OCR output moving away from
+  committed sidecars, not by a new fail-open safety condition.
+- Regenerating sidecars changes the quality baseline and must be reviewed as its
+  own PR, especially for public blank-form expectations.
+
+Until the sidecar refresh PR lands:
+
+- Full-fixture live `--ci` remains intentionally unsuitable as a default gate.
+- Prompt/model candidates should be judged by report-to-report comparison
+  against the accepted floor below.
+- The focused unmaskable safety fixture remains suitable for live `--ci`.
+- `pnpm eval:p1d:quality --ci` remains the stable committed-sidecar gate.
+
+Sidecar refresh is a follow-up PR, not a drive-by step in prompt/model changes.
+That PR should include public blank-form regeneration policy, human review of
+`*.expected.json` fields, three repeated live reports, and the usual stable
+verification commands.
+
 ## Change Procedure
 
 1. Run the command on the current baseline model/prompt and save the report.
@@ -96,7 +123,11 @@ unmaskable finding.
    PII direction failures, or major ratio drops beyond the accepted baseline
    floor as blockers.
    Boundary deltas should be rerun before accepting or rejecting a candidate.
-5. If the drift is acceptable, regenerate scan-pdf sidecars and expected fields:
+5. If the drift is acceptable, do not automatically regenerate scan-pdf
+   sidecars. Record the report paths and keep the accepted baseline fixed for
+   submission work.
+6. Only in a dedicated sidecar refresh PR, regenerate scan-pdf sidecars and
+   expected fields:
 
    ```bash
    pnpm tsx scripts/regenerateScanPdfGoldenSidecars.ts --refresh-expected
@@ -105,7 +136,10 @@ unmaskable finding.
    pnpm test
    ```
 
-6. Record the report path and model/prompt fingerprint in the PR or phase note.
+   The existing regeneration script currently covers the synthetic golden
+   fixtures. Public blank-form fixture updates need an explicit regeneration and
+   review policy before they are folded into the stable baseline.
+7. Record the report path and model/prompt fingerprint in the PR or phase note.
 
 Do not run the full fixture set in normal CI. It requires live Vertex
 credentials and can move with model availability, quota, and service behavior.

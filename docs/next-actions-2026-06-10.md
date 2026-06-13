@@ -6,7 +6,8 @@
 - Phase 4-UX MVP、async Context Package job、Production Hardening、delivery E2E は実装・検証済み。
 - NotebookLM では単一 `.md` より **source 分割 bundle** が正しい渡し方だと実証済み。`exportContextPackageSourceBundle()` と UI zip 導線（P1-A/B）は実装済み。
 - dashboard refresh で不要 UI/CSS の残りが見つかっているが、機能ブロッカーではない。
-- 大きな XLSX で Curator token limit failure が実データ上に見えており、大きめ/混在資料への耐性は次の品質テーマ。
+- P1-E first slice（PR #37-#41）で T1 preflight / row-window / page-group・table-manifest、T2 table fail-soft・scan visual table fallback、T3 label/value enrichment、scan OCR prompt guard + live drift workflow まで完了。
+- 2026-06-13 の P1-D 実測で、born-digital official-doc-pdf（`pdf-parse` 経路）の field recall / table cell recall / locator が最弱領域だと判明。次は production へ繋がず、既存 `poc/document-conversion/official-doc-pdf/compare/` ハーネスに Gemini arm を足して、committed official-doc-pdf 3件で layout/table enrichment の効果を比較する。
 
 ## 優先順位
 
@@ -18,9 +19,11 @@
 | P1-F | Async full-coverage strategist | async job が広い選択を実際に全件レビューできるようにする（**実行順は P1-C より先**） | 完了。Stage 2 本体実装済み。review 残タスクは [docs/p1-f-review-follow-up-tasks.md](p1-f-review-follow-up-tasks.md) に分離 | [docs/p1-f-full-coverage-strategist.md](p1-f-full-coverage-strategist.md) の Stage 2 Done 条件（batched strategist + missing/questions reduce、給与シナリオ再実行で truncation ゼロ） |
 | P1-C | Demo / docs を bundle 前提へ更新 | デモの最後を product truth に合わせる | 完了。`docs/demo-scenario.md` と `docs/demo-runbook.md` を bundle 前提へ更新 | デモシナリオが「NotebookLM には source bundle を渡す」に更新される |
 | P1-D | Extraction & Masking Quality Gate | 「安全に止める」だけでなく「止めすぎない」「構造化データ精度が十分」を示す | 完了（PR #35）。stable quality gate（schema v4、CI blocker）、live masker drift check（`piiLeakCount = 0`）、P1-E handoff doc。recall metrics は report-only。scan-pdf sidecar は raw OCR baseline のまま | curator over-restriction は live-only。stable `falseMaskedTokenCount` は sidecar hygiene check。P1-E へ table/locator/大容量症状を handoff 済み |
-| P1-E | 大きなファイルの事前分割 | token limit failure を減らし、巨大 chunk / 全体失敗を避ける | **次の実装**。direction doc 済み（T1 preflight/splitting、T2 table fallback、T3 chunk boundary/locator enrichment） | extractor / Curator 前に分割または sampling plan を作り、sheet / page / row group 単位で安全に処理できる。table fallback と scan locator 改善は P1-D drift evidence と連動する |
-| P2 | Phase 3-F デモ polish | 動画シナリオを現状の product truth に合わせる | P1-C で export 文言は更新済み。Dashboard refresh 後の画面構成・live funnel の見せ方は未反映 | 動画カットとナレーションが現 UI / bundle 導線と一致する |
-| P2 | 提出前の軽い運用補強 | 「まわす」説明力を上げる | alert / sweeper / TTL は済み。enqueue 二重 submit と SLO が未整理 | 二重 submit の挙動確認、簡易 SLO 1枚を `operate-deliver-readiness.md` へ追記 |
+| P1-E | 大きなファイルの事前分割 / table fallback / locator enrichment | token limit failure を減らし、巨大 chunk / 表構造欠落 / label-value 分断を改善する | **first slice 完了**（PR #37-#41）。T1 preflight + row-window / page-group・table-manifest、T2 official-PDF table fail-soft + scan visual table fallback、T3 label/value enrichment、scan OCR prompt guard + `pnpm eval:scan-pdf:ocr-live-drift` workflow。証跡は [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6、[docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](scan-pdf-ocr-live-drift-evidence-2026-06-13.md)、[docs/scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md](scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md) | large table / PDF は sheet・row window・page-group / table-manifest で Curator 入力を bounded 化し Masker は全文を維持。P1-D handoff の employment-form / invoice scan は stable eval で改善確認済み |
+| P1-E+ | scan-pdf quality floor 解消 | PII prompt guard 後の accepted live drift floor（`majorDriftCount=3`）を下げ、提出説明可能な品質証跡を固める | **方針決定済み**。提出前は current baseline fixed。PII direction / deterministic zero は green、full live `--ci` は sidecar refresh PR まで intentionally red | sidecar refresh は後続 PR。public blank-form regeneration policy、expected fields の人間レビュー、3-run live evidence、full live `--ci` gate 再評価をまとめて実施。提出前の正本は [docs/scan-pdf-ocr-live-drift-workflow.md](scan-pdf-ocr-live-drift-workflow.md) |
+| P1-E2 | born-digital PDF Gemini layout/table compare | official-doc-pdf の table / heading / locator 弱点を、Gemini layout/table enrichment で改善できるかを負債なく判定する | **実装・検証済み**。既存 compare harness に `gemini` / `pdf-parse+gemini-tables` arm を追加。page-group / table-only / grounding filter / hallucination-candidate check を実測。table-assist 専用 golden も追加済み | 採用判断: full Gemini 置換はしない。`pdf-parse` primary + grounded Gemini table-assist を PoC 最善とする。証跡は [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6 |
+| P2 | Phase 3-F デモ polish | 動画シナリオを現状の product truth に合わせる | P1-C で export 文言は更新済み。Dashboard refresh 後の画面構成・live funnel の見せ方は未反映。**提出補強の並行テーマ** | 動画カットとナレーションが現 UI / bundle 導線と一致する |
+| P2 | 提出前の軽い運用補強 | 「まわす」説明力を上げる | alert / sweeper / TTL は済み。enqueue 二重 submit と SLO が未整理。**提出補強の並行テーマ** | 二重 submit の挙動確認、簡易 SLO 1枚を `operate-deliver-readiness.md` へ追記 |
 | P3 | 不要 CSS / UI 残骸 cleanup | 保守性を上げ、次の UI 変更を軽くする | 旧 heatmap / risk-callout / status badge modifier / sensitivity 重複などが残る | 挙動変更なしで未使用 CSS と古い `inventory-demo-*` naming を整理 |
 | P3 | Ingest 拡張判断 | 次の product expansion を決める | Drive folder bulk / local directory batch / standalone images が候補 | 提出前は Drive folder bulk か local directory batch のどちらかを選定。standalone images は OCR/PII/eval 設計が重いので後続寄り |
 
@@ -54,7 +57,7 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 2. **P1-B: source bundle zip UI** — P1-A の payload をブラウザで zip 化して download する。ここで UI と browser evidence を作る。
 3. **P1-C: demo/docs update** — デモの最後を「NotebookLM には source bundle」に更新する。UI が入ってから短く閉じる。
 4. **P1-D: Extraction & Masking Quality Gate** — safety / structure / over-mask の評価を切る。P1-A/B とは別の評価基盤作業として扱う。
-5. **P1-E: large file pre-splitting** — P1-D で露出した失敗ケースを入力にして、XLSX / CSV / PDF の分割方針を実装する。
+5. **P1-E: large file pre-splitting / table fallback / locator enrichment** — first slice 完了（PR #37-#41）。残りは P1-E+ quality floor、P1-E2 born-digital Gemini compare、large mixed PDF qualitative follow-up。
 
 ## P1-A / P1-B: NotebookLM 用 source bundle zip UI
 
@@ -165,23 +168,49 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 
 **位置づけ**: NotebookLM E2E の 5問テストを、変換精度・抽出精度の評価にも拡張する。
 
-## P1-E: 大きなファイルの事前分割
+## P1-E: 大きなファイルの事前分割 / table fallback / locator enrichment
 
-**問題**:
-- 大きな XLSX / PDF で Curator token limit failure が起きる。
-- 1文書を丸ごと Curator に渡すと、失敗時に全体が失敗する。
-- sheet / page / table の局所構造を保った分割がないと、Context Package 側でも巨大 chunk になりやすい。
+**first slice 完了**（PR #37-#41）:
+- **T1**: CSV / XLSX / official PDF preflight + large-table row-window chunking。large PDF / table は page-group / table-manifest で Curator 入力を bounded 化（Masker は全文維持、`requires_masking` fail-closed）。
+- **T2**: official-PDF `getTable()` fail-soft。scan-pdf visual table fallback（`image_text` 行から table chunk 合成）。
+- **T3**: scan-pdf label/value enrichment（同一行の隣接 value を label chunk へ複製、`scanLabelValueLink` 記録）。
+- **scan OCR**: prompt PII guard + `pnpm eval:scan-pdf:ocr-live-drift` workflow。PR #41 で live drift evidence 付き。
 
-**方向性**:
-- XLSX: sheet ごと、必要なら row group ごとに summary / chunk 化する。
-- CSV: header + row window で chunk 化し、列意味とサンプル行を分ける。
-- PDF: page group / detected section ごとに DocumentIR を分ける。
-- Curator は全文分類ではなく、document-level metadata + chunk-level evidence の二段にする。
+**残タスク（P1-E+ quality floor）**:
+- 提出前は current baseline fixed とし、sidecar を opportunistic に regeneration しない。
+- accepted live drift floor は `majorDriftCount=3`。PII direction / deterministic zero は green。full live `--ci` は sidecar refresh PR まで default gate にしない。
+- sidecar refresh は後続 PR として、public blank-form regeneration policy、`*.expected.json` の人間レビュー、3-run live evidence、full live `--ci` gate 再評価をまとめて実施する。
+- 正本: [docs/scan-pdf-ocr-live-drift-workflow.md](scan-pdf-ocr-live-drift-workflow.md)、[docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](scan-pdf-ocr-live-drift-evidence-2026-06-13.md)、[docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6 の review follow-ups。
 
-**最初の実装候補**:
-1. XLSX の large sheet preflight: used range / sheet count / estimated chars を計測。
-2. threshold 超過時は sheet-level summary + row-window chunks へ分割。
-3. Curator token limit を起こした文書を `failed` で終わらせるだけでなく、「分割推奨 / 部分処理可能」として記録する。
+**まだ scope 外**:
+- large mixed PDF（local-only）の table extraction 根本改善。golden がないため table cell recall は測らず、committed official-doc-pdf 3件で Gemini 比較の定量判定を先に行う。
+- non-amount 表への scan visual table fallback 拡張。
+- `curatorInputMode` の structured Firestore 永続化。
+
+## P1-E2: born-digital PDF Gemini layout/table compare
+
+**なぜ次に見るか**:
+- `tmp/p1d-quality-report-current.json` では、実文書寄りの born-digital official-doc-pdf 3件が field recall / table cell recall / locator の最弱領域。
+- `valuePrecision = 1` なので、問題は「拾えた値の対応」ではなく、項目・表・根拠 locator を拾えないこと。
+- scan/slide 側は Gemini 系経路で stable metric が高く、born-digital PDF に Gemini layout/table understanding を当てる仮説の限界効用が大きい。
+
+**実装境界**:
+- production upload path には繋がない。PoC / eval-only。
+- 新規 `scripts/runPdfGeminiComparison.ts` は作らない。
+- 既存 `poc/document-conversion/official-doc-pdf/compare/runCompare.ts` の converter arm に `gemini` を足す。
+- 既存の `runOfficialDocPipeline({ converter })`、`DocumentIR → KnowledgeChunk → eval`、`renderCompareReport` を再利用する。
+- `GOOGLE_CLOUD_LOCATION=global` 前提。新しいコスト会計は作らず、既存 Gemini model / token cost 設定の流用を優先する。
+
+**評価対象**:
+- committed official-doc-pdf fixtures を先に対象にする。
+- large mixed PDF (`local-data/annual-report-doc-2025-viewing-ja.pdf`) は後続の定性トラック。golden がないため table cell recall ではなく、`getTable()` 例外回避、表らしさ、hallucination 候補を確認する。
+
+**採用基準**:
+- table cell recall が `pdf-parse` より明確に改善する。
+- field / core recall と locator coverage が改善する。
+- value precision が落ちない。
+- Gemini が出した値のうち、`pdf-parse` 全文に出現しないものを hallucination candidate として機械的に洗い出せる。
+- 失敗時は `pdf-parse` baseline へ戻れる。
 
 ## P2: Phase 3-F デモ polish
 
@@ -241,6 +270,9 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 3. P1-F async full-coverage strategist を実装する（[docs/p1-f-full-coverage-strategist.md](p1-f-full-coverage-strategist.md)）。（完了。review 残タスクは [docs/p1-f-review-follow-up-tasks.md](p1-f-review-follow-up-tasks.md) に残す）
 4. P1-C demo scenario を bundle 前提へ更新する。（完了）
 5. P1-D Extraction & Masking Quality Gate の成熟化。（完了。PR #35、証跡は [docs/p1-d-evidence-2026-06-11.md](p1-d-evidence-2026-06-11.md)）
-6. **P1-E** large file pre-splitting / table fallback / locator enrichment を、eval で露出した失敗ケースから実装する。（**次**）
-7. P2 enqueue/SLO を提出資料向けに薄く固める。
-8. P3 CSS cleanup と Ingest 拡張判断に進む。
+6. **P1-E** large file pre-splitting / table fallback / locator enrichment の first slice。（完了。PR #37-#41）
+7. **P1-E+** scan-pdf quality floor 方針決定。（完了。提出前は current baseline fixed、sidecar refresh は後続 PR）
+8. **P1-E2** born-digital PDF Gemini layout/table compare を既存 compare ハーネスに追加する。（完了。full Gemini 置換は不採用、`pdf-parse` primary + grounded Gemini table-assist を採用候補）
+9. **P2** 提出補強: Phase 3-F デモ polish と enqueue / SLO を並行で薄く固める。
+10. P1-E+ follow-up PR: scan-pdf sidecar refresh / public blank-form recall / full live `--ci` 再評価に進む。
+11. P3 CSS cleanup と Ingest 拡張判断に進む。

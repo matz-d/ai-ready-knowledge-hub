@@ -1,0 +1,30 @@
+{
+  "documentId": "mhlw-overtime-limit-guide.table-assist",
+  "expectedFields": [],
+  "expectedValues": [],
+  "expectedTableCells": [
+    {
+      "rowLabel": "小売業",
+      "expectedValue": "5,000万円以下",
+      "tier": "core"
+    },
+    {
+      "rowLabel": "建設事業",
+      "expectedValue": "災害の復旧・復興",
+      "tier": "core"
+    },
+    {
+      "rowLabel": "受注の集中",
+      "expectedValue": "３７０時間"
+    },
+    {
+      "rowLabel": "突発的な仕様変更",
+      "expectedValue": "６７０時間"
+    },
+    {
+      "rowLabel": "時間外労働",
+      "expectedValue": "80"
+    }
+  ],
+  "notes": "Compare-only table-assist expected set derived from visible tables in the public MHLW overtime limit guide PDF. This sidecar is loaded only by the official-doc-pdf compare harness via the *.table-assist.expected.json pattern and is not a stable P1-D fixture."
+}

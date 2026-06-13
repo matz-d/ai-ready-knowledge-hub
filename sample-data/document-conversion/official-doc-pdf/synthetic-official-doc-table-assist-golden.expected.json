@@ -1,0 +1,25 @@
+{
+  "documentId": "synthetic-official-doc-table-assist-golden",
+  "expectedFields": [],
+  "expectedValues": [],
+  "expectedTableCells": [
+    {
+      "tableId": "p1-t1",
+      "rowLabel": "Monthly overtime cap",
+      "expectedValue": "45 hours",
+      "tier": "core"
+    },
+    {
+      "tableId": "p1-t1",
+      "rowLabel": "Annual overtime cap",
+      "expectedValue": "360 hours",
+      "tier": "core"
+    },
+    {
+      "tableId": "p1-t1",
+      "rowLabel": "Remote work allowance",
+      "expectedValue": "12000 yen"
+    }
+  ],
+  "notes": "Compare-only, PII-free synthetic fixture for Gemini table-assist evaluation. It is intentionally not listed in scripts/runP1dQualityGate.ts STABLE_FIXTURES because stable P1-D uses committed sidecars only and must not depend on live Gemini."
+}

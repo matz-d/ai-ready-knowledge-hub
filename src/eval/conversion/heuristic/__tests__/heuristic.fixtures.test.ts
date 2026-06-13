@@ -3,11 +3,16 @@
  * DocumentIR fixtures committed under
  * `sample-data/document-conversion/official-doc-pdf/`.
  *
- * The fixtures are intentionally small but mirror real-world shapes:
- *  - `mhlw-overtime-limit-guide` / `mhlw-r07-model-work-rules` / `mhlw-labor-conditions-notice-general`
- *    cover the "public document, full page coverage, has tables" case.
- *  - `synthetic-employment-context-with-pii` covers partial coverage
- *    (one page with whitespace-only blocks) and the `image_text` block kind.
+ * The MHLW fixtures are regenerated from the mainline pdf-parse extractor
+ * (`pnpm fixtures:official-doc-pdf:sidecars`), so these assertions describe what
+ * pdf-parse actually produces on the real public PDFs — not hand-authored stubs:
+ *  - `mhlw-overtime-limit-guide` / `mhlw-r07-model-work-rules` keep full page
+ *    coverage and DO yield pdf-parse table grids (116 / 78 table candidates).
+ *  - `mhlw-labor-conditions-notice-general` keeps full page coverage but yields
+ *    NO pdf-parse table grids (its 2-column form table is not recovered) — the
+ *    documented born-digital table gap that P1-E Gemini table-assist targets.
+ *  - `synthetic-employment-context-with-pii` is a hand-authored fixture covering
+ *    partial coverage (a whitespace-only page) and the `image_text` block kind.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -46,31 +51,33 @@ const FIXTURES: Record<FixtureBasename, DocumentIr> = FIXTURE_BASENAMES.reduce(
 );
 
 describe('evalCoverage (heuristic, fixture-driven)', () => {
-  it('mhlw-overtime-limit-guide: full coverage and 3 table candidates', () => {
+  it('mhlw-overtime-limit-guide: full coverage and 116 table candidates', () => {
     const { coverage } = evalCoverage({
       documentIr: FIXTURES['mhlw-overtime-limit-guide'],
       chunks: [],
     });
     expect(coverage.pageCoverage).toBe(1);
-    expect(coverage.tableCandidates).toBe(3);
+    expect(coverage.tableCandidates).toBe(116);
   });
 
-  it('mhlw-r07-model-work-rules: full coverage and 2 table candidates', () => {
+  it('mhlw-r07-model-work-rules: full coverage and 78 table candidates', () => {
     const { coverage } = evalCoverage({
       documentIr: FIXTURES['mhlw-r07-model-work-rules'],
       chunks: [],
     });
     expect(coverage.pageCoverage).toBe(1);
-    expect(coverage.tableCandidates).toBe(2);
+    expect(coverage.tableCandidates).toBe(78);
   });
 
-  it('mhlw-labor-conditions-notice-general: full coverage and 4 table candidates', () => {
+  it('mhlw-labor-conditions-notice-general: full coverage but no pdf-parse table candidates', () => {
     const { coverage } = evalCoverage({
       documentIr: FIXTURES['mhlw-labor-conditions-notice-general'],
       chunks: [],
     });
     expect(coverage.pageCoverage).toBe(1);
-    expect(coverage.tableCandidates).toBe(4);
+    // pdf-parse does not recover the 2-column form table; the born-digital table
+    // gap that P1-E Gemini table-assist targets.
+    expect(coverage.tableCandidates).toBe(0);
   });
 
   it('synthetic-employment-context-with-pii: partial coverage flags whitespace-only page', () => {
@@ -140,7 +147,8 @@ describe('evalLocatorQuality (heuristic, fixture-driven)', () => {
   it.each([
     ['mhlw-overtime-limit-guide', true, true],
     ['mhlw-r07-model-work-rules', true, true],
-    ['mhlw-labor-conditions-notice-general', true, true],
+    // labor notice: pdf-parse emits page locators but no table grids.
+    ['mhlw-labor-conditions-notice-general', true, false],
     ['synthetic-employment-context-with-pii', true, false],
   ] as const)(
     '%s reports hasPageLocators=%s and hasTableLocators=%s',
