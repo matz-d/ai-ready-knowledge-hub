@@ -12,6 +12,13 @@ export type WorkspaceImportAdapter = {
   fileExtension: '.xlsx' | '.md';
   contentType: string;
   toNormalizedContent: (bytes: Buffer) => string | Promise<string>;
+  toCuratorInput?: (args: {
+    fileName: string;
+    bytes: Buffer;
+    normalizedContent: string;
+  }) =>
+    | { content: string; inputMode: 'full_text' | 'table_manifest' }
+    | Promise<{ content: string; inputMode: 'full_text' | 'table_manifest' }>;
 };
 
 export type WorkspaceSnapshotMetadata = {

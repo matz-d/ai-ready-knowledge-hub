@@ -345,6 +345,45 @@ describe('orchestrateUploadProcessing', () => {
     );
   });
 
+  it('forces table manifest direct classifications through the Masker', async () => {
+    randomUUIDMock.mockReturnValue('doc-table-manifest');
+    curatorFlowMock.mockResolvedValue(curatorDirectResult);
+    maskerPipelineFlowMock.mockResolvedValue(aiSafePipelineResult);
+
+    const result = await orchestrateUploadProcessing({
+      ...baseInput,
+      content: 'FULL CSV SOURCE',
+      curatorContent: 'TABLE MANIFEST',
+      curatorInputMode: 'table_manifest',
+    });
+
+    expect(result.kind).toBe('ai_safe');
+    expect(curatorFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'TABLE MANIFEST',
+      })
+    );
+    expect(maskerPipelineFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'FULL CSV SOURCE',
+        curatorContext: expect.objectContaining({
+          sensitivity: 'Confidential',
+          aiUsePolicy: 'requires_masking',
+        }),
+      })
+    );
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'masking',
+        sensitivity: 'Confidential',
+        aiUsePolicy: 'requires_masking',
+        curator: expect.objectContaining({
+          rationale: expect.stringContaining('sampled table manifest'),
+        }),
+      })
+    );
+  });
+
   it('returns ai_safe and writes masked object when masker decides ai_safe_ready', async () => {
     randomUUIDMock.mockReturnValue('doc-2');
     curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);

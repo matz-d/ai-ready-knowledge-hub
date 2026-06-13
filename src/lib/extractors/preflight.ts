@@ -45,6 +45,7 @@ const LARGE_PDF_CHAR_THRESHOLD = 150_000;
 const ROW_GROUP_SIZE = 500;
 const PAGE_GROUP_SIZE = 25;
 const PDF_GROUP_PREVIEW_CHARS = 600;
+const TABLE_MANIFEST_PREVIEW_ROWS = 5;
 
 function estimateChunkCount(estimatedChars: number): number {
   if (estimatedChars <= 0) return 0;
@@ -221,6 +222,68 @@ export function renderPdfPageGroupManifest(input: {
   }
 
   return lines.join('\n');
+}
+
+export type TableManifestSheet = {
+  sheetName: string;
+  rowCount: number;
+  columnCount: number;
+  range: string;
+  previewMarkdown: string;
+};
+
+export function renderTableManifest(input: {
+  fileName: string;
+  preflightReport: DocumentPreflightReport;
+  sheets: readonly TableManifestSheet[];
+  fallbackText: string;
+}): string {
+  if (input.preflightReport.recommendedSplitUnit === 'none') {
+    return input.fallbackText;
+  }
+
+  const lines = [
+    `# ${input.fileName}`,
+    '',
+    'Table preflight manifest for document classification.',
+    'This manifest is sampled; use it for document type and risk classification, not for direct AI use decisions.',
+    `File type: ${input.preflightReport.fileType}`,
+    `Sheets: ${input.preflightReport.sheetCount ?? input.sheets.length}`,
+    `Rows: ${input.preflightReport.rowCount ?? 0}`,
+    `Columns: ${input.preflightReport.columnCount ?? 0}`,
+    `Estimated chars: ${input.preflightReport.estimatedChars}`,
+    `Chunk estimate: ${input.preflightReport.chunkEstimate}`,
+    `Recommended split unit: ${input.preflightReport.recommendedSplitUnit}`,
+    `Reasons: ${input.preflightReport.reasons.join(', ')}`,
+    '',
+    '## Sheets',
+  ];
+  if (input.preflightReport.suggestedRowGroupSize !== undefined) {
+    lines.splice(
+      12,
+      0,
+      `Suggested row group size: ${input.preflightReport.suggestedRowGroupSize ?? ROW_GROUP_SIZE}`
+    );
+  }
+
+  for (const sheet of input.sheets) {
+    lines.push(
+      '',
+      `### ${sheet.sheetName}`,
+      `Range: ${sheet.range}`,
+      `Rows: ${sheet.rowCount}`,
+      `Columns: ${sheet.columnCount}`,
+      sheet.previewMarkdown.length > 0
+        ? sheet.previewMarkdown
+        : '(no table preview)'
+    );
+  }
+
+  return lines.join('\n');
+}
+
+export function tableManifestPreviewRowLimit(): number {
+  return TABLE_MANIFEST_PREVIEW_ROWS;
 }
 
 export function formatPreflightWarning(

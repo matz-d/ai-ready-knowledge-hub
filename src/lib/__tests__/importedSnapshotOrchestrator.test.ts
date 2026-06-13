@@ -5,6 +5,7 @@ const {
   parseGoogleSheetsInputMock,
   fetchSheetsSnapshotMock,
   xlsxBufferToNormalizedContentMock,
+  xlsxToCuratorInputMock,
   parseGoogleDocsInputMock,
   fetchDocsSnapshotMock,
   markdownBufferToNormalizedContentMock,
@@ -32,6 +33,7 @@ const {
   parseGoogleSheetsInputMock: vi.fn(),
   fetchSheetsSnapshotMock: vi.fn(),
   xlsxBufferToNormalizedContentMock: vi.fn(),
+  xlsxToCuratorInputMock: vi.fn(),
   parseGoogleDocsInputMock: vi.fn(),
   fetchDocsSnapshotMock: vi.fn(),
   markdownBufferToNormalizedContentMock: vi.fn(),
@@ -76,6 +78,7 @@ vi.mock('../googleSheetsSnapshotImporter', () => ({
     contentType:
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     toNormalizedContent: xlsxBufferToNormalizedContentMock,
+    toCuratorInput: xlsxToCuratorInputMock,
   },
   parseGoogleSheetsInput: parseGoogleSheetsInputMock,
   fetchSheetsSnapshot: fetchSheetsSnapshotMock,
@@ -327,6 +330,10 @@ beforeEach(() => {
   parseGoogleSheetsInputMock.mockReturnValue({ fileId: 'sheet-file-id' });
   fetchSheetsSnapshotMock.mockResolvedValue(snapshot);
   xlsxBufferToNormalizedContentMock.mockReturnValue('## Sheet1\n\n| A |');
+  xlsxToCuratorInputMock.mockReturnValue({
+    content: '## Sheet1\n\n| A |',
+    inputMode: 'full_text',
+  });
   parseGoogleDocsInputMock.mockReturnValue({ fileId: 'docs-file-id' });
   fetchDocsSnapshotMock.mockResolvedValue(docsSnapshot);
   markdownBufferToNormalizedContentMock.mockReturnValue('# Ops Guide\n\n- Step 1');
@@ -390,6 +397,38 @@ describe('orchestrateImportedSnapshotProcessing', () => {
       expect.objectContaining({ status: 'curated', aiUsePolicy: 'direct' })
     );
     expect(replaceChunksForDocMock).toHaveBeenCalledWith('doc-1');
+  });
+
+  it('uses a Sheets table manifest only for Curator while preserving full content for Masker', async () => {
+    randomUUIDMock.mockReturnValue('doc-sheet-manifest');
+    xlsxBufferToNormalizedContentMock.mockReturnValue('FULL SHEET MARKDOWN');
+    xlsxToCuratorInputMock.mockReturnValue({
+      content: 'TABLE MANIFEST',
+      inputMode: 'table_manifest',
+    });
+    curatorFlowMock.mockResolvedValue(curatorRequiresMaskingResult);
+    maskerPipelineFlowMock.mockResolvedValue(aiSafePipelineResult);
+
+    const result = await orchestrateImportedSnapshotProcessing({
+      urlOrFileId: 'sheet-file-id',
+    });
+
+    expect(result.kind).toBe('ai_safe');
+    expect(xlsxToCuratorInputMock).toHaveBeenCalledWith({
+      fileName: '料金表.xlsx',
+      bytes: xlsxBuffer,
+      normalizedContent: 'FULL SHEET MARKDOWN',
+    });
+    expect(curatorFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'TABLE MANIFEST',
+      })
+    );
+    expect(maskerPipelineFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'FULL SHEET MARKDOWN',
+      })
+    );
   });
 
   it('uses sheet fallback for Drive name that is only an xlsx suffix', async () => {

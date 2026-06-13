@@ -178,9 +178,6 @@ export async function orchestrateImportedSnapshotProcessing(
     throw new ImportTooLargeError(exportBuffer.length);
   }
 
-  // [B-pre] toNormalizedContent — Curator / Masker 入力向け正規化
-  const content = await deps.adapter.toNormalizedContent(exportBuffer);
-
   const docId = existing?.docRef.id ?? randomUUID();
   const baseFileName = deps.normalizeFileBaseName(metadata.name);
   const fileName = `${baseFileName}${deps.adapter.fileExtension}`;
@@ -190,6 +187,17 @@ export async function orchestrateImportedSnapshotProcessing(
   const contentSha256 = hashContentSha256(exportBuffer);
   const contentType = deps.adapter.contentType;
   const previousStoragePath = existing?.firestoreDocument.storagePath;
+
+  // [B-pre] toNormalizedContent — Masker / source-hash input. Curator may get a
+  // bounded manifest below when the exported table is too large to classify whole.
+  const content = await deps.adapter.toNormalizedContent(exportBuffer);
+  const curatorInput = deps.adapter.toCuratorInput
+    ? await deps.adapter.toCuratorInput({
+        fileName,
+        bytes: exportBuffer,
+        normalizedContent: content,
+      })
+    : undefined;
 
   const db = getFirestoreClient();
   const docRef = existing?.docRef ?? db.collection(DOCUMENTS_COLLECTION).doc(docId);
@@ -280,6 +288,8 @@ export async function orchestrateImportedSnapshotProcessing(
       docId,
       displayName: input.displayName?.trim() || fileName,
       content,
+      curatorContent: curatorInput?.content,
+      curatorInputMode: curatorInput?.inputMode,
       contentSha256,
       sourceKind: 'google_workspace',
       externalSource,

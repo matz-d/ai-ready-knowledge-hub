@@ -1,4 +1,7 @@
-import { xlsxToNormalizedMarkdown } from './extractors/xlsxExtractor';
+import {
+  buildXlsxCuratorInput,
+  xlsxToNormalizedMarkdown,
+} from './extractors/xlsxExtractor';
 import { getGoogleDriveClient } from './googleWorkspaceClient';
 import type { WorkspaceImportAdapter } from './workspaceImport/types';
 
@@ -14,6 +17,13 @@ export const googleSheetsWorkspaceImportAdapter: WorkspaceImportAdapter = {
   fileExtension: '.xlsx',
   contentType: XLSX_EXPORT_MIME_TYPE,
   toNormalizedContent: (bytes) => xlsxBufferToNormalizedContent(bytes),
+  toCuratorInput: async ({ fileName, bytes, normalizedContent }) => {
+    const input = await buildXlsxCuratorInput({ fileName, content: bytes });
+    return {
+      content: input.inputMode === 'full_text' ? normalizedContent : input.content,
+      inputMode: input.inputMode,
+    };
+  },
 };
 
 /** Thrown when Drive metadata says the file is not a Google Sheet (maps to HTTP 415). */
