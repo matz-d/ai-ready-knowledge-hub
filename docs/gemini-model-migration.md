@@ -89,6 +89,18 @@ export SCAN_PDF_GEMINI_MODEL=gemini-3.1-flash-lite
 pnpm poc:conversion:scan-pdf sample-data/document-conversion/scan-pdf/synthetic-employment-form-scan.pdf
 ```
 
+Before changing the scan-pdf OCR model or prompt, run the live drift workflow:
+
+```bash
+GOOGLE_CLOUD_LOCATION=global \
+SCAN_PDF_GEMINI_MODEL=gemini-3.1-flash-lite \
+pnpm eval:scan-pdf:ocr-live-drift \
+  --out tmp/scan-pdf-ocr-live-drift-report.json
+```
+
+See [scan-pdf OCR live drift workflow](scan-pdf-ocr-live-drift-workflow.md) for
+the prompt/model change procedure and acceptance signals.
+
 For the higher-quality OCR comparison:
 
 ```bash
@@ -122,7 +134,11 @@ Before shipping the hackathon default, verify:
 3. Strategist Context Package JSON shape remains stable.
 4. scan-pdf OCR returns non-empty pages and preserves `piiFindings`.
 5. `document.convert.inferenceDestination.model` records the trial model.
-6. Any fixture or docs that intentionally pin `gemini-2.5-flash` are updated or
+6. `pnpm eval:scan-pdf:ocr-live-drift --ci` passes, or any major drift is
+   explicitly accepted with a report attached to the PR / phase note. During the
+   current scan-pdf sidecar floor, compare candidate reports against the accepted
+   baseline and run the focused unmaskable PII probe with `--ci`.
+7. Any fixture or docs that intentionally pin `gemini-2.5-flash` are updated or
    left with an explicit historical date.
 
 If `gemini-3.5-flash` passes on `asia-northeast1` in a later rerun, the project

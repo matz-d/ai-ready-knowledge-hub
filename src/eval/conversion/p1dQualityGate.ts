@@ -269,6 +269,12 @@ function parseExpectedPdfTableId(
   };
 }
 
+function parseExpectedOcrBlockId(tableId: string): { page: number } | null {
+  const match = /^p(\d+)-ocr\d+$/u.exec(tableId);
+  if (!match) return null;
+  return { page: Number(match[1]) };
+}
+
 function tableIdMatchesChunk(
   tableId: string | undefined,
   chunk: MatchableChunk
@@ -299,6 +305,14 @@ function tableIdMatchesChunk(
     page === expectedPdfTable.page &&
     paragraphId?.startsWith(`table-${expectedPdfTable.tableIndex}-`)
   ) {
+    return true;
+  }
+
+  // scan-pdf Gemini OCR block ids (`pN-ocrM`) are not stable enough for
+  // long-lived golden expectations. Treat them as a page-scoped hint while
+  // still requiring the row/column/value text to match in the table chunk.
+  const expectedOcrBlock = parseExpectedOcrBlockId(tableId);
+  if (expectedOcrBlock && page === expectedOcrBlock.page) {
     return true;
   }
 
