@@ -51,6 +51,12 @@ const FIXTURES: Record<FixtureBasename, DocumentIr> = FIXTURE_BASENAMES.reduce(
 );
 
 describe('evalCoverage (heuristic, fixture-driven)', () => {
+  // NOTE: the table-candidate counts below (116 / 78 / 0) are the pinned
+  // pdf-parse *extractor baseline*, not "true" document table counts. If a
+  // pdf-parse upgrade or a DocumentIR-adapter change shifts them, that is a
+  // signal to regenerate the baseline
+  // (`pnpm fixtures:official-doc-pdf:sidecars`) and update these numbers — not a
+  // regression to debug.
   it('mhlw-overtime-limit-guide: full coverage and 116 table candidates', () => {
     const { coverage } = evalCoverage({
       documentIr: FIXTURES['mhlw-overtime-limit-guide'],

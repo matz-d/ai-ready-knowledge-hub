@@ -434,3 +434,50 @@ blocks, and auto-splits oversized chunks, so large-doc regeneration is safe.
 Verification: `pnpm typecheck`, full `pnpm test` (897 green), `pnpm eval:p1d:quality -- --ci` exit 0.
 `heuristic.fixtures.test.ts` was updated to the measured reality (overtime
 `tableCandidates 3→116`, model `2→78`, labor `4→0` + `hasTableLocators false`).
+
+Baseline-fixed-values caveat: the pinned counts (`116 / 78 / 0`) are the
+**pdf-parse extractor baseline**, not "true" document table counts. If a
+pdf-parse upgrade or a DocumentIR-adapter change moves them, treat it as
+"baseline regeneration needed" (`pnpm fixtures:official-doc-pdf:sidecars`), not a
+broken test. The same applies to the regenerated `*.document-ir.json` sidecars.
+
+### 2026-06-14: P1-E Step 1 design (locked) — production grounded Gemini table-assist
+
+Goal: convert the PoC table-assist win (public table-assist `3/15 → 14/15`) into
+bounded production behavior on the born-digital `official-doc-pdf` path, without
+the 270s whole-document latency.
+
+Locked decisions:
+
+1. **Gating = table-suspect ∧ under-served + per-document page budget `N=6`.**
+   Per page, score "table-suspect" from row-like raw-text lines and tier the page
+   by how well pdf-parse already covered it. Priority order:
+   `no_pdf_table` (0 pdf-parse table rows + suspect) > `sparse_pdf_table`
+   (few rows + suspect) > `uncaptured_cells` (many rows but suspect content). Take
+   the top `N=6`. Started at `6` (not 8) specifically to cap the overtime case.
+   Rationale: the heuristic only decides *which ≤6 pages* spend a Gemini call;
+   correctness is enforced by grounding and cost by the budget.
+2. **Cell-level grounding (mandatory).** Keep only cells whose normalized text
+   appears in the same page's pdf-parse text; rebuild the row from surviving
+   cells; drop the row if `< 2` cells survive (and require ≥1 substantive cell).
+   This makes table-assist **content-neutral**: every emitted character was
+   already in pdf-parse output, so it adds no new PII surface and flows through
+   the existing Masker unchanged — no new safety gate needed.
+3. **Page splitting via `pdf-lib` (pure JS), not Ghostscript.** The Cloud Run
+   image (`node:22-bookworm-slim`) has no `gs`; avoid adding a native binary.
+   New dependency must respect `minimumReleaseAge: 4320` + lockfile review.
+4. **Activation = new Firestore feature flag `pdf-table-assist` (off by default)
+   AND async-worker-only execution context (double gate)**, with fail-soft.
+   Implementation: thread an explicit `tableAssistMode: 'disabled' | 'async'`
+   into the dispatcher so a flag alone can never run it on the synchronous
+   upload path. Any failure / timeout / budget-exceeded returns the unchanged
+   pdf-parse `documentIr` and records a `tableAssist` audit summary.
+
+Module layout (`src` cannot import `poc`, so reimplemented here):
+`src/lib/extractors/officialDocPdfTableAssist/` as a small, pure-function-heavy
+pipeline: `selectCandidatePages` (pure) → `splitPages` (pdf-lib I/O) →
+`extractTables` (Gemini I/O, mirrors `scanPdfGeminiOcr.ts`) → `groundCells`
+(pure) → `mergeDocumentIr` (pure). First PR scope: the pure core + N=6 +
+fail-soft + audit summary; quality tuning (esp. tier-3 "uncaptured" precision)
+is a follow-up. The synthetic table-assist golden remains the regression check;
+the stable P1-D gate stays pdf-parse-baseline (it documents the gap, by design).
