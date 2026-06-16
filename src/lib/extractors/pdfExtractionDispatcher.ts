@@ -13,16 +13,29 @@ import {
 } from './preflight';
 import { extractSlidePdfFromBuffer } from './slidePdfDocumentExtractor';
 import { extractScanPdfFromBuffer } from './scanPdfDocumentExtractor';
+import { augmentOfficialDocWithTableAssist } from './officialDocPdfTableAssist';
 
 export type PdfExtractionResult = {
   textContent: string;
   documentIr: DocumentIr;
+  /** Per-page raw texts for table-assist grounding (WU-4). Only subtype-1. */
+  pageTexts?: { pageNumber: number; text: string }[];
   preflightReport?: DocumentPreflightReport;
   pageGroupPlan?: PdfPageGroupSplitPlan;
   tableExtraction?: ExtractPdfFromBufferResult['tableExtraction'];
   /** Audit metadata threaded into `document.convert` (Phase 3-H-3 §4.2). */
   conversion: PdfConversionAudit;
 };
+
+/**
+ * Converts a pageTexts array into a ReadonlyMap for O(1) page lookup.
+ * Used by WU-4 to supply pageRawTexts to augmentOfficialDocWithTableAssist.
+ */
+export function pageTextsToMap(
+  pageTexts: { pageNumber: number; text: string }[]
+): ReadonlyMap<number, string> {
+  return new Map(pageTexts.map((p) => [p.pageNumber, p.text]));
+}
 
 type PdfSubtypePreFlightConfig = {
   flagId: FeatureFlagId;
@@ -88,6 +101,7 @@ export const PDF_SUBTYPE_PRE_FLIGHT_CONFIGS: readonly PdfSubtypePreFlightConfig[
       return {
         textContent: result.textContent,
         documentIr: result.documentIr,
+        pageTexts: result.pageTexts,
         preflightReport: result.preflightReport,
         pageGroupPlan: result.pageGroupPlan,
         tableExtraction: result.tableExtraction,
@@ -152,6 +166,20 @@ export async function dispatchPdfExtraction(args: {
   fileName: string;
   isFlagEnabled: PdfFlagEnabledReader;
   configs?: readonly PdfSubtypePreFlightConfig[];
+  /**
+   * Execution-context gate for the grounded Gemini table-assist second pass
+   * (P1-E Step 1, Decision 4). Defaults to 'disabled'. Only 'async' — passed
+   * exclusively from the async ingest worker — combined with the tenant
+   * `pdf-table-assist` flag lets the second pass run. The synchronous upload
+   * route MUST pass 'disabled' (or omit it), so a flag alone can never fire
+   * the second pass on the sync path.
+   */
+  tableAssistMode?: 'disabled' | 'async';
+  /**
+   * Injection seam for tests; defaults to the real, internally fail-soft
+   * augmenter. Production never sets this.
+   */
+  augmentTableAssist?: typeof augmentOfficialDocWithTableAssist;
 }): Promise<PdfExtractionDispatchOutcome> {
   const configs = args.configs ?? PDF_SUBTYPE_PRE_FLIGHT_CONFIGS;
   const enabledPdfConfigs: PdfSubtypePreFlightConfig[] = [];
@@ -178,13 +206,46 @@ export async function dispatchPdfExtraction(args: {
 
   const selectedPdfConfig = enabledPdfConfigs[0]!;
 
+  let result: PdfExtractionResult;
   try {
-    const result = await selectedPdfConfig.extract({
+    result = await selectedPdfConfig.extract({
       buffer: args.buffer,
       fileName: args.fileName,
     });
-    return { ok: true, result };
   } catch (cause) {
     return { ok: false, failure: { code: 'extraction_failed', cause } };
   }
+
+  // P1-E Step 1 — grounded Gemini table-assist second pass (WU-4).
+  //
+  // Double-gated (Decision 4): runs only for official-doc-pdf (subtype-1),
+  // only in the async execution context (`tableAssistMode === 'async'`), and
+  // only when the tenant `pdf-table-assist` flag is on. The flag read reuses
+  // the same tenant-bound reader (no new reader is created). subtype-2/3 never
+  // reach this branch even when `tableAssistMode === 'async'`, and the
+  // synchronous upload path passes 'disabled', so a flag alone cannot fire it.
+  //
+  // INVARIANT — the merge must happen HERE, before the Masker. Grounding
+  // matches each synthesized cell against the raw (pre-mask) pdf-parse page
+  // text, so any post-Masker enrichment would reintroduce masked PII into
+  // chunks. The augmenter is internally fail-soft (it returns the unchanged
+  // pdf-parse IR plus a summary on any failure / per-page timeout), so we let
+  // its result flow through rather than swallowing it into `extraction_failed`.
+  if (
+    selectedPdfConfig.flagId === 'pdf-conversion-subtype-1' &&
+    (args.tableAssistMode ?? 'disabled') === 'async' &&
+    (await args.isFlagEnabled('pdf-table-assist'))
+  ) {
+    const augment = args.augmentTableAssist ?? augmentOfficialDocWithTableAssist;
+    const outcome = await augment({
+      mode: 'async',
+      buffer: args.buffer,
+      documentIr: result.documentIr,
+      pageRawTexts: pageTextsToMap(result.pageTexts ?? []),
+    });
+    result.documentIr = outcome.documentIr;
+    result.conversion.tableAssist = outcome.summary;
+  }
+
+  return { ok: true, result };
 }

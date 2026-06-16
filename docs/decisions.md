@@ -1906,8 +1906,33 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 ---
 
+## D-P1-E-TA-1: P1-E Step 1 table-assist mainline wiring — D strategy（2026-06-16、確定）
+
+**日付**: 2026-06-16
+**状態**: 確定。実装・検証の詳細は [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6「2026-06-16: P1-E Step 1 mainline wiring (D strategy — locked)」を正本とする。
+
+**背景:** PoC の grounded Gemini table-assist（`pdf-parse` primary + table-only second pass）は compare harness で回帰確認済み。本番投入には locked decision 4（flag + async-worker-only の二重ゲート）があるが、async document ingest worker のフル構築は context-package job 基盤相当になり提出前スコープと競合する。**D 戦略**として、本線 dispatcher への配線だけを先に land し、async トリガは後続 epic とする。
+
+**決定:**
+
+1. **D 戦略スコープ:** `pdfExtractionDispatcher` へ `tableAssistMode` と `augmentOfficialDocWithTableAssist` を配線する。同期 upload route は `tableAssistMode: 'disabled'` を明示し、production で table-assist を発火させない。async ingest worker / Cloud Tasks enqueue は本 PR 対象外。
+2. **二重ゲート:** tenant-scoped flag `pdf-table-assist`（default off）**かつ** `tableAssistMode: 'async'` の実行コンテキストでのみ augment を呼ぶ。flag のみでは同期経路で走らせない。
+3. **Merge は Masker 前段 — post-terminal enrichment 禁止.** augment は `dispatchPdfExtraction` 内でのみ `documentIr` をマージし、Masker より前に完了する。terminal document や masked chunks への後付け enrichment は禁止。根拠テスト: `src/lib/extractors/__tests__/pdfTableAssistMaskingRegression.test.ts`（WU-6a）。
+4. **`raw/` 14日 retention 依存:** grounding は ingest 時点の pre-mask pdf-parse page text に対して行う。`D-PROD-3` の 14日 lifecycle 後に `raw/` を読み直す遅延再処理は設計パターンとして禁止。
+5. **Fail-soft:** augment 失敗・timeout・budget 超過時は pdf-parse IR を維持し `tableAssist` audit summary を記録。
+6. **Curator / hash 不変:** Curator は引き続き `textContent` ベース。table-assist は `documentIr` の chunk 化・マスキング入力にのみ影響し、分類入力と content hash は変えない。
+
+**代替案:**
+- async worker を本 PR で同時構築する → スコープ膨張・P2 競合のため不採用（epic B へ送る）。
+- 同期 upload でも flag ON なら table-assist を走らせる → レイテンシ・Gemini コスト・マスキング境界リスクのため不採用。
+
+**撤退条件:** async worker epic 着手時に `tableAssistMode: 'async'` を worker から渡す。post-terminal merge や同期経路での Gemini 発火が必要になった場合は新 decision を起こし、WU-6a 相当の masking 回帰を先に追加する。
+
+---
+
 ## 関連ドキュメント
 
+- [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) — P1-E direction（table-assist D 戦略・不変条件の正本）
 - [docs/production-readiness.md](production-readiness.md) — ゲート一覧・現在地・DoD の正本（`D-PROD-*` の状態追跡）
 - [docs/phase-4-ux-direction.md](phase-4-ux-direction.md) — Phase 4-UX 作業分配・実装者向け指示文の正本（`D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2`）
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）

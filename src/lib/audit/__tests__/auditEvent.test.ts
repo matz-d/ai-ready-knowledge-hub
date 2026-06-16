@@ -122,6 +122,53 @@ describe('recordAuditEvent', () => {
     );
   });
 
+  it('appends document.convert with tableAssist summary on official-doc-pdf', async () => {
+    await recordAuditEvent({
+      tenantId: 'customer.example',
+      actor: {
+        userId: 'alice@customer.example',
+        ipAddress: '203.0.113.10',
+        userAgent: 'vitest',
+      },
+      action: 'document.convert',
+      target: {
+        docId: 'doc-official-table-assist',
+        fileName: 'tables.pdf',
+        sourceKind: 'upload',
+        sensitivity: 'Internal',
+      },
+      result: 'success',
+      conversion: {
+        converterId: 'pdf-parse',
+        sourceSubtype: 'official-doc-pdf',
+        evalStatus: 'pass',
+        tableAssist: {
+          status: 'merged',
+          candidatePageCount: 2,
+          pagesProcessed: 2,
+          pagesFailed: 0,
+          rawRowCount: 5,
+          rowsMerged: 4,
+          rowsRejected: 1,
+          elapsedMs: 1200,
+        },
+      },
+    });
+
+    const [written] = createMock.mock.calls[0] as [Record<string, unknown>];
+    expect((written.conversion as { tableAssist: unknown }).tableAssist).toEqual({
+      status: 'merged',
+      candidatePageCount: 2,
+      pagesProcessed: 2,
+      pagesFailed: 0,
+      rawRowCount: 5,
+      rowsMerged: 4,
+      rowsRejected: 1,
+      elapsedMs: 1200,
+    });
+    expect(written.inferenceDestination).toBeUndefined();
+  });
+
   it('accepts warn and fail evalStatus values on document.convert', async () => {
     await recordAuditEvent({
       tenantId: 'customer.example',

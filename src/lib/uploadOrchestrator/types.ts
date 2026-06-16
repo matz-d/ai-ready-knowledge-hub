@@ -1,6 +1,7 @@
 import type { DocumentReference } from '@google-cloud/firestore';
 import type { CuratorOutputResult } from '../../agents/curator/schema';
 import type { DocumentIr, DocumentSourceSubtype } from '../../eval/conversion/documentIr';
+import type { TableAssistSummary } from '../extractors/officialDocPdfTableAssist';
 import type {
   AuditConverterId,
   AuditInferenceDestination,
@@ -26,6 +27,8 @@ export type PdfConversionAudit = {
    * Required on scan-pdf `gemini-vertex-ocr` success paths (set at route boundary).
    */
   unmaskablePiiFindingsCount?: number;
+  /** Grounded Gemini table-assist summary (official-doc-pdf, metadata only). */
+  tableAssist?: TableAssistSummary;
 };
 export type CuratorInputMode =
   | 'full_text'

@@ -124,6 +124,8 @@ export type ExtractPdfFromBufferResult = {
    * Used as `extractorInput` for KnowledgeChunk source-hash computation.
    */
   textContent: string;
+  /** Per-page raw texts — supply source for table-assist grounding (WU-4). */
+  pageTexts: { pageNumber: number; text: string }[];
   preflightReport: DocumentPreflightReport;
   pageGroupPlan?: PdfPageGroupSplitPlan;
   tableExtraction: { ok: true } | { ok: false; error: string };
@@ -199,8 +201,6 @@ export async function extractPdfFromBuffer(
       }
     }
 
-    const pageTexts: string[] = [];
-
     const irPages = (
       textResult.pages as Array<{ num: number; text: string }>
     ).map((page) => {
@@ -253,11 +253,13 @@ export async function extractPdfFromBuffer(
         blocks.push(block);
       }
 
-      pageTexts.push(page.text);
       return { pageNumber: page.num, blocks };
     });
 
-    const textContent = pageTexts.join('\n');
+    const pageTexts: { pageNumber: number; text: string }[] = (
+      textResult.pages as Array<{ num: number; text: string }>
+    ).map((p) => ({ pageNumber: p.num, text: p.text }));
+    const textContent = pageTexts.map((p) => p.text).join('\n');
     const preflightReport = buildPdfPreflightReport({
       pageCount: textResult.pages.length,
       estimatedChars: textContent.length,
@@ -281,6 +283,7 @@ export async function extractPdfFromBuffer(
     return {
       documentIr,
       textContent,
+      pageTexts,
       preflightReport,
       ...(pageGroupPlan !== undefined ? { pageGroupPlan } : {}),
       tableExtraction,

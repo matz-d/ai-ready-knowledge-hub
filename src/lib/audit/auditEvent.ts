@@ -5,6 +5,7 @@ import { FieldValue, getFirestoreClient } from '../firestore';
 import { resolveTenantIdFromAuth } from '../auth/resolveTenantIdFromAuth';
 import type { FirestoreSourceKind } from '../firestoreSchema';
 import type { ProcessingProfile } from '../processingProfile';
+import type { TableAssistSummary } from '../extractors/officialDocPdfTableAssist';
 
 export const AUDIT_EVENTS_COLLECTION = 'auditEvents';
 
@@ -63,6 +64,8 @@ export type AuditEventConversion = {
   unmaskablePiiFindings?: {
     count: number;
   };
+  /** Grounded Gemini table-assist summary (official-doc-pdf, metadata only). */
+  tableAssist?: TableAssistSummary;
 };
 
 export type AuditEventResult = 'success' | 'failure' | 'partial';
