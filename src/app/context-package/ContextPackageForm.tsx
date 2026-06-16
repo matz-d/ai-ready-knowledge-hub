@@ -174,10 +174,12 @@ export function ContextPackageForm() {
   );
 
   const activeJobRef = useRef<string | null>(null);
+  const submitInFlightRef = useRef(false);
 
   useEffect(() => {
     return () => {
       activeJobRef.current = null;
+      submitInFlightRef.current = false;
     };
   }, []);
 
@@ -377,8 +379,10 @@ export function ContextPackageForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitInFlightRef.current) return;
     if (!generateEnabled) return;
 
+    submitInFlightRef.current = true;
     activeJobRef.current = null;
     setErrorMessage(null);
     setDocIdsErrorDetails(null);
@@ -472,6 +476,8 @@ export function ContextPackageForm() {
     } catch {
       setErrorMessage('ネットワークエラーが発生しました。');
       setUiState('error');
+    } finally {
+      submitInFlightRef.current = false;
     }
   };
 
