@@ -17,7 +17,7 @@ import {
 export const MIN_ROW_LIKE_LINES = 2;
 
 /** Upper bound on pdf-parse table rows for the `sparse_pdf_table` tier. */
-export const SPARSE_PDF_TABLE_MAX = 3;
+export const SPARSE_PDF_TABLE_MAX = 4;
 
 const TIER_PRIORITY: Record<TableAssistCandidateTier, number> = {
   no_pdf_table: 0,

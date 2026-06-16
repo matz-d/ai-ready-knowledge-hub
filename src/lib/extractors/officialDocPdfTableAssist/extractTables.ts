@@ -51,14 +51,14 @@ export class OfficialDocTableAssistError extends Error {
   }
 }
 
-function parseJsonFromModelText(text: string): unknown {
+export function parseJsonFromModelText(text: string): unknown {
   const trimmed = text.trim();
   const fence = trimmed.match(/^```(?:json)?\s*([\s\S]*?)```$/m);
   const raw = fence ? fence[1]!.trim() : trimmed;
   return JSON.parse(raw) as unknown;
 }
 
-function parseTableOnlyOutput(response: {
+export function parseTableOnlyOutput(response: {
   output?: unknown;
   text?: string;
 }): GeminiTableOnlyOutput {

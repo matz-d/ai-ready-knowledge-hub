@@ -12,6 +12,7 @@ import type {
   DocumentIrBlock,
 } from '../../../eval/conversion/documentIr';
 import type { GroundedTableRow, MergeGroundedRowsResult } from './types';
+import { isTableAssistBlock } from './tableAssistBlocks';
 
 function maxTableIndexOnPage(blocks: readonly DocumentIrBlock[]): number {
   return blocks.reduce((max, block) => {
@@ -46,8 +47,18 @@ export function mergeGroundedRowsIntoDocumentIr(options: {
     const rows = rowsByPage.get(page.pageNumber);
     if (rows === undefined || rows.length === 0) return page;
 
+    const existingTableAssistRowText = new Set(
+      page.blocks
+        .filter((block) => block.kind === 'table' && isTableAssistBlock(block))
+        .map((block) => block.text)
+    );
+    const rowsToMerge = rows.filter(
+      (row) => !existingTableAssistRowText.has(row.cells.join('\t'))
+    );
+    if (rowsToMerge.length === 0) return page;
+
     const tableIndex = maxTableIndexOnPage(page.blocks) + 1;
-    const newBlocks: DocumentIrBlock[] = rows.map((row, rowIndex) => ({
+    const newBlocks: DocumentIrBlock[] = rowsToMerge.map((row, rowIndex) => ({
       blockId: `p${page.pageNumber}-tableassist-${tableIndex}-r${rowIndex}`,
       kind: 'table',
       text: row.cells.join('\t'),

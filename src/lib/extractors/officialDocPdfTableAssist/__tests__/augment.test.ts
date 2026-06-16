@@ -119,6 +119,41 @@ describe('augmentOfficialDocWithTableAssist', () => {
     });
   });
 
+  it('skips an already table-assist augmented IR without running I/O', async () => {
+    const first = await augmentOfficialDocWithTableAssist({
+      mode: 'async',
+      buffer: Buffer.alloc(0),
+      documentIr: doc(),
+      pageRawTexts: PAGE_RAW_TEXTS,
+      deps: {
+        splitPages: fakeSplit(),
+        extractTableRowsForPage: vi.fn(async ({ pageNumber }) => [
+          { pageNumber, cells: ['Monthly overtime cap', '45 hours'] },
+        ]),
+      },
+    });
+    const splitPages = fakeSplit();
+    const extractTableRowsForPage = vi.fn(async () => [] as RawTableRow[]);
+
+    const second = await augmentOfficialDocWithTableAssist({
+      mode: 'async',
+      buffer: Buffer.alloc(0),
+      documentIr: first.documentIr,
+      pageRawTexts: PAGE_RAW_TEXTS,
+      deps: { splitPages, extractTableRowsForPage },
+    });
+
+    expect(second.documentIr).toBe(first.documentIr);
+    expect(second.summary).toMatchObject({
+      status: 'skipped',
+      reason: 'document already contains table-assist blocks',
+      candidatePageCount: 0,
+      rowsMerged: 0,
+    });
+    expect(splitPages).not.toHaveBeenCalled();
+    expect(extractTableRowsForPage).not.toHaveBeenCalled();
+  });
+
   it('rejects ungrounded (hallucinated) rows and skips', async () => {
     const result = await augmentOfficialDocWithTableAssist({
       mode: 'async',

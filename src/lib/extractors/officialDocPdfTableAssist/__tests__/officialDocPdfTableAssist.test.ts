@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseDocumentIr, type DocumentIr } from '../../../../eval/conversion/documentIr';
+import { buildCandidatePageInputs } from '../index';
 import { selectCandidatePages } from '../selectCandidatePages';
 import { groundTableRows } from '../groundCells';
 import { mergeGroundedRowsIntoDocumentIr } from '../mergeDocumentIr';
@@ -68,6 +71,28 @@ describe('selectCandidatePages', () => {
   it('defaults the budget to 6', () => {
     const pages = Array.from({ length: 9 }, (_, i) => page(i + 1, SUSPECT_TEXT, 0));
     expect(selectCandidatePages({ pages })).toHaveLength(6);
+  });
+
+  it('keeps MHLW overtime table-assist golden pages 14 and 15 within the default budget', () => {
+    const fixture = JSON.parse(
+      readFileSync(
+        resolve(
+          process.cwd(),
+          'sample-data/document-conversion/official-doc-pdf/mhlw-overtime-limit-guide.document-ir.json'
+        ),
+        'utf8'
+      )
+    ) as DocumentIr;
+    const pages = buildCandidatePageInputs({
+      documentIr: fixture,
+      pageRawTexts: new Map(),
+    });
+
+    const selected = selectCandidatePages({ pages });
+    expect(selected).toHaveLength(6);
+    expect(selected.map((p) => p.pageNumber)).toEqual(
+      expect.arrayContaining([14, 15])
+    );
   });
 });
 
@@ -139,6 +164,92 @@ describe('groundTableRows (cell-level, content-neutral)', () => {
       { pageNumber: 9, cells: ['Monthly overtime cap', '45 hours'] },
     ];
     expect(groundTableRows({ documentIr: GROUNDING_DOC, rawRows })).toEqual([]);
+  });
+
+  it('does not ground against prior table-assist blocks', () => {
+    const augmentedOnlyDoc: DocumentIr = parseDocumentIr({
+      schemaVersion: 1,
+      source: {
+        fileName: 'x.pdf',
+        mediaType: 'application/pdf',
+        sourceKind: 'upload',
+        sourceSubtype: 'official-doc-pdf',
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: 'p1-tableassist-0-r0',
+              kind: 'table',
+              text: 'Prior assist\tOnly here',
+              locator: { pageNumber: 1, tableIndex: 0, rowIndex: 0 },
+              metadata: {
+                tableAssist: true,
+                extractionProvider: 'gemini-table-assist',
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      groundTableRows({
+        documentIr: augmentedOnlyDoc,
+        rawRows: [{ pageNumber: 1, cells: ['Prior assist', 'Only here'] }],
+      })
+    ).toEqual([]);
+  });
+});
+
+describe('buildCandidatePageInputs', () => {
+  it('ignores existing table-assist blocks for fallback text and pdf table row counts', () => {
+    const augmentedDoc: DocumentIr = parseDocumentIr({
+      schemaVersion: 1,
+      source: {
+        fileName: 'x.pdf',
+        mediaType: 'application/pdf',
+        sourceKind: 'upload',
+        sourceSubtype: 'official-doc-pdf',
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: 'p1-b1',
+              kind: 'paragraph',
+              text: 'plain prose',
+              locator: { pageNumber: 1 },
+            },
+            {
+              blockId: 'p1-tableassist-0-r0',
+              kind: 'table',
+              text: 'Injected score\t300円',
+              locator: { pageNumber: 1, tableIndex: 0, rowIndex: 0 },
+              metadata: {
+                tableAssist: true,
+                extractionProvider: 'gemini-table-assist',
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      buildCandidatePageInputs({
+        documentIr: augmentedDoc,
+        pageRawTexts: new Map(),
+      })
+    ).toEqual([
+      {
+        pageNumber: 1,
+        rawText: 'plain prose',
+        pdfTableRowCount: 0,
+      },
+    ]);
   });
 });
 
@@ -218,5 +329,20 @@ describe('mergeGroundedRowsIntoDocumentIr', () => {
     expect(stats).toEqual({ rowsMerged: 0, pagesAugmented: 0 });
     expect(documentIr.pages[0].blocks).toHaveLength(2);
     expect(documentIr.pages[1].blocks).toHaveLength(0);
+  });
+
+  it('does not append duplicate table-assist rows already present on the page', () => {
+    const once = mergeGroundedRowsIntoDocumentIr({
+      documentIr: baseDoc,
+      groundedRows: [{ pageNumber: 1, cells: ['月', '45時間'] }],
+    }).documentIr;
+
+    const twice = mergeGroundedRowsIntoDocumentIr({
+      documentIr: once,
+      groundedRows: [{ pageNumber: 1, cells: ['月', '45時間'] }],
+    });
+
+    expect(twice.stats).toEqual({ rowsMerged: 0, pagesAugmented: 0 });
+    expect(twice.documentIr.pages[0].blocks).toHaveLength(3);
   });
 });

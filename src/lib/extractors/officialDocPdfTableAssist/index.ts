@@ -14,6 +14,10 @@ import { groundTableRows } from './groundCells';
 import { mergeGroundedRowsIntoDocumentIr } from './mergeDocumentIr';
 import { selectCandidatePages } from './selectCandidatePages';
 import {
+  isTableAssistBlock,
+  withoutTableAssistBlocks,
+} from './tableAssistBlocks';
+import {
   splitPagesToSinglePagePdfs,
   type SplitPageResult,
 } from './splitPages';
@@ -56,14 +60,17 @@ export function buildCandidatePageInputs(options: {
   documentIr: DocumentIr;
   pageRawTexts: ReadonlyMap<number, string>;
 }): CandidatePageInput[] {
-  return options.documentIr.pages.map((page) => ({
-    pageNumber: page.pageNumber,
-    rawText:
-      options.pageRawTexts.get(page.pageNumber) ??
-      page.blocks.map((block) => block.text).join('\n'),
-    pdfTableRowCount: page.blocks.filter((block) => block.kind === 'table')
-      .length,
-  }));
+  return options.documentIr.pages.map((page) => {
+    const baseBlocks = withoutTableAssistBlocks(page.blocks);
+    return {
+      pageNumber: page.pageNumber,
+      rawText:
+        options.pageRawTexts.get(page.pageNumber) ??
+        baseBlocks.map((block) => block.text).join('\n'),
+      pdfTableRowCount: baseBlocks.filter((block) => block.kind === 'table')
+        .length,
+    };
+  });
 }
 
 async function mapWithConcurrency<T, R>(
@@ -140,6 +147,22 @@ export async function augmentOfficialDocWithTableAssist(options: {
         ...baseSummary,
         status: 'disabled',
         reason: 'table-assist not enabled for this execution context',
+        elapsedMs: elapsed(),
+      },
+    };
+  }
+
+  if (
+    options.documentIr.pages.some((page) =>
+      page.blocks.some((block) => isTableAssistBlock(block))
+    )
+  ) {
+    return {
+      documentIr: options.documentIr,
+      summary: {
+        ...baseSummary,
+        status: 'skipped',
+        reason: 'document already contains table-assist blocks',
         elapsedMs: elapsed(),
       },
     };

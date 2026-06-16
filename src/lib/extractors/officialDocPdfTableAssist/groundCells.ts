@@ -16,6 +16,7 @@ import {
   type GroundedTableRow,
   type RawTableRow,
 } from './types';
+import { withoutTableAssistBlocks } from './tableAssistBlocks';
 
 /** A cell is "substantive" when its normalized form is at least 2 chars. */
 const SUBSTANTIVE_CELL_MIN_CHARS = 2;
@@ -23,7 +24,9 @@ const SUBSTANTIVE_CELL_MIN_CHARS = 2;
 function buildNormalizedPageText(documentIr: DocumentIr): Map<number, string> {
   const byPage = new Map<number, string>();
   for (const page of documentIr.pages) {
-    const pageText = page.blocks.map((block) => block.text).join('\n');
+    const pageText = withoutTableAssistBlocks(page.blocks)
+      .map((block) => block.text)
+      .join('\n');
     byPage.set(page.pageNumber, normalizeForSubstringMatch(pageText));
   }
   return byPage;
