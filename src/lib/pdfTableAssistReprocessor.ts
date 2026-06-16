@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type {
   DocumentData,
   DocumentReference,
@@ -42,14 +43,6 @@ const REPROCESSABLE_STATUSES = new Set<FirestoreDocumentStatus>([
   'blocked',
   'failed',
 ]);
-
-/**
- * A crashed reprocess can leave `reprocessing: true` behind. After this TTL the
- * lease is treated as stale and may be stolen, so a single failed run cannot
- * block the document forever. Generous relative to a worst-case reprocess
- * (table-assist Gemini pass + curator + masker ≈ 1–2 min).
- */
-const REPROCESS_LEASE_TTL_MS = 15 * 60 * 1000;
 
 export type PdfTableAssistReprocessFailure =
   | { code: 'document_not_found' }
@@ -195,7 +188,7 @@ async function restoreReprocessSnapshot(args: {
 }
 
 type ReprocessLeaseResult =
-  | { ok: true }
+  | { ok: true; leaseId: string }
   | { ok: false; reason: 'document_not_found' }
   | {
       ok: false;
@@ -204,34 +197,22 @@ type ReprocessLeaseResult =
     }
   | { ok: false; reason: 'reprocess_in_progress' };
 
-function timestampToMillis(value: unknown): number | null {
-  if (value == null) return null;
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    const ms = Date.parse(value);
-    return Number.isNaN(ms) ? null : ms;
-  }
-  if (value instanceof Date) return value.getTime();
-  const maybeTimestamp = value as { toMillis?: () => number };
-  if (typeof maybeTimestamp.toMillis === 'function') {
-    return maybeTimestamp.toMillis();
-  }
-  return null;
-}
-
 /**
  * Single-flight lease for reprocess. Uses a dedicated `reprocessing` field rather
  * than the lifecycle status so it survives the curator/masker status writes inside
  * `orchestratePdfPath` and never collides with the terminal-status invariants. The
  * status re-check inside the transaction also closes the TOCTOU window with the
- * pre-lease validation read. A stale lease (crashed run, older than
- * `REPROCESS_LEASE_TTL_MS`) is stolen rather than blocking the document forever.
+ * pre-lease validation read.
+ *
+ * The request path does not steal existing leases. A crashed run can leave the
+ * document blocked, but recovering that requires a separate owner-aware sweep/admin
+ * flow so a slow live holder cannot overlap with a new holder on destructive writes.
  */
 async function acquireReprocessLease(
   db: Firestore,
   docRef: DocumentReference
 ): Promise<ReprocessLeaseResult> {
-  const now = Date.now();
+  const leaseId = randomUUID();
   return db.runTransaction<ReprocessLeaseResult>(async (tx) => {
     const snapshot = await tx.get(docRef);
     if (!snapshot.exists) {
@@ -242,27 +223,41 @@ async function acquireReprocessLease(
     if (!REPROCESSABLE_STATUSES.has(status)) {
       return { ok: false, reason: 'document_not_reprocessable', status };
     }
-    const startedAt = timestampToMillis(data.reprocessingStartedAt);
-    const heldFresh =
-      data.reprocessing === true &&
-      startedAt !== null &&
-      now - startedAt <= REPROCESS_LEASE_TTL_MS;
-    if (heldFresh) {
+    if (data.reprocessing === true) {
       return { ok: false, reason: 'reprocess_in_progress' };
     }
     tx.update(docRef, {
       reprocessing: true,
+      reprocessingLeaseId: leaseId,
       reprocessingStartedAt: FieldValue.serverTimestamp(),
     });
-    return { ok: true };
+    return { ok: true, leaseId };
   });
 }
 
-async function releaseReprocessLease(docRef: DocumentReference): Promise<void> {
+async function releaseReprocessLease(
+  db: Firestore,
+  docRef: DocumentReference,
+  leaseId: string
+): Promise<void> {
   // Best-effort: a failed release must not mask the real reprocess outcome. The
-  // TTL steal path recovers a lease that is somehow left set.
+  // leaseId check prevents a stale holder from clearing a newer owner-aware lease.
   try {
-    await docRef.update({ reprocessing: false });
+    await db.runTransaction(async (tx) => {
+      const snapshot = await tx.get(docRef);
+      if (!snapshot.exists) return;
+
+      const data = snapshot.data() ?? {};
+      if (data.reprocessing !== true || data.reprocessingLeaseId !== leaseId) {
+        return;
+      }
+
+      tx.update(docRef, {
+        reprocessing: false,
+        reprocessingLeaseId: null,
+        reprocessingStartedAt: null,
+      });
+    });
   } catch (error) {
     console.warn(
       '[documents/table-assist] failed to release reprocess lease',
@@ -340,12 +335,12 @@ export async function reprocessPdfWithTableAssist(args: {
   let rollbackChunks: StoredChunkSnapshot[] | null = null;
 
   try {
-    rollbackChunks = await readChunkSnapshot(docRef);
-
     const buffer = await readRawObject(doc.storagePath);
     if (hashContentSha256(buffer) !== doc.contentSha256) {
       return { ok: false, failure: { code: 'raw_content_hash_mismatch' } };
     }
+
+    rollbackChunks = await readChunkSnapshot(docRef);
 
     const dispatchOutcome = await dispatchPdfExtraction({
       buffer,
@@ -427,15 +422,22 @@ export async function reprocessPdfWithTableAssist(args: {
     };
   } catch (error) {
     if (rollbackChunks !== null) {
-      await restoreReprocessSnapshot({
-        db,
-        docRef,
-        doc: rollbackDoc,
-        chunks: rollbackChunks,
-      });
+      try {
+        await restoreReprocessSnapshot({
+          db,
+          docRef,
+          doc: rollbackDoc,
+          chunks: rollbackChunks,
+        });
+      } catch (restoreError) {
+        console.warn(
+          '[documents/table-assist] failed to restore reprocess snapshot',
+          restoreError
+        );
+      }
     }
     throw error;
   } finally {
-    await releaseReprocessLease(docRef);
+    await releaseReprocessLease(db, docRef, lease.leaseId);
   }
 }

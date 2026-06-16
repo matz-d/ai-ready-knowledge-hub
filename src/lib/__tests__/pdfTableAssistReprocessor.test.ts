@@ -155,12 +155,15 @@ const tableAssistDocumentIr: DocumentIr = {
   ],
 };
 
+let installedFirestoreDoc: Record<string, unknown> | null = null;
+
 function installFirestoreDoc(data: Record<string, unknown> | null) {
-  docGetMock.mockResolvedValue({
-    exists: data !== null,
+  installedFirestoreDoc = data;
+  docGetMock.mockImplementation(async () => ({
+    exists: installedFirestoreDoc !== null,
     id: 'doc-1',
-    data: () => data,
-  });
+    data: () => installedFirestoreDoc,
+  }));
 }
 
 const curator = {
@@ -199,6 +202,18 @@ beforeEach(() => {
       fn: (tx: { get: typeof docGetMock; update: typeof txUpdateMock }) => unknown
     ) => fn({ get: docGetMock, update: txUpdateMock })
   );
+  txUpdateMock.mockImplementation(
+    (_ref: unknown, update: Record<string, unknown>) => {
+      if (installedFirestoreDoc !== null) {
+        installedFirestoreDoc = { ...installedFirestoreDoc, ...update };
+      }
+    }
+  );
+  docUpdateMock.mockImplementation((update: Record<string, unknown>) => {
+    if (installedFirestoreDoc !== null) {
+      installedFirestoreDoc = { ...installedFirestoreDoc, ...update };
+    }
+  });
   installFirestoreDoc(baseFirestoreDoc);
   chunkCollectionGetMock.mockResolvedValue({ docs: [] });
   chunkCollectionDocMock.mockImplementation((id: string) => ({ id }));
@@ -388,7 +403,33 @@ describe('reprocessPdfWithTableAssist', () => {
       { id: 'old-chunk' },
       { id: 'old-chunk', text: 'old safe text' }
     );
-    expect(docUpdateMock).toHaveBeenCalledWith({ reprocessing: false });
+    expect(txUpdateMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reprocessing: false,
+        reprocessingLeaseId: null,
+        reprocessingStartedAt: null,
+      })
+    );
+  });
+
+  it('preserves the original orchestration error when rollback restore fails', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    orchestratePdfPathMock.mockRejectedValue(new Error('transient write failure'));
+    docUpdateMock.mockRejectedValueOnce(new Error('restore failed'));
+
+    await expect(
+      reprocessPdfWithTableAssist({
+        docId: 'doc-1',
+        tenantId: 'tenant-1',
+      })
+    ).rejects.toThrow('transient write failure');
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[documents/table-assist] failed to restore reprocess snapshot',
+      expect.any(Error)
+    );
+    warnSpy.mockRestore();
   });
 
   it('clears stale chunks when the reprocessed document becomes restricted', async () => {
@@ -463,11 +504,11 @@ describe('reprocessPdfWithTableAssist', () => {
     expect(orchestratePdfPathMock).not.toHaveBeenCalled();
   });
 
-  it('steals a stale lease past the TTL and proceeds', async () => {
+  it('rejects any held lease in the request path, even when it is old', async () => {
     installFirestoreDoc({
       ...baseFirestoreDoc,
       reprocessing: true,
-      // Far older than REPROCESS_LEASE_TTL_MS (15 min) relative to now.
+      reprocessingLeaseId: 'old-lease',
       reprocessingStartedAt: '2026-06-01T00:00:00.000Z',
     });
 
@@ -476,12 +517,12 @@ describe('reprocessPdfWithTableAssist', () => {
       tenantId: 'tenant-1',
     });
 
-    expect(outcome.ok).toBe(true);
-    expect(txUpdateMock).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ reprocessing: true })
-    );
-    expect(dispatchPdfExtractionMock).toHaveBeenCalled();
+    expect(outcome).toEqual({
+      ok: false,
+      failure: { code: 'reprocess_in_progress' },
+    });
+    expect(txUpdateMock).not.toHaveBeenCalled();
+    expect(dispatchPdfExtractionMock).not.toHaveBeenCalled();
   });
 
   it('releases the lease after a successful reprocess', async () => {
@@ -491,7 +532,53 @@ describe('reprocessPdfWithTableAssist', () => {
     });
 
     expect(outcome.ok).toBe(true);
-    expect(docUpdateMock).toHaveBeenCalledWith({ reprocessing: false });
+    expect(txUpdateMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reprocessing: true,
+        reprocessingLeaseId: expect.any(String),
+        reprocessingStartedAt: '__server_timestamp__',
+      })
+    );
+    expect(txUpdateMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reprocessing: false,
+        reprocessingLeaseId: null,
+        reprocessingStartedAt: null,
+      })
+    );
+  });
+
+  it('does not release a lease that has been replaced by another owner', async () => {
+    orchestratePdfPathMock.mockImplementation(async () => {
+      if (installedFirestoreDoc !== null) {
+        installedFirestoreDoc = {
+          ...installedFirestoreDoc,
+          reprocessing: true,
+          reprocessingLeaseId: 'newer-lease',
+        };
+      }
+      return {
+        kind: 'curated',
+        docId: 'doc-1',
+        storagePath: 'raw/doc-1/sample.pdf',
+        curator,
+        curatorCompletedAt: new Date('2026-06-01T00:00:00.000Z'),
+      };
+    });
+
+    const outcome = await reprocessPdfWithTableAssist({
+      docId: 'doc-1',
+      tenantId: 'tenant-1',
+    });
+
+    expect(outcome.ok).toBe(true);
+    const releaseCalls = txUpdateMock.mock.calls.filter(
+      ([, update]) =>
+        (update as Record<string, unknown>).reprocessing === false
+    );
+    expect(releaseCalls).toHaveLength(0);
   });
 
   it('returns raw_content_hash_mismatch and still releases the lease', async () => {
@@ -507,6 +594,14 @@ describe('reprocessPdfWithTableAssist', () => {
       failure: { code: 'raw_content_hash_mismatch' },
     });
     expect(dispatchPdfExtractionMock).not.toHaveBeenCalled();
-    expect(docUpdateMock).toHaveBeenCalledWith({ reprocessing: false });
+    expect(chunkCollectionGetMock).not.toHaveBeenCalled();
+    expect(txUpdateMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reprocessing: false,
+        reprocessingLeaseId: null,
+        reprocessingStartedAt: null,
+      })
+    );
   });
 });
