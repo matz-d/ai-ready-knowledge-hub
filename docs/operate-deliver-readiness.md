@@ -29,8 +29,8 @@
 | マルチテナント分離（job / result / candidates 認可） | ✅ | tenantId=IAP domain、revision `00041-2kr` で越境なし確認 | — | `production-readiness.md §3`, `D-P4UX-1` |
 | 再処理 / 再生成 recovery tooling | ✅ | `regenerateChunksForDoc`（`scripts/regenerateChunks.ts`）。**`raw/` 14日 lifecycle に依存**し、14日超は全 status で raw 404 失敗し得る（復旧=再アップロード） | — | `D-PROD-3` 決定項目5 |
 | **Gemini API 運用制約の明文化 / 監視** | ✅ | **決定済・記述済（`D-OPS-1`）**: quota/コスト dashboard は新設せず runbook 注記 + 既存 job error alert で運用。`setup-gcp.md` Notes に「Gemini 運用監視」節を追記済み | — | `D-OPS-1`, `setup-gcp.md`, PR #18 |
-| **enqueue 冪等性（重複 submit）** | 🔲 | 二重 submit で重複 job が立たないか（client double-click / retry storm）の確認が未明示 | 冪等キー or UI guard の有無を確認・記録 | `jobs/route.ts` |
-| **運用 SLO / error budget** | 🔲 | 生成成功率・p95 レイテンシの目標値が未定義（アラート閾値はあるが SLO ではない） | ハッカソン提出向けに最小限の SLO を1枚で定義（任意） | 本書 |
+| **enqueue 冪等性（重複 submit）** | ✅ | UI は通常クリックを disabled state で抑止し、同一 tick の二重 submit は同期 ref lock で `POST /api/context-package` を1回に抑える。Cloud Tasks は task name に `jobId` を使い、同一 job の二重 enqueue を拒否 | API-level の semantic retry idempotency key は post-submit hardening。現 MVP の submit 事故対策としては完了 | `ContextPackageForm.tsx`, `enqueuer.ts` |
+| **運用 SLO / error budget** | ✅ | 提出向けの最小 SLO を §E に定義。既存 alert は job error / stale recovery / queue backlog を監視 | 実測 dashboard 化は後続。現状は runbook + evidence で運用 | 本書 |
 
 ---
 
@@ -71,11 +71,31 @@
 
 **とどける** が成立と言えるのは、B の ✅ 群（4分類の構造化出力 / 下流指示 / 正直なカバレッジ開示 / 理由・sensitivity 提示 / human-review 明示 / .md 取得）を満たすこと。**これも達成済み**。残るのは渡し先体験（渡し先別ガイド・出力粒度・handoff 幅・E2E 検証）で、ここが**ハッカソン提出のデモ価値に最も効く伸びしろ**。
 
-> 結論: まわす/とどける とも **コア DoD は通過済み**。**とどける の E2E 検証も 2026-06-09 達成**（実 NotebookLM 5/5 PASS、source 分割 bundle を fast-follow 実装）。UI zip 導線（P1-B）とデモ docs の bundle 前提更新（P1-C）も完了。残る限界効用は Gemini/RAG 取り込み手順の追補。
+> 結論: まわす/とどける とも **コア DoD は通過済み**。**とどける の E2E 検証も 2026-06-09 達成**（実 NotebookLM 5/5 PASS、source 分割 bundle を fast-follow 実装）。UI zip 導線（P1-B）とデモ docs の bundle 前提更新（P1-C）も完了。submit 重複 guard と提出向け SLO も 2026-06-16 に閉じた。残る限界効用は Gemini/RAG 取り込み手順の追補。
 
 ---
 
-## E. とどける E2E delivery 検証 runbook（提出デモ証跡）
+## E. Minimal Operate SLO（提出向け）
+
+本 MVP の SLO は「提出デモと dev tenant の小規模運用」を対象にする。大量顧客・商用 multi-tenant の SLO ではない。
+
+| 指標 | 目標 | 観測 / 運用方法 |
+|---|---:|---|
+| Async accepted response p95 | 3秒以下 | `POST /api/context-package` が `202` を返すまで。過去 smoke は `1.295s` / `3.647s` |
+| Worker completion p95 | 10分以下 | P1-F の 30文書 / 11 batches 実測は約596秒。通常サンプルは60秒以下を目安 |
+| Job success rate | 95%以上 | `context_package_job_errors` alert で低下を検知。失敗時は retry / stale recovery / result route を確認 |
+| Stale-running recovery | 30分以内 | Cloud Tasks retry window と sweeper runbook に合わせる |
+| Result retention | 14日 | Firestore TTL と GCS lifecycle（`raw/`, `context-package/job-results/`）で自動削除 |
+
+Error budget の扱い:
+
+- stale recovery や queue backlog の alert が出たら、提出デモ前は新規 large package 生成を止め、直近 job の status / worker logs / Cloud Tasks queue を確認する。
+- Gemini quota / transient failure は job error alert で拾い、必要なら目的・文書数を絞って再生成する。
+- 同じユーザー操作の通常 double-click は disabled state、同一 tick の二重 submit は ref lock で抑止済み。ネットワーク retry が同じ semantic request を別 job として作る問題は、post-submit の request idempotency key 候補として残す。
+
+---
+
+## F. とどける E2E delivery 検証 runbook（提出デモ証跡）
 
 **状態:** 2026-06-09 実施・合格。本節は**確立した手順**として残す。実施結果は [delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md)。
 

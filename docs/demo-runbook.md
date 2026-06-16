@@ -1,8 +1,10 @@
-# Live Demo Runbook (MVP / W2)
+# Live Demo Runbook (Phase 4 / Submission)
 
-Upload → Firestore/GCS → Inventory → Context Package を再現するための実行手順です。  
-この時点では **MVP デモ** であり、PDF 専用抽出は未導入です。**Google Sheets** は [Phase 3-A](phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。  
-Phase 3-E のデモ説明では、標準 profile は **`cloud-managed`** です。管理されたクラウド境界で文書を受け取り、Cloud DLP + Masker で安全化し、目的にひもづいた Context Package として NotebookLM / Gemini / RAG に渡す前段を作ります。
+Upload / Google Workspace import → Firestore/GCS → Inventory → Context Package → source bundle export を再現するための実行手順です。
+
+現時点の提出デモでは、PDF / CSV / XLSX / Google Sheets / Google Docs の主要 ingest、Phase 4-UX の purpose-driven candidate selection、Safety Review、Preview acknowledgement、async Context Package job、NotebookLM 用 source bundle が実装済みです。**Google Sheets** は [Phase 3-A](phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。
+
+デモ説明では、標準 profile は **`cloud-managed`** です。管理されたクラウド境界で文書を受け取り、Cloud DLP + Masker で安全化し、目的にひもづいた Context Package として NotebookLM / Gemini / RAG に渡す前段を作ります。NotebookLM には単一 `.md` ではなく、Context Package result panel から取得できる **source bundle zip** の全ファイルを source 追加します。
 
 ## 0. デモで伝える Processing Boundary
 
@@ -122,6 +124,8 @@ pnpm dev
 ```
 
 ブラウザで `http://localhost:3000/upload` を開きます。
+
+ローカルで async Context Package job まで通す場合は Cloud Tasks / worker 用 env が必要です。未配線のローカルでは `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED` を有効にせず、同期生成の手動通しとして扱います。本番 / Cloud Run での async smoke は [docs/setup-gcp.md](setup-gcp.md) §8 を正本にします。
 
 ## 4. Upload UI で投入する推奨サンプル
 

@@ -283,6 +283,90 @@ describe('ContextPackageForm candidate selection', () => {
     expect(body.purpose).toBe('テスト用途');
   });
 
+  it('suppresses immediate double-submit while generation is in flight', async () => {
+    let resolveContextPackage: ((response: Response) => void) | undefined;
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/api/context-package/candidates') {
+        return Promise.resolve(jsonResponse(200, CANDIDATES_FIXTURE));
+      }
+      if (url === '/api/context-package') {
+        return new Promise<Response>((resolve) => {
+          resolveContextPackage = resolve;
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const ContextPackageForm = await loadForm();
+    const { container } = render(<ContextPackageForm />);
+
+    fireEvent.change(screen.getByLabelText('Purpose（目的）'), {
+      target: { value: 'テスト用途' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '候補を表示' }));
+    await flush();
+
+    const form = container.querySelector('form');
+    expect(form).toBeTruthy();
+    act(() => {
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    const contextPackageCalls = fetchMock.mock.calls.filter(
+      (c) => c[0] === '/api/context-package',
+    );
+    expect(contextPackageCalls).toHaveLength(1);
+
+    resolveContextPackage?.(jsonResponse(200, RESULT_FIXTURE));
+    await flush();
+  });
+
+  it('allows submitting again after generation settles', async () => {
+    const pendingResponses: ((response: Response) => void)[] = [];
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/api/context-package/candidates') {
+        return Promise.resolve(jsonResponse(200, CANDIDATES_FIXTURE));
+      }
+      if (url === '/api/context-package') {
+        return new Promise<Response>((resolve) => {
+          pendingResponses.push(resolve);
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const ContextPackageForm = await loadForm();
+    render(<ContextPackageForm />);
+
+    fireEvent.change(screen.getByLabelText('Purpose（目的）'), {
+      target: { value: 'テスト用途' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '候補を表示' }));
+    await flush();
+
+    const generateButton = screen.getByRole('button', {
+      name: /Context Package を生成/,
+    });
+    fireEvent.click(generateButton);
+    expect(
+      fetchMock.mock.calls.filter((c) => c[0] === '/api/context-package'),
+    ).toHaveLength(1);
+
+    pendingResponses.shift()?.(jsonResponse(200, RESULT_FIXTURE));
+    await flush();
+
+    fireEvent.click(generateButton);
+    expect(
+      fetchMock.mock.calls.filter((c) => c[0] === '/api/context-package'),
+    ).toHaveLength(2);
+
+    pendingResponses.shift()?.(jsonResponse(200, RESULT_FIXTURE));
+    await flush();
+  });
+
   it('downloads the source bundle as a NotebookLM zip', async () => {
     const fetchMock = vi.fn(routeFetch);
     const createObjectURL = vi.fn((object: Blob | MediaSource) => {
