@@ -23,7 +23,7 @@
 | P1-E+ | scan-pdf quality floor 解消 | PII prompt guard 後の accepted live drift floor（`majorDriftCount=3`）を下げ、提出説明可能な品質証跡を固める | **方針決定済み**。提出前は current baseline fixed。PII direction / deterministic zero は green、full live `--ci` は sidecar refresh PR まで intentionally red | sidecar refresh は後続 PR。public blank-form regeneration policy、expected fields の人間レビュー、3-run live evidence、full live `--ci` gate 再評価をまとめて実施。提出前の正本は [docs/scan-pdf-ocr-live-drift-workflow.md](scan-pdf-ocr-live-drift-workflow.md) |
 | P1-E2 | born-digital PDF Gemini layout/table compare | official-doc-pdf の table / heading / locator 弱点を、Gemini layout/table enrichment で改善できるかを負債なく判定する | **実装・検証済み**。既存 compare harness に `gemini` / `pdf-parse+gemini-tables` arm を追加。page-group / table-only / grounding filter / hallucination-candidate check を実測。table-assist 専用 golden も追加済み | 採用判断: full Gemini 置換はしない。`pdf-parse` primary + grounded Gemini table-assist を PoC 最善とする。証跡は [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6 |
 | P2 | Phase 3-F デモ polish | 動画シナリオを現状の product truth に合わせる | P1-C で export 文言は更新済み。Dashboard refresh 後の画面構成・live funnel の見せ方は未反映。**提出補強の並行テーマ** | 動画カットとナレーションが現 UI / bundle 導線と一致する |
-| P2 | 提出前の軽い運用補強 | 「まわす」説明力を上げる | alert / sweeper / TTL は済み。enqueue 二重 submit と SLO が未整理。**提出補強の並行テーマ** | 二重 submit の挙動確認、簡易 SLO 1枚を `operate-deliver-readiness.md` へ追記 |
+| P2 | 提出前の軽い運用補強 | 「まわす」説明力を上げる | **完了**。alert / sweeper / TTL に加え、UI submit 重複 guard と簡易 SLO を追記済み | `ContextPackageForm` の in-flight lock、`operate-deliver-readiness.md` §E |
 | P3 | 不要 CSS / UI 残骸 cleanup | 保守性を上げ、次の UI 変更を軽くする | 旧 heatmap / risk-callout / status badge modifier / sensitivity 重複などが残る | 挙動変更なしで未使用 CSS と古い `inventory-demo-*` naming を整理 |
 | P3 | Ingest 拡張判断 | 次の product expansion を決める | Drive folder bulk / local directory batch / standalone images が候補 | 提出前は Drive folder bulk か local directory batch のどちらかを選定。standalone images は OCR/PII/eval 設計が重いので後続寄り |
 
@@ -223,18 +223,14 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 
 ## P2: 提出前の軽い運用補強
 
-**enqueue 二重 submit**:
-- UI の disabled / active job guard で重複 job が立たないか確認。
-- browser double-click と network retry の観点を分ける。
-- 必要なら idempotency key を検討する。
+**enqueue 二重 submit**（完了）:
+- 通常クリックは既存 disabled state、同一 tick の二重 submit は submit in-flight lock で `POST /api/context-package` が1回だけになるよう固定。
+- Cloud Tasks enqueue は task name に `jobId` を使い、同一 job の重複 enqueue を抑止済み。
+- network retry が同じ semantic request を別 job として作る問題は post-submit の request idempotency key 候補として残す。
 
-**簡易 SLO**:
-- 例:
-  - Context Package async job success rate: 95%+
-  - async accepted response p95: 3s 以下
-  - worker completion p95: 60s 以下（デモ tenant / sample workload）
-  - stale-running recovery: 30分以内
-- 提出用には「現状の実測と運用上の目標」を1枚で足りる。
+**簡易 SLO**（完了）:
+- `operate-deliver-readiness.md` §E に提出向けの最小 SLO / error budget を追記。
+- dev tenant / 小規模運用の目標として、async accepted response p95、worker completion p95、job success rate、stale-running recovery、retention を定義。
 
 ## P3: 不要 CSS / UI 残骸 cleanup
 
