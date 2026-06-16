@@ -178,10 +178,12 @@ export async function POST(request: Request) {
       tenantId = '';
     }
     const db = getFirestoreClient();
+    // Sync upload must never run table-assist; only the async worker may pass 'async'.
     const pdfDispatchOutcome = await dispatchPdfExtraction({
       buffer,
       fileName: displayName,
       isFlagEnabled: createFirestorePdfFlagReader(db, tenantId),
+      tableAssistMode: 'disabled',
     });
 
     if (!pdfDispatchOutcome.ok) {

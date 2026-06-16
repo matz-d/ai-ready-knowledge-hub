@@ -122,6 +122,9 @@ export async function recordDocumentConvertAudit(args: {
               },
             }
           : {}),
+        ...(args.conversion.tableAssist !== undefined
+          ? { tableAssist: args.conversion.tableAssist }
+          : {}),
       },
       ...(args.conversion.inferenceDestination
         ? { inferenceDestination: args.conversion.inferenceDestination }

@@ -78,6 +78,18 @@ describe('FeatureFlagSchema', () => {
     expect(flag.expiresAt).toBe('2026-07-31T23:59:59.000Z');
   });
 
+  it('parses pdf-table-assist with tenant allow-list and default off', () => {
+    const flag = FeatureFlagSchema.parse({
+      flagId: 'pdf-table-assist',
+      enabledTenants: ['m-grow-ai.com'],
+      defaultEnabled: false,
+    });
+    expect(flag.flagId).toBe('pdf-table-assist');
+    expect(flag.enabledTenants).toEqual(['m-grow-ai.com']);
+    expect(flag.defaultEnabled).toBe(false);
+    expect(flag.expiresAt).toBeUndefined();
+  });
+
   it('rejects a flag with invalid expiresAt format', () => {
     expect(() =>
       FeatureFlagSchema.parse({
@@ -291,11 +303,12 @@ describe('getFeatureFlag', () => {
 // ── Constants tests ────────────────────────────────────────────────────────
 
 describe('FEATURE_FLAG_IDS', () => {
-  it('includes pdf-conversion-subtype-1, subtype-2, and subtype-3', () => {
+  it('includes pdf-conversion-subtype-1, subtype-2, subtype-3, and pdf-table-assist', () => {
     const ids: readonly FeatureFlagId[] = FEATURE_FLAG_IDS;
     expect(ids).toContain('pdf-conversion-subtype-1');
     expect(ids).toContain('pdf-conversion-subtype-2');
     expect(ids).toContain('pdf-conversion-subtype-3');
+    expect(ids).toContain('pdf-table-assist');
   });
 
   it('each ID is a non-empty string', () => {

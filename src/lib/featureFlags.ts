@@ -18,6 +18,7 @@ export const FEATURE_FLAG_IDS = [
   'pdf-conversion-subtype-1', // official-doc-pdf pipeline (Phase 3-H-2 M1)
   'pdf-conversion-subtype-2', // slide-pdf pipeline (Phase 3-H-3 M1)
   'pdf-conversion-subtype-3', // scan-pdf pipeline (Phase 3-H-3 M6)
+  'pdf-table-assist', // official-doc-pdf grounded Gemini table-assist (P1-E Step 1, async-only)
 ] as const satisfies readonly string[];
 
 export type FeatureFlagId = (typeof FEATURE_FLAG_IDS)[number];

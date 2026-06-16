@@ -22,16 +22,20 @@ vi.mock('../scanPdfDocumentExtractor', () => ({
   extractScanPdfFromBuffer: extractScanPdfFromBufferMock,
 }));
 
+import type { FeatureFlagId } from '../../featureFlags';
+import { augmentOfficialDocWithTableAssist } from '../officialDocPdfTableAssist';
 import {
   buildPdfCuratorContent,
   dispatchPdfExtraction,
   PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE,
   PDF_SUBTYPE_PRE_FLIGHT_CONFIGS,
   PDF_UPLOAD_BETA_DISABLED_MESSAGE,
+  type PdfExtractionResult,
 } from '../pdfExtractionDispatcher';
 
 const minimalPdfExtraction = {
   textContent: 'PDF body text',
+  pageTexts: [{ pageNumber: 1, text: 'PDF body text' }],
   documentIr: {
     schemaVersion: 1 as const,
     source: {
@@ -135,6 +139,65 @@ const minimalScanPdfExtraction = {
 
 function pdfBuffer(): Buffer {
   return Buffer.from('%PDF-1.4 fake');
+}
+
+/** Table-suspect raw page text so selectCandidatePages picks page 1. */
+const TABLE_SUSPECT_PAGE_TEXT =
+  'Monthly overtime cap   45 hours   Manager review\nAnnual cap   360 hours   HR';
+
+function officialDocWithPageTexts(): PdfExtractionResult {
+  return {
+    textContent: TABLE_SUSPECT_PAGE_TEXT,
+    documentIr: {
+      schemaVersion: 1,
+      source: {
+        fileName: 'sample.pdf',
+        mediaType: 'application/pdf',
+        sourceKind: 'upload',
+        sourceSubtype: 'official-doc-pdf',
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: 'p1-b0',
+              kind: 'paragraph',
+              text: TABLE_SUSPECT_PAGE_TEXT,
+            },
+          ],
+        },
+      ],
+    },
+    pageTexts: [{ pageNumber: 1, text: TABLE_SUSPECT_PAGE_TEXT }],
+    conversion: { converterId: 'pdf-parse' },
+  };
+}
+
+const subtype1InjectedConfig = {
+  flagId: 'pdf-conversion-subtype-1' as const,
+  extract: async () => officialDocWithPageTexts(),
+};
+
+function fakeSplitDeps() {
+  return {
+    splitPages: async ({
+      pageNumbers,
+    }: {
+      pageNumbers: readonly number[];
+    }) =>
+      pageNumbers.map((pageNumber) => ({
+        pageNumber,
+        pdfBytes: new Uint8Array(),
+      })),
+  };
+}
+
+function isFlagEnabledFor(
+  enabled: FeatureFlagId[]
+): (flagId: FeatureFlagId) => Promise<boolean> {
+  const enabledSet = new Set(enabled);
+  return async (flagId) => enabledSet.has(flagId);
 }
 
 describe('dispatchPdfExtraction', () => {
@@ -288,6 +351,262 @@ describe('dispatchPdfExtraction', () => {
     expect(outcome.failure.code).toBe('conflicting_flags');
     if (outcome.failure.code !== 'conflicting_flags') return;
     expect(outcome.failure.enabledFlagIds).toHaveLength(3);
+  });
+});
+
+describe('table-assist gating (WU-6b)', () => {
+  it('does not run table-assist when tableAssistMode is disabled', async () => {
+    const augmentTableAssist = vi.fn();
+
+    const outcome = await dispatchPdfExtraction({
+      buffer: pdfBuffer(),
+      fileName: 'sample.pdf',
+      isFlagEnabled: isFlagEnabledFor([
+        'pdf-conversion-subtype-1',
+        'pdf-table-assist',
+      ]),
+      tableAssistMode: 'disabled',
+      configs: [subtype1InjectedConfig],
+      augmentTableAssist,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(augmentTableAssist).not.toHaveBeenCalled();
+    expect(outcome.result.conversion.tableAssist).toBeUndefined();
+  });
+
+  it('does not run table-assist when mode is async but pdf-table-assist flag is off', async () => {
+    const augmentTableAssist = vi.fn();
+
+    const outcome = await dispatchPdfExtraction({
+      buffer: pdfBuffer(),
+      fileName: 'sample.pdf',
+      isFlagEnabled: isFlagEnabledFor(['pdf-conversion-subtype-1']),
+      tableAssistMode: 'async',
+      configs: [subtype1InjectedConfig],
+      augmentTableAssist,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(augmentTableAssist).not.toHaveBeenCalled();
+    expect(outcome.result.conversion.tableAssist).toBeUndefined();
+  });
+
+  it('merges table-assist blocks when mode is async and pdf-table-assist flag is on', async () => {
+    const augmentWithMerge: typeof augmentOfficialDocWithTableAssist = (
+      options
+    ) =>
+      augmentOfficialDocWithTableAssist({
+        ...options,
+        deps: {
+          ...fakeSplitDeps(),
+          extractTableRowsForPage: async ({ pageNumber }) => [
+            { pageNumber, cells: ['Monthly overtime cap', '45 hours'] },
+          ],
+        },
+      });
+
+    const outcome = await dispatchPdfExtraction({
+      buffer: pdfBuffer(),
+      fileName: 'sample.pdf',
+      isFlagEnabled: isFlagEnabledFor([
+        'pdf-conversion-subtype-1',
+        'pdf-table-assist',
+      ]),
+      tableAssistMode: 'async',
+      configs: [subtype1InjectedConfig],
+      augmentTableAssist: augmentWithMerge,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.result.conversion.tableAssist).toEqual(
+      expect.objectContaining({
+        status: 'merged',
+        rowsMerged: 1,
+      })
+    );
+    expect(
+      outcome.result.documentIr.pages[0]!.blocks.some(
+        (block) => block.kind === 'table'
+      )
+    ).toBe(true);
+  });
+
+  it('records when table-assist falls back because pageTexts are unavailable', async () => {
+    const { pageTexts: _pageTexts, ...withoutPageTexts } =
+      officialDocWithPageTexts();
+    const augmentTableAssist = vi.fn<typeof augmentOfficialDocWithTableAssist>(
+      async (options) => ({
+        documentIr: options.documentIr,
+        summary: {
+          status: 'skipped',
+          candidatePageCount: 0,
+          pagesProcessed: 0,
+          pagesFailed: 0,
+          rawRowCount: 0,
+          rowsMerged: 0,
+          rowsRejected: 0,
+          elapsedMs: 1,
+        },
+      })
+    );
+
+    const outcome = await dispatchPdfExtraction({
+      buffer: pdfBuffer(),
+      fileName: 'sample.pdf',
+      isFlagEnabled: isFlagEnabledFor([
+        'pdf-conversion-subtype-1',
+        'pdf-table-assist',
+      ]),
+      tableAssistMode: 'async',
+      configs: [
+        {
+          flagId: 'pdf-conversion-subtype-1',
+          extract: async () => withoutPageTexts,
+        },
+      ],
+      augmentTableAssist,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(augmentTableAssist).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pageRawTexts: expect.any(Map),
+      })
+    );
+    expect(
+      outcome.result.conversion.tableAssist?.reason
+    ).toBe('pageTexts unavailable; used DocumentIR block text fallback');
+  });
+
+  it('keeps pdf-parse IR and records skipped when page extraction throws (fail-soft)', async () => {
+    const base = officialDocWithPageTexts();
+    const augmentWithThrow: typeof augmentOfficialDocWithTableAssist = (
+      options
+    ) =>
+      augmentOfficialDocWithTableAssist({
+        ...options,
+        deps: {
+          ...fakeSplitDeps(),
+          extractTableRowsForPage: async () => {
+            throw new Error('gemini boom');
+          },
+        },
+      });
+
+    const outcome = await dispatchPdfExtraction({
+      buffer: pdfBuffer(),
+      fileName: 'sample.pdf',
+      isFlagEnabled: isFlagEnabledFor([
+        'pdf-conversion-subtype-1',
+        'pdf-table-assist',
+      ]),
+      tableAssistMode: 'async',
+      configs: [subtype1InjectedConfig],
+      augmentTableAssist: augmentWithThrow,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.result.documentIr).toEqual(base.documentIr);
+    expect(outcome.result.conversion.tableAssist).toEqual(
+      expect.objectContaining({
+        status: 'skipped',
+        rowsMerged: 0,
+        pagesFailed: 1,
+      })
+    );
+    expect(outcome.result.conversion.tableAssist?.reason).toContain('failed');
+  });
+
+  it('drops ungrounded cells and does not merge hallucinated rows (content-neutral)', async () => {
+    const base = officialDocWithPageTexts();
+    const augmentWithHallucination: typeof augmentOfficialDocWithTableAssist = (
+      options
+    ) =>
+      augmentOfficialDocWithTableAssist({
+        ...options,
+        deps: {
+          ...fakeSplitDeps(),
+          extractTableRowsForPage: async ({ pageNumber }) => [
+            { pageNumber, cells: ['Fabricated item', '999 widgets'] },
+          ],
+        },
+      });
+
+    const outcome = await dispatchPdfExtraction({
+      buffer: pdfBuffer(),
+      fileName: 'sample.pdf',
+      isFlagEnabled: isFlagEnabledFor([
+        'pdf-conversion-subtype-1',
+        'pdf-table-assist',
+      ]),
+      tableAssistMode: 'async',
+      configs: [subtype1InjectedConfig],
+      augmentTableAssist: augmentWithHallucination,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.result.documentIr).toEqual(base.documentIr);
+    expect(outcome.result.conversion.tableAssist).toEqual(
+      expect.objectContaining({
+        status: 'skipped',
+        rawRowCount: 1,
+        rowsMerged: 0,
+        rowsRejected: 1,
+      })
+    );
+  });
+
+  it.each([
+    ['pdf-conversion-subtype-2', extractSlidePdfFromBufferMock],
+    ['pdf-conversion-subtype-3', extractScanPdfFromBufferMock],
+  ] as const)(
+    'does not run table-assist for %s even when mode is async and pdf-table-assist is on',
+    async (subtypeFlag, extractorMock) => {
+      const augmentTableAssist = vi.fn();
+
+      const outcome = await dispatchPdfExtraction({
+        buffer: pdfBuffer(),
+        fileName: 'sample.pdf',
+        isFlagEnabled: isFlagEnabledFor([
+          subtypeFlag,
+          'pdf-table-assist',
+        ]),
+        tableAssistMode: 'async',
+        augmentTableAssist,
+      });
+
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) return;
+      expect(extractorMock).toHaveBeenCalled();
+      expect(augmentTableAssist).not.toHaveBeenCalled();
+      expect(outcome.result.conversion.tableAssist).toBeUndefined();
+    }
+  );
+
+  it('omits tableAssist from conversion when tableAssistMode is omitted (backward compat)', async () => {
+    const outcome = await dispatchPdfExtraction({
+      buffer: pdfBuffer(),
+      fileName: 'sample.pdf',
+      isFlagEnabled: async (flagId) => flagId === 'pdf-conversion-subtype-1',
+      configs: PDF_SUBTYPE_PRE_FLIGHT_CONFIGS,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.result).toEqual(
+      expect.objectContaining({
+        textContent: 'PDF body text',
+        conversion: { converterId: 'pdf-parse' },
+      })
+    );
+    expect(outcome.result.conversion.tableAssist).toBeUndefined();
   });
 });
 

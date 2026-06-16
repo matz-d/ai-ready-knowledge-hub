@@ -481,3 +481,69 @@ pipeline: `selectCandidatePages` (pure) → `splitPages` (pdf-lib I/O) →
 fail-soft + audit summary; quality tuning (esp. tier-3 "uncaptured" precision)
 is a follow-up. The synthetic table-assist golden remains the regression check;
 the stable P1-D gate stays pdf-parse-baseline (it documents the gap, by design).
+
+### 2026-06-16: P1-E Step 1 mainline wiring (D strategy — locked)
+
+**Scope (D strategy):** Connect grounded Gemini table-assist to the mainline
+`pdfExtractionDispatcher` without building the production async document ingest
+worker or Cloud Tasks enqueue. The synchronous upload route passes
+`tableAssistMode: 'disabled'` explicitly, so production upload never fires
+table-assist even when the tenant flag is on.
+
+**Not in this PR:** PDF async ingest worker, Cloud Tasks enqueue, upload API
+202 + polling, UI status lifecycle, post-terminal enrichment on terminal
+documents or masked chunks, production live smoke on the sync path.
+
+**Locked invariants:**
+
+1. **Double gate (tenant flag + async context).** Activation requires the
+   tenant-scoped feature flag `pdf-table-assist` (default off) **and**
+   `tableAssistMode: 'async'`. A flag alone must never run table-assist on the
+   synchronous upload path. See [decisions.md](decisions.md) `D-P1-E-TA-1`.
+
+2. **Merge before Masker — post-terminal enrichment forbidden.** Table-assist
+   merge runs **only** inside `dispatchPdfExtraction`, strictly before
+   `documentIrToKnowledgeChunks` and the Masker. Grounding compares Gemini
+   cells against the same page's **pre-mask** pdf-parse text; merged table rows
+   re-surface characters that already existed in raw text. Writing merged IR or
+   chunks onto terminal documents or masked chunks after masking would let those
+   tokens bypass the Masker. This is forbidden.
+
+   - **Structural guarantee:** `src/lib/extractors/pdfExtractionDispatcher.ts`
+     (WU-4) calls `augmentOfficialDocWithTableAssist` inside dispatch and
+     returns merged `documentIr` to callers.
+   - **Executable evidence:**
+     `src/lib/extractors/__tests__/pdfTableAssistMaskingRegression.test.ts`
+     (WU-6a): dispatch → `documentIrToKnowledgeChunks` → Masker; a phone token
+     grounded from raw text must end up `[REDACTED:PHONE]` in the masked chunk.
+
+3. **`raw/` 14-day retention dependency.** Grounding and any future async
+   re-run depend on pre-mask pdf-parse page text available at ingest time, not
+   on delayed re-read of `raw/` after lifecycle delete. Deferred re-processing
+   that assumes `raw/{docId}/` survives beyond the 14-day GCS lifecycle is out
+   of scope and forbidden as a design pattern. Retention policy:
+   [decisions.md](decisions.md) `D-PROD-3`.
+
+4. **Fail-soft.** Timeout, Gemini failure, or budget exceeded returns the
+   unchanged pdf-parse `documentIr` and records a `tableAssist` audit summary.
+   Table extraction failure must not discard successful text extraction.
+
+5. **Curator / classification / content hash unchanged.** Curator input remains
+   `textContent` (full pdf-parse text). Table-assist merge affects
+   `documentIr` only for chunking and masking; it does not change Curator
+   classification inputs or document content hash.
+
+**Follow-up (separate epic):** Production async caller that passes
+`tableAssistMode: 'async'` from a document ingest worker — reuses
+context-package job lease/sweeper/OIDC patterns; not part of this PR.
+
+**Follow-up hardening (tracked outside this PR):**
+
+- [#45](https://github.com/matz-d/ai-ready-knowledge-hub/issues/45):
+  When the production async caller is added, treat transient reads of the
+  optional `pdf-table-assist` flag as fail-soft skip for table-assist rather
+  than failing the whole PDF dispatch.
+- [#46](https://github.com/matz-d/ai-ready-knowledge-hub/issues/46): Keep
+  table-assist-derived chunks in the live masker drift evaluation set so Cloud
+  DLP / Gemini masker over-mask and under-mask behavior is measured on grounded
+  table rows, not only on deterministic `simple-rule` regression fixtures.
