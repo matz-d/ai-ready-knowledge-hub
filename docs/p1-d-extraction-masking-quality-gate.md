@@ -209,6 +209,10 @@ P1-D で見つかった次の症状は、P1-E の大きなファイル事前分�
 
 - public curator over-restriction — 既存 curator classification eval を live-only で継続。
 - scan fixture 再生成時に placeholder 名を realistic synthetic 名へ差し替え（`PERSON_NAME` 評価の拡張）。
+- [#46](https://github.com/matz-d/ai-ready-knowledge-hub/issues/46):
+  P1-E table-assist 由来 chunk を `pnpm eval:p1d:masker-drift` の live-only
+  対象へ追加し、grounded table rows に対する本番 masker の over-mask /
+  under-mask drift を測る（deterministic な WU-6a 回帰テストとは別軸）。
 
 実行例:
 

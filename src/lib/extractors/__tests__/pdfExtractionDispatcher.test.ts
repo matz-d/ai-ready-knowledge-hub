@@ -435,6 +435,54 @@ describe('table-assist gating (WU-6b)', () => {
     ).toBe(true);
   });
 
+  it('records when table-assist falls back because pageTexts are unavailable', async () => {
+    const { pageTexts: _pageTexts, ...withoutPageTexts } =
+      officialDocWithPageTexts();
+    const augmentTableAssist = vi.fn<typeof augmentOfficialDocWithTableAssist>(
+      async (options) => ({
+        documentIr: options.documentIr,
+        summary: {
+          status: 'skipped',
+          candidatePageCount: 0,
+          pagesProcessed: 0,
+          pagesFailed: 0,
+          rawRowCount: 0,
+          rowsMerged: 0,
+          rowsRejected: 0,
+          elapsedMs: 1,
+        },
+      })
+    );
+
+    const outcome = await dispatchPdfExtraction({
+      buffer: pdfBuffer(),
+      fileName: 'sample.pdf',
+      isFlagEnabled: isFlagEnabledFor([
+        'pdf-conversion-subtype-1',
+        'pdf-table-assist',
+      ]),
+      tableAssistMode: 'async',
+      configs: [
+        {
+          flagId: 'pdf-conversion-subtype-1',
+          extract: async () => withoutPageTexts,
+        },
+      ],
+      augmentTableAssist,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(augmentTableAssist).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pageRawTexts: expect.any(Map),
+      })
+    );
+    expect(
+      outcome.result.conversion.tableAssist?.reason
+    ).toBe('pageTexts unavailable; used DocumentIR block text fallback');
+  });
+
   it('keeps pdf-parse IR and records skipped when page extraction throws (fail-soft)', async () => {
     const base = officialDocWithPageTexts();
     const augmentWithThrow: typeof augmentOfficialDocWithTableAssist = (

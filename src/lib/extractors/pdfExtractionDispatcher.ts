@@ -13,7 +13,10 @@ import {
 } from './preflight';
 import { extractSlidePdfFromBuffer } from './slidePdfDocumentExtractor';
 import { extractScanPdfFromBuffer } from './scanPdfDocumentExtractor';
-import { augmentOfficialDocWithTableAssist } from './officialDocPdfTableAssist';
+import {
+  augmentOfficialDocWithTableAssist,
+  type TableAssistSummary,
+} from './officialDocPdfTableAssist';
 
 export type PdfExtractionResult = {
   textContent: string;
@@ -35,6 +38,19 @@ export function pageTextsToMap(
   pageTexts: { pageNumber: number; text: string }[]
 ): ReadonlyMap<number, string> {
   return new Map(pageTexts.map((p) => [p.pageNumber, p.text]));
+}
+
+function appendTableAssistReason(
+  summary: TableAssistSummary,
+  reason: string
+): TableAssistSummary {
+  return {
+    ...summary,
+    reason:
+      summary.reason === undefined || summary.reason.length === 0
+        ? reason
+        : `${summary.reason}; ${reason}`,
+  };
 }
 
 type PdfSubtypePreFlightConfig = {
@@ -237,14 +253,28 @@ export async function dispatchPdfExtraction(args: {
     (await args.isFlagEnabled('pdf-table-assist'))
   ) {
     const augment = args.augmentTableAssist ?? augmentOfficialDocWithTableAssist;
+    const pageTexts = result.pageTexts ?? [];
     const outcome = await augment({
       mode: 'async',
       buffer: args.buffer,
       documentIr: result.documentIr,
-      pageRawTexts: pageTextsToMap(result.pageTexts ?? []),
+      pageRawTexts: pageTextsToMap(pageTexts),
     });
-    result.documentIr = outcome.documentIr;
-    result.conversion.tableAssist = outcome.summary;
+    const tableAssistSummary =
+      pageTexts.length === 0
+        ? appendTableAssistReason(
+            outcome.summary,
+            'pageTexts unavailable; used DocumentIR block text fallback'
+          )
+        : outcome.summary;
+    result = {
+      ...result,
+      documentIr: outcome.documentIr,
+      conversion: {
+        ...result.conversion,
+        tableAssist: tableAssistSummary,
+      },
+    };
   }
 
   return { ok: true, result };

@@ -536,3 +536,14 @@ documents or masked chunks, production live smoke on the sync path.
 **Follow-up (separate epic):** Production async caller that passes
 `tableAssistMode: 'async'` from a document ingest worker — reuses
 context-package job lease/sweeper/OIDC patterns; not part of this PR.
+
+**Follow-up hardening (tracked outside this PR):**
+
+- [#45](https://github.com/matz-d/ai-ready-knowledge-hub/issues/45):
+  When the production async caller is added, treat transient reads of the
+  optional `pdf-table-assist` flag as fail-soft skip for table-assist rather
+  than failing the whole PDF dispatch.
+- [#46](https://github.com/matz-d/ai-ready-knowledge-hub/issues/46): Keep
+  table-assist-derived chunks in the live masker drift evaluation set so Cloud
+  DLP / Gemini masker over-mask and under-mask behavior is measured on grounded
+  table rows, not only on deterministic `simple-rule` regression fixtures.
