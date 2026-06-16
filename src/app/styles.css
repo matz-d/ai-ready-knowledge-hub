@@ -499,6 +499,138 @@ pre {
   font-size: 12px;
 }
 
+/* Multi-file upload queue */
+.upload-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 720px;
+}
+
+.upload-queue__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.upload-queue__head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.upload-retry-all {
+  padding: 6px 12px;
+  border: 1px solid var(--border, #d7d2c8);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.upload-retry-all:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.upload-queue__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.upload-queue__item {
+  padding: 12px 14px;
+  border: 1px solid var(--border, #e2ddd3);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.upload-queue__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.upload-queue__name {
+  flex: 1;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.upload-queue__badge {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.upload-queue__badge--queued {
+  background: #ece9e1;
+  color: #5b5648;
+}
+
+.upload-queue__badge--uploading {
+  background: #dfeaf6;
+  color: #275079;
+}
+
+.upload-queue__badge--succeeded {
+  background: #d8efdc;
+  color: #235c33;
+}
+
+.upload-queue__badge--failed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.upload-queue__retry {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--border, #d7d2c8);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.upload-queue__retry:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.upload-queue__error {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #4a2a26;
+}
+
+.upload-queue__error code {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--danger-soft);
+  font-size: 12px;
+}
+
+.upload-queue__result {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.upload-queue__cta {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .curator-result-card {
   max-width: 720px;
   padding: 22px;
