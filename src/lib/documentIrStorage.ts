@@ -1,6 +1,6 @@
 /**
  * GCS adapter for DocumentIR snapshots — Phase 3-H-2 M1.
- * Authoritative path: `raw/{docId}/document-ir/v1.json`
+ * Authoritative path: `raw/{docId}/document-ir/{revisionId}.json`
  * Design rationale: docs/decisions.md D-P3-H-4 (Q2).
  * Retention policy: docs/decisions.md D-PROD-3.
  *
@@ -23,14 +23,20 @@ export const DOCUMENT_IR_GCS_VERSION = 'v1' as const;
 
 /**
  * GCS object path for a DocumentIR snapshot.
- * Returns `raw/{docId}/document-ir/v1.json`.
+ * Returns `raw/{docId}/document-ir/{revisionId}.json`.
  * Throws if `docId` is empty or whitespace-only.
  */
-export function documentIrStoragePath(docId: string): string {
+export function documentIrStoragePath(
+  docId: string,
+  revisionId: string = DOCUMENT_IR_GCS_VERSION
+): string {
   if (!docId.trim()) {
     throw new Error('documentIrStoragePath: docId must be non-empty');
   }
-  return `raw/${docId}/document-ir/${DOCUMENT_IR_GCS_VERSION}.json`;
+  if (!revisionId.trim()) {
+    throw new Error('documentIrStoragePath: revisionId must be non-empty');
+  }
+  return `raw/${docId}/document-ir/${revisionId}.json`;
 }
 
 // ── Write ──────────────────────────────────────────────────────────────────
@@ -38,6 +44,7 @@ export function documentIrStoragePath(docId: string): string {
 export type WriteDocumentIrSnapshotOptions = {
   bucketName: string;
   docId: string;
+  revisionId?: string;
   documentIr: DocumentIr;
   /** Injected for testing; defaults to `new Storage()` in production. */
   storage?: Storage;
@@ -49,7 +56,7 @@ export type WriteDocumentIrSnapshotOptions = {
  * Validates `documentIr` with Zod **before** the network call so schema drift
  * in the caller is caught at the source rather than silently written to GCS.
  *
- * Returns the GCS object path (`raw/{docId}/document-ir/v1.json`).
+ * Returns the GCS object path (`raw/{docId}/document-ir/{revisionId}.json`).
  * The object may contain unmasked extracted text for reprocessing, so the
  * production bucket lifecycle must delete `raw/` objects after the D-PROD-3
  * retention window.
@@ -57,12 +64,17 @@ export type WriteDocumentIrSnapshotOptions = {
 export async function writeDocumentIrSnapshot(
   options: WriteDocumentIrSnapshotOptions
 ): Promise<string> {
-  const { bucketName, docId, storage = new Storage() } = options;
+  const {
+    bucketName,
+    docId,
+    revisionId = DOCUMENT_IR_GCS_VERSION,
+    storage = new Storage(),
+  } = options;
 
   // Validate first — any Zod error surfaces before we touch the network.
   const validated = DocumentIrSchema.parse(options.documentIr);
 
-  const objectPath = documentIrStoragePath(docId);
+  const objectPath = documentIrStoragePath(docId, revisionId);
   const body = `${JSON.stringify(validated, null, 2)}\n`;
 
   await storage.bucket(bucketName).file(objectPath).save(body, {
@@ -79,6 +91,7 @@ export async function writeDocumentIrSnapshot(
 export type ReadDocumentIrSnapshotOptions = {
   bucketName: string;
   docId: string;
+  revisionId?: string;
   /** Injected for testing; defaults to `new Storage()` in production. */
   storage?: Storage;
 };
@@ -93,9 +106,14 @@ export type ReadDocumentIrSnapshotOptions = {
 export async function readDocumentIrSnapshot(
   options: ReadDocumentIrSnapshotOptions
 ): Promise<DocumentIr | null> {
-  const { bucketName, docId, storage = new Storage() } = options;
+  const {
+    bucketName,
+    docId,
+    revisionId = DOCUMENT_IR_GCS_VERSION,
+    storage = new Storage(),
+  } = options;
 
-  const objectPath = documentIrStoragePath(docId);
+  const objectPath = documentIrStoragePath(docId, revisionId);
   const file = storage.bucket(bucketName).file(objectPath);
 
   const [exists] = await file.exists();

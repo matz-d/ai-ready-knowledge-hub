@@ -138,6 +138,7 @@ import {
   orchestrateUploadProcessing,
   UNMASKABLE_PII_RESTRICTION_REASON,
 } from '../uploadOrchestrator';
+import { orchestratePdfPath } from '../uploadOrchestrator/pdfPath';
 
 const minimalDocumentIr: DocumentIr = {
   schemaVersion: 1,
@@ -647,6 +648,46 @@ describe('orchestrateUploadProcessing', () => {
       expect(maskerPipelineFlowMock).not.toHaveBeenCalled();
     });
 
+    it('uses a caller-provided DocumentIR revision for PDF artifacts and health eval', async () => {
+      curatorFlowMock.mockResolvedValue(curatorDirectResult);
+
+      await orchestratePdfPath({
+        docRef: docMock as never,
+        docId: 'doc-reprocess',
+        displayName: 'sample.pdf',
+        content: 'PDF body text',
+        curatorContent: 'PDF curator content',
+        curatorInputMode: 'full_text',
+        contentSha256: 'sha256',
+        storagePath: 'raw/doc-reprocess/sample.pdf',
+        aiSafeStoragePath: 'masked/doc-reprocess/sample.pdf',
+        documentIr: minimalDocumentIr,
+        documentIrRevisionId: 'reprocess-lease-1',
+        conversion: {
+          converterId: 'pdf-parse',
+        },
+      });
+
+      expect(writeDocumentIrSnapshotMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          docId: 'doc-reprocess',
+          revisionId: 'reprocess-lease-1',
+        })
+      );
+      expect(appendConversionEvalMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          docId: 'doc-reprocess',
+          revisionId: 'reprocess-lease-1',
+          stage: 'health',
+        })
+      );
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          latestConversionEvalId: 'doc-reprocess:reprocess-lease-1',
+        })
+      );
+    });
+
     it('uses pdfCuratorContent only for Curator while preserving full PDF text for chunks', async () => {
       randomUUIDMock.mockReturnValue('doc-pdf-page-group');
       curatorFlowMock.mockResolvedValue(curatorDirectResult);
@@ -918,7 +959,10 @@ describe('orchestrateUploadProcessing', () => {
         ([payload]) =>
           payload &&
           typeof payload === 'object' &&
-          (payload as Record<string, unknown>).conversionError !== undefined
+          // A real conversion failure carries a truthy error object; the curator
+          // phase's idempotent `conversionError: null` reset must not count.
+          (payload as Record<string, unknown>).conversionError !== undefined &&
+          (payload as Record<string, unknown>).conversionError !== null
       );
       expect(conversionFailureCall).toBeUndefined();
     });
@@ -958,7 +1002,10 @@ describe('orchestrateUploadProcessing', () => {
         ([payload]) =>
           payload &&
           typeof payload === 'object' &&
-          (payload as Record<string, unknown>).conversionError !== undefined
+          // A real conversion failure carries a truthy error object; the curator
+          // phase's idempotent `conversionError: null` reset must not count.
+          (payload as Record<string, unknown>).conversionError !== undefined &&
+          (payload as Record<string, unknown>).conversionError !== null
       );
       expect(conversionFailureCall).toBeUndefined();
     });
