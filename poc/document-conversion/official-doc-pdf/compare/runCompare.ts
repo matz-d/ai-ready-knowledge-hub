@@ -45,6 +45,7 @@ import {
   type TableAssistGoldenQuality,
 } from './renderCompareReport';
 import { mergePdfParseWithGeminiTables } from './groundGeminiTables';
+import { evaluateGeminiCompareGuard } from './geminiCompareGuard';
 import { toPipelineSnapshot } from '../runPipeline';
 import {
   P1dExpectedFixtureSchema,
@@ -58,9 +59,6 @@ import type { DocumentIr } from '../../shared/documentIr';
 import { mapDocumentIrToChunkDrafts } from '../adapter/toKnowledgeChunk';
 
 const SUBTYPE = 'official-doc-pdf' as const;
-const GEMINI_ALLOWED_SYNTHETIC_FIXTURES = new Set([
-  'synthetic-official-doc-table-assist-golden',
-]);
 
 async function listFixturePdfPaths(): Promise<string[]> {
   const dir = fixtureDir(SUBTYPE);
@@ -145,11 +143,13 @@ async function runGeminiArm(
   expected: P1dExpectedFixture | undefined,
   isPublicDocument: boolean
 ): Promise<OfficialDocPipelineResult | { error: string }> {
-  if (!fixtureCanUseGemini(basename, isPublicDocument)) {
-    return {
-      error:
-        'Gemini arm skipped for non-public fixture; set OFFICIAL_DOC_PDF_GEMINI_INCLUDE_NON_PUBLIC_FIXTURES=1 to run explicitly.',
-    };
+  const guard = evaluateGeminiCompareGuard({
+    inputPath,
+    basename,
+    fixtureDir: fixtureDir(SUBTYPE),
+  });
+  if (!guard.allowed) {
+    return { error: guard.reason };
   }
 
   try {
@@ -199,11 +199,13 @@ async function runPdfParseGeminiTablesArm(
     }
   | { error: string }
 > {
-  if (!fixtureCanUseGemini(basename, isPublicDocument)) {
-    return {
-      error:
-        'Gemini table-assist skipped for non-public fixture; set OFFICIAL_DOC_PDF_GEMINI_INCLUDE_NON_PUBLIC_FIXTURES=1 to run explicitly.',
-    };
+  const guard = evaluateGeminiCompareGuard({
+    inputPath,
+    basename,
+    fixtureDir: fixtureDir(SUBTYPE),
+  });
+  if (!guard.allowed) {
+    return { error: guard.reason };
   }
 
   try {
@@ -352,17 +354,6 @@ function evaluateTableAssistGoldens(options: {
 
 function isPublicFixture(basename: string): boolean {
   return !basename.startsWith('synthetic-');
-}
-
-function fixtureCanUseGemini(
-  basename: string,
-  isPublicDocument: boolean
-): boolean {
-  return (
-    isPublicDocument ||
-    GEMINI_ALLOWED_SYNTHETIC_FIXTURES.has(basename) ||
-    process.env.OFFICIAL_DOC_PDF_GEMINI_INCLUDE_NON_PUBLIC_FIXTURES === '1'
-  );
 }
 
 function expectedTextsForHallucinationCheck(

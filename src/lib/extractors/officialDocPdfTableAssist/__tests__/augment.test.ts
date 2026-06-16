@@ -194,6 +194,73 @@ describe('augmentOfficialDocWithTableAssist', () => {
     expect(result.summary.reason).toContain('failed');
   });
 
+  it('counts candidate pages that could not be split as failures', async () => {
+    const twoCandidateDoc = parseDocumentIr({
+      schemaVersion: 1,
+      source: {
+        fileName: 'x.pdf',
+        mediaType: 'application/pdf',
+        sourceKind: 'upload',
+        sourceSubtype: 'official-doc-pdf',
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: 'p1-b1',
+              kind: 'paragraph',
+              text: 'Monthly overtime cap 45 hours Manager review',
+              locator: { pageNumber: 1 },
+            },
+          ],
+        },
+        {
+          pageNumber: 2,
+          blocks: [
+            {
+              blockId: 'p2-b1',
+              kind: 'paragraph',
+              text: 'Annual cap 360 hours HR review',
+              locator: { pageNumber: 2 },
+            },
+          ],
+        },
+      ],
+    });
+    const pageRawTexts = new Map<number, string>([
+      [
+        1,
+        'Monthly overtime cap   45 hours   Manager review\nAnnual cap   360 hours   HR',
+      ],
+      [2, 'Annual cap   360 hours   HR review\nMonthly overtime cap   45 hours'],
+    ]);
+
+    const result = await augmentOfficialDocWithTableAssist({
+      mode: 'async',
+      buffer: Buffer.alloc(0),
+      documentIr: twoCandidateDoc,
+      pageRawTexts,
+      deps: {
+        splitPages: vi.fn(
+          async (args: { pageNumbers: readonly number[] }) =>
+            args.pageNumbers
+              .filter((pageNumber) => pageNumber === 1)
+              .map((pageNumber) => ({
+                pageNumber,
+                pdfBytes: new Uint8Array(),
+              }))
+        ),
+        extractTableRowsForPage: vi.fn(async () => [] as RawTableRow[]),
+      },
+    });
+
+    expect(result.summary.candidatePageCount).toBe(2);
+    expect(result.summary.pagesFailed).toBe(1);
+    expect(result.summary.pagesProcessed).toBe(1);
+    expect(result.summary.reason).toContain('could not be split');
+  });
+
   it('is fail-soft when splitting throws (returns the original DocumentIR)', async () => {
     const original = doc();
     const result = await augmentOfficialDocWithTableAssist({

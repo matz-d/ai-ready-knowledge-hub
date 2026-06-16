@@ -106,4 +106,98 @@ describe('compare harness Gemini table grounding', () => {
       merged.documentIr.pages[0].blocks.filter((block) => block.kind === 'table')
     ).toEqual([]);
   });
+
+  it('keeps 月 + 45時間 and rejects 時 embedded inside 45時間', () => {
+    const pdfParseDocumentIr = baseDocumentIr([
+      {
+        pageNumber: 1,
+        blocks: [
+          {
+            blockId: 'p1-b1',
+            kind: 'paragraph',
+            text: '月 45時間 上限',
+            locator: { pageNumber: 1 },
+          },
+        ],
+      },
+    ]);
+    const keep = mergePdfParseWithGeminiTables({
+      pdfParseDocumentIr,
+      geminiTableDocumentIr: baseDocumentIr([
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: 'g-keep',
+              kind: 'table',
+              text: '月\t45時間',
+              locator: { pageNumber: 1, tableIndex: 0, rowIndex: 0 },
+            },
+          ],
+        },
+      ]),
+    });
+    expect(keep.grounding.groundedTableRows).toBe(1);
+    expect(
+      keep.documentIr.pages[0].blocks.filter((block) => block.kind === 'table')
+    ).toHaveLength(1);
+
+    const reject = mergePdfParseWithGeminiTables({
+      pdfParseDocumentIr,
+      geminiTableDocumentIr: baseDocumentIr([
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: 'g-reject',
+              kind: 'table',
+              text: '時\t45時間',
+              locator: { pageNumber: 1, tableIndex: 0, rowIndex: 0 },
+            },
+          ],
+        },
+      ]),
+    });
+    expect(reject.grounding.groundedTableRows).toBe(0);
+    expect(
+      reject.documentIr.pages[0].blocks.filter((block) => block.kind === 'table')
+    ).toEqual([]);
+  });
+
+  it('keeps a 1-char checkbox marker when substantive cells ground the row', () => {
+    const pdfParseDocumentIr = baseDocumentIr([
+      {
+        pageNumber: 1,
+        blocks: [
+          {
+            blockId: 'p1-b1',
+            kind: 'paragraph',
+            text: '項目名 ○ 備考欄',
+            locator: { pageNumber: 1 },
+          },
+        ],
+      },
+    ]);
+    const merged = mergePdfParseWithGeminiTables({
+      pdfParseDocumentIr,
+      geminiTableDocumentIr: baseDocumentIr([
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: 'g1',
+              kind: 'table',
+              text: '項目名\t○\t備考欄',
+              locator: { pageNumber: 1, tableIndex: 0, rowIndex: 0 },
+            },
+          ],
+        },
+      ]),
+    });
+    expect(merged.grounding.groundedTableRows).toBe(1);
+    expect(
+      merged.documentIr.pages[0].blocks.find((block) => block.kind === 'table')
+        ?.text
+    ).toBe('項目名\t○\t備考欄');
+  });
 });

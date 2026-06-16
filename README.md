@@ -207,7 +207,7 @@ sample-data/
 | `pnpm curator:ui` | Genkit dev UI で flow を観察 |
 | `pnpm security:audit` | 依存パッケージの脆弱性監査 |
 | `pnpm poc:conversion:official-doc-pdf [path]` | official-doc-pdf PoC runner |
-| `pnpm poc:conversion:official-doc-pdf:compare [path]` | official-doc-pdf converter compare harness（`pdf-parse` / MarkItDown / Gemini / grounded `pdf-parse+gemini-tables`、eval-only） |
+| `pnpm poc:conversion:official-doc-pdf:compare [path]` | official-doc-pdf converter compare harness（`pdf-parse` / MarkItDown / Gemini / grounded `pdf-parse+gemini-tables`、eval-only）。Gemini arms は既定 skip、`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1` で fixture 配下のみ明示 opt-in |
 | `pnpm poc:conversion:slide-pdf [path]` | slide-pdf PoC runner（本線とは別） |
 | `pnpm poc:conversion:scan-pdf [path]` | scan-pdf PoC runner（本線とは別） |
 | `pnpm fixtures:scan-pdf:unmaskable:verify` | `synthetic-unmaskable-pii-scan.pdf` の本線 verifier 確認 |
@@ -255,7 +255,7 @@ sample-data/
 - **AuditEvent**: `document.import` / `document.reimport` / `document.export` / `document.convert` を `auditEvents/{eventId}` に append-only で記録。PDF 変換（subtype 2/3）では Vertex 成功時に `inferenceDestination` 必須。scan-pdf では `unmaskablePiiFindings.count` を記録。Firestore Security Rules で update/delete を拒否。
 - **PDF conversion feature flags**: `pdf-conversion-subtype-1/2/3` は Firestore `feature_flags` の allow-list + `expiresAt` で gating。同一 tenant で複数 subtype flag の同時 ON は 403。subtype 3 は **`m-grow-ai.com` のみ**（公開拡大は M6 後の別 decision）。
 - **scan-pdf fail-closed**: Gemini OCR timeout / quota / schema 失敗は pre-flight で HTTP 400。`document` / `chunk` / `document.convert` AuditEvent は作らない。本線 upload 上限は **5 MiB**（PoC runner の 30 MiB とは別）。
-- **official-doc-pdf Gemini table-assist は eval-only**: 現時点では production upload path へ接続しない。stable P1-D gate は live Gemini に依存させない。compare harness では public fixture と PII-free synthetic exception のみを既定で Gemini 実行対象にし、table-only rows は同一ページの `pdf-parse` text に grounded なものだけ merge する。
+- **official-doc-pdf Gemini table-assist は eval-only**: 現時点では production upload path へ接続しない。stable P1-D gate は live Gemini に依存させない。compare harness の Gemini arms は **既定ではすべて skip** し、`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1` の明示 opt-in 時のみ `sample-data/document-conversion/official-doc-pdf/` 配下の PDF（public fixture または allowlisted synthetic）へ Vertex を呼ぶ。table-only rows は同一ページの `pdf-parse` text に grounded なものだけ merge する。
 - **Safety gate**: Strategist へ渡す前に決定論的ルールで chunk を除外（Restricted / blocked / masking 未完了 / クロス顧客機密）。LLM に依存しない。
 - **Masking defense-in-depth**: `requires_masking` chunk に `maskedText` がない場合、`toContextPackage` は raw text を fallback で出さず throw する。
 - **Cloud DLP**: Masker provider として導入済み。現在の固定値は `minLikelihood=POSSIBLE`、replacement token は `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-06-12-v1`。P1-D で synthetic masked name / My Number-like value 用の custom infoTypes を追加済み。未指定は `simple-rule` fallback、`MASKER_PROVIDER=cloud-dlp` で明示。

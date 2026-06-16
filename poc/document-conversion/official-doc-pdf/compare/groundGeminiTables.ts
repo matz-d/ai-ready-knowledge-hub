@@ -1,4 +1,7 @@
-import { normalizeForSubstringMatch } from '../../../../src/eval/conversion/golden';
+import {
+  groundRowCells,
+  MIN_GROUNDED_CELLS_PER_ROW,
+} from '../../../../src/eval/conversion/tableCellGrounding';
 import type {
   DocumentIr,
   DocumentIrBlock,
@@ -6,42 +9,11 @@ import type {
 } from '../../shared/documentIr';
 import type { GeminiTableGroundingObservation } from './renderCompareReport';
 
-const MIN_GROUNDED_CELLS_PER_ROW = 2;
-const SUBSTANTIVE_CELL_MIN_CHARS = 2;
-
 function cellsFromTableBlock(block: DocumentIrBlock): string[] {
   return block.text
     .split(/[\t\n]/u)
     .map((cell) => cell.trim())
     .filter((cell) => cell.length > 0);
-}
-
-function groundCellsInPageText(
-  block: DocumentIrBlock,
-  pageText: string
-): string[] {
-  const normalizedPage = normalizeForSubstringMatch(pageText);
-  if (normalizedPage.length === 0) return [];
-
-  const groundedCells: string[] = [];
-  let hasSubstantiveCell = false;
-  for (const cell of cellsFromTableBlock(block)) {
-    const normalizedCell = normalizeForSubstringMatch(cell);
-    if (normalizedCell.length === 0) continue;
-    if (!normalizedPage.includes(normalizedCell)) continue;
-    groundedCells.push(cell);
-    if (normalizedCell.length >= SUBSTANTIVE_CELL_MIN_CHARS) {
-      hasSubstantiveCell = true;
-    }
-  }
-
-  if (
-    groundedCells.length < MIN_GROUNDED_CELLS_PER_ROW ||
-    !hasSubstantiveCell
-  ) {
-    return [];
-  }
-  return groundedCells;
 }
 
 export function mergePdfParseWithGeminiTables(options: {
@@ -71,7 +43,10 @@ export function mergePdfParseWithGeminiTables(options: {
 
     const tableBlocks: DocumentIrBlock[] = [];
     for (const [index, block] of sourceTableBlocks.entries()) {
-      const groundedCells = groundCellsInPageText(block, pdfParsePageText);
+      const groundedCells = groundRowCells({
+        cells: cellsFromTableBlock(block),
+        pageText: pdfParsePageText,
+      });
       if (groundedCells.length < MIN_GROUNDED_CELLS_PER_ROW) {
         if (rejectedExamples.length < 5) {
           rejectedExamples.push({

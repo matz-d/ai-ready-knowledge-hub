@@ -201,13 +201,16 @@ export async function augmentOfficialDocWithTableAssist(options: {
       pageNumbers: candidates.map((page) => page.pageNumber),
     });
 
+    const pagesSkippedBySplit = candidates.length - split.length;
+
     const perPage = await mapWithConcurrency(split, concurrency, (s) =>
       extractWithTimeout({ extract, split: s, perCallTimeoutMs })
     );
 
     const rawRows = perPage.flatMap((result) => result.rows);
     const pagesProcessed = perPage.filter((result) => result.ok).length;
-    const pagesFailed = perPage.length - pagesProcessed;
+    const pagesFailedFromExtraction = perPage.length - pagesProcessed;
+    const pagesFailed = pagesSkippedBySplit + pagesFailedFromExtraction;
 
     const grounded = groundTableRows({
       documentIr: options.documentIr,
@@ -229,7 +232,18 @@ export async function augmentOfficialDocWithTableAssist(options: {
         rowsMerged: merged.stats.rowsMerged,
         rowsRejected: rawRows.length - grounded.length,
         ...(pagesFailed > 0
-          ? { reason: `${pagesFailed} page(s) failed table-assist` }
+          ? {
+              reason: [
+                pagesSkippedBySplit > 0
+                  ? `${pagesSkippedBySplit} candidate page(s) could not be split`
+                  : null,
+                pagesFailedFromExtraction > 0
+                  ? `${pagesFailedFromExtraction} page(s) failed table-assist`
+                  : null,
+              ]
+                .filter((part): part is string => part !== null)
+                .join('; '),
+            }
           : {}),
         elapsedMs: elapsed(),
       },

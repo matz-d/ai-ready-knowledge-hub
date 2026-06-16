@@ -150,6 +150,11 @@ describe('groundTableRows (cell-level, content-neutral)', () => {
     expect(groundTableRows({ documentIr: GROUNDING_DOC, rawRows })).toEqual([]);
   });
 
+  it('rejects 時 when it would only match inside 45時間', () => {
+    const rawRows: RawTableRow[] = [{ pageNumber: 1, cells: ['時', '45時間'] }];
+    expect(groundTableRows({ documentIr: GROUNDING_DOC, rawRows })).toEqual([]);
+  });
+
   it('keeps a short label cell when paired with a substantive grounded cell', () => {
     const rawRows: RawTableRow[] = [
       { pageNumber: 1, cells: ['月', '45時間'] },

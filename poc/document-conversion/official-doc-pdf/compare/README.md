@@ -4,8 +4,10 @@ PoC-only comparison for subtype 1. Current arms are `pdf-parse`, MarkItDown,
 Gemini, and `pdf-parse+gemini-tables`. MarkItDown runs via local `uv` / `uvx`
 (not Dockerfile / mainline build). Gemini is eval-only and runs through Vertex.
 
-The Gemini arm is eval-only and defaults to public fixtures. Non-public
-synthetic fixtures are skipped unless
+The Gemini arm is eval-only. Cloud inference requires an explicit opt-in
+(`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1`) and only runs for PDFs under
+`sample-data/document-conversion/official-doc-pdf/`. Non-public synthetic
+fixtures are skipped unless
 `OFFICIAL_DOC_PDF_GEMINI_INCLUDE_NON_PUBLIC_FIXTURES=1` is set explicitly.
 The only allowlisted synthetic exception is the PII-free table-assist golden
 fixture, `synthetic-official-doc-table-assist-golden.pdf`.
@@ -29,6 +31,7 @@ pnpm poc:conversion:official-doc-pdf:compare sample-data/document-conversion/off
 Gemini knobs:
 
 ```bash
+OFFICIAL_DOC_PDF_GEMINI_ENABLE=1 \
 GOOGLE_CLOUD_LOCATION=global \
 OFFICIAL_DOC_PDF_GEMINI_PAGE_GROUP_SIZE=1 \
 OFFICIAL_DOC_PDF_GEMINI_CONCURRENCY=4 \
@@ -48,6 +51,7 @@ Table-assist golden check:
 
 ```bash
 pnpm exec tsx poc/document-conversion/official-doc-pdf/fixtures/generate-table-assist-golden.ts
+OFFICIAL_DOC_PDF_GEMINI_ENABLE=1 \
 GOOGLE_CLOUD_LOCATION=global \
 OFFICIAL_DOC_PDF_GEMINI_PAGE_GROUP_SIZE=1 \
 pnpm poc:conversion:official-doc-pdf:compare sample-data/document-conversion/official-doc-pdf/synthetic-official-doc-table-assist-golden.pdf
