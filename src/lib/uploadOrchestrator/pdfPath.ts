@@ -131,6 +131,7 @@ async function runPdfCuratorPhase(args: {
 
     await args.docRef.update({
       status: nextStatus,
+      aiSafeStoragePath: null,
       maskingPending: maskingPending ?? null,
       updatedAt: FieldValue.serverTimestamp(),
       documentType: result.documentType,
@@ -142,6 +143,7 @@ async function runPdfCuratorPhase(args: {
       sensitivitySource: 'curator',
       originalCuratorSensitivity: null,
       sensitivityReason: null,
+      restrictionSource: null,
       curator: {
         documentType: result.documentType,
         businessDomain: result.businessDomain,
@@ -154,6 +156,9 @@ async function runPdfCuratorPhase(args: {
         modelId: curatorModelId,
       },
       curatorError: null,
+      masker: null,
+      maskerError: null,
+      conversionError: null,
     });
 
     return { result, completedAt };

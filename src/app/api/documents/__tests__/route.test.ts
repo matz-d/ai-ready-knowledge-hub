@@ -838,6 +838,7 @@ describe('POST /api/documents', () => {
       expect(dispatchPdfExtractionMock).toHaveBeenCalledWith(
         expect.objectContaining({
           fileName: 'sample.pdf',
+          tableAssistMode: 'disabled',
         })
       );
       expect(orchestrateUploadProcessingMock).toHaveBeenCalledWith(
