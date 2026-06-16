@@ -5,9 +5,29 @@ import { runOfficialDocPdfHealthCheck } from './eval/healthCheck';
 import type { DocumentIr } from '../shared/documentIr';
 import { safeParseDocumentIr } from '../../../src/eval/conversion/documentIr';
 import type { ConversionEvalResult } from '../../../src/eval/conversion';
+import {
+  evaluateP1dFixture,
+  type P1dExpectedFixture,
+  type P1dFixtureQualityResult,
+} from '../../../src/eval/conversion/p1dQualityGate';
 import { writeDocumentIrArtifact } from '../shared/runConversion';
 
-export type OfficialDocConverterId = 'pdf-parse' | 'markitdown';
+export type OfficialDocConverterId =
+  | 'pdf-parse'
+  | 'markitdown'
+  | 'gemini'
+  | 'pdf-parse+gemini-tables';
+
+export type OfficialDocConverterRuntime = {
+  elapsedMs?: number;
+  model?: string;
+  region?: string;
+  pageGroupSize?: number;
+  pageGroupCount?: number;
+  geminiCallCount?: number;
+  concurrency?: number;
+  attemptsPerGroup?: number;
+};
 
 export type OfficialDocPipelineResult = {
   converter: OfficialDocConverterId;
@@ -20,6 +40,8 @@ export type OfficialDocPipelineResult = {
   schemaPassed: boolean;
   schemaErrors: string[];
   eval: ConversionEvalResult;
+  quality?: P1dFixtureQualityResult;
+  runtime?: OfficialDocConverterRuntime;
 };
 
 /** JSON report shape: IR artifact is written to disk, not duplicated in compare output. */
@@ -41,6 +63,10 @@ export async function runOfficialDocPipeline(options: {
   documentIr: DocumentIr;
   outputBasename: string;
   totalPages?: number;
+  inputPath?: string;
+  expected?: P1dExpectedFixture;
+  isPublicDocument?: boolean;
+  runtime?: OfficialDocConverterRuntime;
 }): Promise<OfficialDocPipelineResult> {
   const parsed = safeParseDocumentIr(options.documentIr);
   const schemaPassed = parsed.success;
@@ -67,6 +93,18 @@ export async function runOfficialDocPipeline(options: {
   const evalResult = enrichOfficialDocPdfEvalMetrics(baseEval, documentIr, {
     totalPages: options.totalPages,
   });
+  const quality =
+    options.expected && options.inputPath
+      ? evaluateP1dFixture({
+          documentId: options.outputBasename,
+          fixturePath: options.inputPath,
+          sourceSubtype: 'official-doc-pdf',
+          isPublicDocument: options.isPublicDocument ?? true,
+          documentIr,
+          chunks: chunkDrafts,
+          expected: options.expected,
+        })
+      : undefined;
 
   const blockCount = documentIr.pages.reduce(
     (sum, page) => sum + page.blocks.length,
@@ -89,6 +127,8 @@ export async function runOfficialDocPipeline(options: {
     schemaPassed,
     schemaErrors,
     eval: evalResult,
+    ...(quality ? { quality } : {}),
+    ...(options.runtime ? { runtime: options.runtime } : {}),
   };
 }
 

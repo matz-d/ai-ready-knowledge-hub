@@ -72,5 +72,5 @@
       "expectedValue": "事務職"
     }
   ],
-  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW public form, no PII. Structured value/table expectations are scoped to the committed P1-D DocumentIR sidecar."
+  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW public form, no PII. The committed DocumentIR sidecar is the raw pdf-parse baseline (pnpm fixtures:official-doc-pdf:sidecars); these expectations encode document-level truth, so unmet value/table cells are the intentional P1-E table-assist / label-value gaps, not loosened goldens."
 }

@@ -187,3 +187,250 @@ Non-blocking items to keep visible for the team:
 Recommended PR boundary:
 
 - Cut a PR before scan OCR prompt changes. The current slice contains T1 preflight, CSV/XLSX row-window chunking, PDF page-group curator manifest, T2 official-PDF table fail-soft with fail-closed compensation, local T3 label/value enrichment, and local T2 scan visual table fallback. These conversion-adapter changes do not call Gemini or regenerate scan sidecars. Scan OCR prompt/model changes should be a follow-up PR because they affect model output and require separate P1-D live drift evidence.
+
+### 2026-06-13: born-digital PDF Gemini comparison before more production work
+
+Current P1-D stable metrics show that the weakest structured conversion area is
+not scan-pdf anymore. It is born-digital official-doc-pdf through the `pdf-parse`
+path:
+
+- `mhlw-labor-conditions-notice-general`: field recall `0.06`, core `0.50`,
+  table `1.0`, locator `0.21`
+- `mhlw-overtime-limit-guide`: field recall `0.19`, core `0.75`,
+  table `0`, locator `0.26`
+- `mhlw-r07-model-work-rules`: field recall `0.05`, core `0.29`,
+  table `0`, locator `0.14`
+- measured value precision is already `1.0`, so the issue is recall, table
+  structure, and locator evidence rather than field/value pairing.
+
+Do not start by adding a new comparison script or wiring Gemini into production.
+Use the existing PoC compare harness:
+
+- Extend `poc/document-conversion/official-doc-pdf/compare/runCompare.ts` with a
+  third converter arm: `gemini`.
+- Reuse `runOfficialDocPipeline({ converter })`, `DocumentIR -> KnowledgeChunk`,
+  and `renderCompareReport` so the report stays comparable with the existing
+  `pdf-parse` / MarkItDown arms.
+- Keep this eval-only. No upload route, no feature flag, no sidecar regeneration,
+  and no production fallback until the comparison says it is worth doing.
+- Use committed official-doc-pdf fixtures first because they have golden
+  expectations. `local-data/annual-report-doc-2025-viewing-ja.pdf` stays
+  local-only and qualitative because it has no expected sidecar.
+- For hallucination screening, compare Gemini-emitted field/value/table cell text
+  against the `pdf-parse` full text as a cheap ground proxy. Values absent from
+  the full text should be surfaced as hallucination candidates before any human
+  review.
+
+Adoption criteria for a later production design:
+
+- table cell recall improves clearly over `pdf-parse`
+- field/core recall and locator coverage improve
+- value precision does not regress
+- Gemini failures remain fail-soft in the compare harness and can fall back to
+  the `pdf-parse` baseline
+- large mixed PDFs are evaluated separately as a qualitative table/layout
+  fallback track, not as a table-cell-recall benchmark without golden data
+
+First eval-only comparison result:
+
+- `mhlw-labor-conditions-notice-general` (4 pages): Gemini succeeded, but matched
+  `pdf-parse` on the measured quality metrics: field/core `1.0`, value `0.333`,
+  table `0`, locator `0.872`, hallucination candidates `0`.
+- `mhlw-overtime-limit-guide` (24 pages / 13 MB): Gemini succeeded on retry and
+  preserved value precision `1.0`, but did not improve table cell recall
+  (`0`). Field recall was lower than fresh `pdf-parse` (`0.906` vs `1.0`) and
+  locator coverage was lower (`0.868` vs `0.947`). hallucination candidates `0`.
+- `mhlw-r07-model-work-rules` (94 pages): Gemini full-document direct read
+  returned empty output/text in the compare harness. This stays fail-soft.
+
+Interpretation:
+
+- The current Gemini full-document arm is useful as a comparison harness, but is
+  not production-adoptable yet.
+- It does not yet validate the table-recall hypothesis. The next useful
+  experiment is page-grouped or table-focused Gemini extraction, not direct
+  whole-document replacement.
+- The comparison results are from fresh converter output. They should not be
+  confused with committed P1-D sidecar baseline metrics, which measure the
+  currently committed fixtures/sidecars.
+
+Page-grouped Gemini follow-up:
+
+- The Gemini arm now supports Ghostscript-based page grouping for eval-only
+  comparison. Defaults: `OFFICIAL_DOC_PDF_GEMINI_PAGE_GROUP_SIZE=1`,
+  `OFFICIAL_DOC_PDF_GEMINI_CONCURRENCY=4`,
+  `OFFICIAL_DOC_PDF_GEMINI_GROUP_ATTEMPTS=2`.
+- Page-grouping must not trust model-emitted page numbers. The harness remaps
+  each group result back to the source page range deterministically.
+- Table locators are also normalized deterministically in the Gemini arm because
+  model-emitted `tableIndex` values were unstable.
+
+Observed page-group results:
+
+- `mhlw-labor-conditions-notice-general` with `pageGroupSize=1`: Gemini kept
+  page coverage `1.0`, improved table cell recall from `0` to `0.333`, and
+  improved locator coverage from `0.872` to `0.897`. The remaining missing table
+  cells are blank-form sidecar values (`○○事業所`, `事務職`) that are not visibly
+  present in the public blank form.
+- `mhlw-overtime-limit-guide` with `pageGroupSize=1`: page coverage recovered to
+  `1.0`, but field recall dropped to `0.563`, value precision to `0.75`, locator
+  coverage to `0.553`, and table cell recall stayed `0`. `pageGroupSize=2`
+  was worse on this fixture: field `0.5`, value `0.75`, locator `0.5`, table
+  `0`.
+- `mhlw-r07-model-work-rules` with `pageGroupSize=4`: full-document Gemini's
+  empty output was avoided. Gemini produced 91 IR pages out of 94 source pages
+  (`eval.coverage.pageCoverage=0.968`), field/core recall `1.0`, value `0`,
+  table `0`, locator `0.860`. This is operationally better than empty output,
+  but not better than fresh `pdf-parse` on quality.
+- This means page grouping helps coverage and prevents whole-document empty
+  output, but it is not a quality win for all official PDFs. It should be treated
+  as a bounded extraction strategy, not a drop-in replacement for `pdf-parse`.
+
+Hybrid table-assist follow-up:
+
+- The compare harness now includes `pdf-parse+gemini-tables`: use `pdf-parse` as
+  the primary extractor, run Gemini in table-only mode as a second pass, and
+  merge only table rows grounded in the same page's `pdf-parse` text.
+- The grounding filter is required. Before filtering, Gemini table-only produced
+  at least one table row on `mhlw-overtime-limit-guide` page 3 that was clearly
+  from an unrelated agricultural document. Ungrounded table rows are not merged.
+- `mhlw-labor-conditions-notice-general` with `pageGroupSize=1`: hybrid
+  preserves pdf-parse field/core/value metrics and improves table recall from
+  `0` to `0.333` and locator from `0.872` to `0.897`.
+- `mhlw-overtime-limit-guide` with `pageGroupSize=1`: hybrid preserves
+  pdf-parse field/core/value/locator (`1.0 / 1.0 / 1.0 / 0.947`) but table recall
+  remains `0`. It increases grounded table candidates (`116 -> 193`) without
+  improving the current golden cells.
+- `mhlw-r07-model-work-rules` with `pageGroupSize=4`: hybrid preserves
+  pdf-parse field/core/value/locator (`1.0 / 1.0 / 0 / 0.860`) and increases
+  table candidates (`78 -> 298`), but table recall remains `0`.
+
+Table-assist golden result:
+
+- Added `synthetic-official-doc-table-assist-golden.pdf` as a compare-only,
+  PII-free official-doc-pdf fixture. It is intentionally not listed in
+  `scripts/runP1dQualityGate.ts` `STABLE_FIXTURES` because stable P1-D must not
+  depend on live Gemini calls.
+- The fixture is generated by
+  `poc/document-conversion/official-doc-pdf/fixtures/generate-table-assist-golden.ts`
+  and has a sidecar
+  `sample-data/document-conversion/official-doc-pdf/synthetic-official-doc-table-assist-golden.expected.json`.
+- Fresh compare result on 2026-06-13:
+
+| Fixture | Arm | table cell recall | table candidates | locator coverage | hallucination candidates |
+|---|---|---:|---:|---:|---:|
+| `synthetic-official-doc-table-assist-golden` | `pdf-parse` | `0` | `0` | `0` | n/a |
+| `synthetic-official-doc-table-assist-golden` | `gemini` | `0` | `4` | `0` | `0` |
+| `synthetic-official-doc-table-assist-golden` | `pdf-parse+gemini-tables` | `1.0` | `4` | `1.0` | `0` |
+| `mhlw-labor-conditions-notice-general` | `pdf-parse` | `0` | `0` | `0.872` | n/a |
+| `mhlw-labor-conditions-notice-general` | `gemini` | `0` | `11` | `0.872` | `0` |
+| `mhlw-labor-conditions-notice-general` | `pdf-parse+gemini-tables` | `0.333` | `13` | `0.897` | `0` |
+
+- Interpretation: full Gemini can emit table-shaped blocks, but its block /
+  locator granularity is not reliable enough to adopt as a replacement. The
+  table-only hybrid path preserves the `pdf-parse` baseline and improves the
+  targeted golden fixture from `0/3` to `3/3`.
+- The result supports a production design shaped as **bounded table assist**,
+  not full-document Gemini replacement: run Gemini only for table extraction,
+  merge only rows grounded in local text, and keep `pdf-parse` as the source of
+  truth for page text and fallback behavior.
+
+Current best decision:
+
+- Do not replace `pdf-parse` with Gemini for official-doc-pdf.
+- The best PoC direction is `pdf-parse` primary plus a gated Gemini table-assist
+  second pass for documents/pages where table extraction is known weak.
+- Treat table-assist output as untrusted until it is grounded against local
+  extracted text. A production design would also need cost/latency controls and
+  a better table-specific golden set because the current official-doc-pdf
+  expected table cells do not show broad wins.
+- Keep the synthetic table-assist golden as the regression check for this
+  behavior before wiring any production path.
+
+Local mixed PDF qualitative result:
+
+- `local-data/annual-report-doc-2025-viewing-ja.pdf` (56 pages / local-only /
+  no golden): `pdf-parse.getTable()` still throws on this document, so the PoC
+  extractor now keeps text extraction and falls back to empty tables for the
+  compare harness.
+- `pdf-parse`: 56 IR pages, 56 chunks, table candidates `0`, page coverage `1`.
+- MarkItDown: 1 IR page, 4209 chunks, table candidates `1707`, page coverage
+  `0.018`.
+- Gemini direct full-document: succeeded but returned only 7 IR pages, 56
+  chunks, table candidates `5`, page coverage `0.125`.
+- Gemini page-grouped (`pageGroupSize=1`): 56 IR pages, 1749 chunks, table
+  candidates `459`, page coverage `1.0`, no hallucination candidates from the
+  available expected-sidecar check. This took several minutes locally and has no
+  golden table recall because the document is local-only.
+- Hybrid `pdf-parse+gemini-tables` (`pageGroupSize=4`): 56 IR pages, 506 chunks,
+  table candidates `450`, page coverage `1.0`. This keeps the pdf-parse page
+  coverage and adds grounded table rows, making it the best qualitative result
+  for this local mixed PDF.
+- This confirms the local mixed PDF should not use full-document Gemini direct
+  read as-is. Page-grouping is promising for coverage, but a production design
+  would need cost/latency controls and a grounded table-focused second pass.
+
+Table-assist hardening before production wiring:
+
+- Added compare-only public PDF table-assist expected sets as
+  `official-doc-pdf/*.table-assist.expected.json`. They are loaded only by the
+  compare harness and are not added to stable P1-D `STABLE_FIXTURES`.
+- The compare report now records `tableAssistGoldens`, Gemini runtime metadata
+  (`elapsedMs`, `pageGroupCount`, `geminiCallCount`, group size, concurrency,
+  attempts, model, region), and `pdfParseGeminiTablesGrounding` with raw,
+  grounded, rejected, and example rejected rows.
+- 2026-06-13 live compare spot checks:
+  - `synthetic-official-doc-table-assist-golden`, `pageGroupSize=1`: hybrid
+    table recall `1.0`, grounding rejected `0/4`.
+  - `mhlw-labor-conditions-notice-general`, `pageGroupSize=1`: compare-only
+    table-assist golden improved `pdf-parse 0/5` to hybrid `5/5`; grounding
+    rejected `0/12`; table-assist elapsed `21552ms`, Gemini calls `4`.
+  - `mhlw-overtime-limit-guide`, `pageGroupSize=4`: compare-only table-assist
+    golden improved `pdf-parse 3/5` to hybrid `5/5`; grounding rejected
+    `64/129`; table-assist elapsed `270230ms`, Gemini calls `6`.
+  - `mhlw-r07-model-work-rules`, `pageGroupSize=16`: compare-only table-assist
+    golden improved `pdf-parse 0/5` to hybrid `4/5`; grounding rejected
+    `23/134`; table-assist elapsed `42200ms`, Gemini calls `6`.
+- The overtime result makes cost/latency/timeout gating a production blocker:
+  even with six page groups, table-assist took about 4.5 minutes in this run.
+
+### 2026-06-14: P1-E Step 0 — official-doc sidecars regenerated from raw pdf-parse
+
+Finding: the born-digital "weak field recall" signal (labor `0.06`, overtime
+`0.19`, model-work-rules `0.05`) was a **stale-sidecar measurement artifact**, not
+an extractor weakness. The committed `*.document-ir.json` sidecars were small
+hand-authored stubs (May 20); `*.expected.json` was later broadened to the full
+real-document field list (Jun 11). The stable gate was grading a tiny stub
+against a large golden (labor `2/33 = 0.0606`, core `2/4 = 0.50` — exact match).
+
+Action: regenerated the 3 public MHLW sidecars from the mainline pdf-parse path
+(`extractPdf` → `buildDocumentIr`) via the new committed regenerator
+`pnpm fixtures:official-doc-pdf:sidecars`, matching the scan-pdf raw-baseline
+policy. `*.expected.json` files were left intact (document-level truth).
+`synthetic-employment-context-with-pii` is excluded (hand-authored PII
+value-retention fixture; declares `expectedTableCells: not_applicable`).
+
+Stable-gate before → after (the gate now measures the real extractor):
+
+| fixture | field | core | value | table | locator |
+|---|---|---|---|---|---|
+| labor notice | 0.06 → **1.00** | 0.50 → **1.00** | 1.00 → 0.33 | 1.00 → 0.00 | 0.21 → **0.87** |
+| overtime guide | 0.19 → **1.00** | 0.75 → **1.00** | 1.00 → 1.00 | 0.00 → 0.00 | 0.26 → **0.95** |
+| model work rules | 0.05 → **1.00** | 0.29 → **1.00** | 1.00 → 0.00 | 0.00 → 0.00 | 0.14 → **0.86** |
+
+Interpretation: field/core recall is now `1.0` everywhere — the extractor was
+never the field-recall problem. The real, now-honest born-digital gaps are:
+
+- **value precision** (labor `0.33`, model-work-rules `0.00`): label/value
+  linearized apart — the Step 2 / T3 label-value enrichment target.
+- **table cell recall** (`0` on all 3, despite `116`/`78` pdf-parse table
+  candidates on overtime/model-work-rules and `0` on labor): pdf-parse emits
+  table noise but not the specific legal-limit / rule cells — the Step 1 grounded
+  Gemini table-assist target.
+
+Deterministic CI blockers stay green (`emptyChunkCount=0`, `oversizedChunkCount=0`,
+`falseMaskedTokenCount=0`); the src adapter is one-chunk-per-block, skips empty
+blocks, and auto-splits oversized chunks, so large-doc regeneration is safe.
+Verification: `pnpm typecheck`, full `pnpm test` (897 green), `pnpm eval:p1d:quality -- --ci` exit 0.
+`heuristic.fixtures.test.ts` was updated to the measured reality (overtime
+`tableCandidates 3→116`, model `2→78`, labor `4→0` + `hasTableLocators false`).

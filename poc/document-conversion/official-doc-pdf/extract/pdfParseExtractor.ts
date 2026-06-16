@@ -60,7 +60,7 @@ export async function extractPdf(
     // create a fresh pdfjs document and transfer the *same* `data.buffer`,
     // which fails with `DataCloneError`. Awaiting in order primes the cache.
     const textResult = await parser.getText({ pageJoiner: '' });
-    const tableResult = await parser.getTable();
+    const tableResult = await parser.getTable().catch(() => ({ pages: [] }));
 
     const tablesByPage = new Map<number, ExtractedTable[]>();
     for (const page of tableResult.pages) {

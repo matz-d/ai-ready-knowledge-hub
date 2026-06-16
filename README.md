@@ -16,9 +16,9 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 
 ---
 
-## 現在のステータス (2026-06-12)
+## 現在のステータス (2026-06-13)
 
-**フェーズ**: Phase 4-UX MVP、NotebookLM source bundle（P1-A/B）、P1-F async full-coverage strategist、P1-C デモ docs 更新、**P1-D Extraction & Masking Quality Gate 成熟化**まで完了。stable eval（`pnpm eval:p1d:quality --ci`）は CI blocker、live masker drift check（`pnpm eval:p1d:masker-drift`）も合格証跡あり。次は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) の **P1-E**（大ファイル preflight / table fallback / chunk locator enrichment）へ進む。
+**フェーズ**: Phase 4-UX MVP、NotebookLM source bundle（P1-A/B）、P1-F async full-coverage strategist、P1-C デモ docs 更新、P1-D Extraction & Masking Quality Gate 成熟化、**P1-E first slice（PR #37-#41）**、official-doc-pdf Gemini table-assist eval hardening まで完了。stable eval（`pnpm eval:p1d:quality --ci`）は CI blocker、live masker drift check（`pnpm eval:p1d:masker-drift`）も合格証跡あり。次は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) の **P1-E+ scan-pdf quality floor 解消**と **official-doc-pdf table-assist production design**（cost / latency / timeout / page gating）と **P2 提出補強**（デモ polish / enqueue・SLO）を並行で進める。
 
 ### 完了済み
 
@@ -57,8 +57,10 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 - **P1-A/B NotebookLM source bundle**: API result に `sourceBundle.files`、`ContextPackageForm` に zip download 導線。delivery E2E 5/5 PASS。
 - **P1-F async full-coverage strategist**: batched strategist で truncation ゼロ。review 残タスクは [docs/p1-f-review-follow-up-tasks.md](docs/p1-f-review-follow-up-tasks.md)。
 - **P1-D Extraction & Masking Quality Gate**: schema v4、deterministic zero checks（CI blocker）、live Cloud DLP drift check。証跡は [docs/p1-d-evidence-2026-06-11.md](docs/p1-d-evidence-2026-06-11.md)。
+- **P1-E first slice（PR #37-#41）**: T1 large-file preflight + row-window / page-group・table-manifest、T2 official-PDF table fail-soft + scan visual table fallback、T3 scan label/value enrichment、scan OCR prompt guard + live drift workflow（`pnpm eval:scan-pdf:ocr-live-drift`）。方針・実装メモは [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md)。live drift 証跡は [docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md) / [docs/scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md)。
+- **P1-E official-doc-pdf Gemini table-assist eval hardening**: full Gemini 置換は採用せず、`pdf-parse` primary + grounded `pdf-parse+gemini-tables` を最善候補として compare-only で評価拡張。public PDF 由来の `*.table-assist.expected.json` を 3 件追加し、report に Gemini runtime（elapsed / page groups / calls / concurrency）と grounding rejected 行数・例を出す。production upload path と stable P1-D gate には未接続。実測は [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) / harness は [poc/document-conversion/official-doc-pdf/compare/README.md](poc/document-conversion/official-doc-pdf/compare/README.md)。
 
-### コードの位置 (P1-D 完了時点)
+### コードの位置 (P1-E first slice 完了時点)
 
 ```
 src/
@@ -205,11 +207,16 @@ sample-data/
 | `pnpm curator:ui` | Genkit dev UI で flow を観察 |
 | `pnpm security:audit` | 依存パッケージの脆弱性監査 |
 | `pnpm poc:conversion:official-doc-pdf [path]` | official-doc-pdf PoC runner |
+| `pnpm poc:conversion:official-doc-pdf:compare [path]` | official-doc-pdf converter compare harness（`pdf-parse` / MarkItDown / Gemini / grounded `pdf-parse+gemini-tables`、eval-only） |
 | `pnpm poc:conversion:slide-pdf [path]` | slide-pdf PoC runner（本線とは別） |
 | `pnpm poc:conversion:scan-pdf [path]` | scan-pdf PoC runner（本線とは別） |
 | `pnpm fixtures:scan-pdf:unmaskable:verify` | `synthetic-unmaskable-pii-scan.pdf` の本線 verifier 確認 |
 | `pnpm fixtures:scan-pdf:ocr-fail-closed` | ≤5 MiB OCR fail-closed 専用 fixture 生成 |
 | `pnpm fixtures:scan-pdf:invoice` | 合成請求書 scan fixture 生成 |
+| `pnpm eval:p1d:quality` | P1-D stable quality gate（`--ci` で deterministic zero checks） |
+| `pnpm eval:p1d:masker-drift` | P1-D live Cloud DLP masker drift check |
+| `pnpm eval:p1d:mixed-pdf` | large mixed PDF の local-only table/text 症状チェック |
+| `pnpm eval:scan-pdf:ocr-live-drift` | scan-pdf OCR prompt/model の live drift + PII direction check |
 
 ### schemaVersion 1 → 2 backfill 実行手順
 
@@ -248,6 +255,7 @@ sample-data/
 - **AuditEvent**: `document.import` / `document.reimport` / `document.export` / `document.convert` を `auditEvents/{eventId}` に append-only で記録。PDF 変換（subtype 2/3）では Vertex 成功時に `inferenceDestination` 必須。scan-pdf では `unmaskablePiiFindings.count` を記録。Firestore Security Rules で update/delete を拒否。
 - **PDF conversion feature flags**: `pdf-conversion-subtype-1/2/3` は Firestore `feature_flags` の allow-list + `expiresAt` で gating。同一 tenant で複数 subtype flag の同時 ON は 403。subtype 3 は **`m-grow-ai.com` のみ**（公開拡大は M6 後の別 decision）。
 - **scan-pdf fail-closed**: Gemini OCR timeout / quota / schema 失敗は pre-flight で HTTP 400。`document` / `chunk` / `document.convert` AuditEvent は作らない。本線 upload 上限は **5 MiB**（PoC runner の 30 MiB とは別）。
+- **official-doc-pdf Gemini table-assist は eval-only**: 現時点では production upload path へ接続しない。stable P1-D gate は live Gemini に依存させない。compare harness では public fixture と PII-free synthetic exception のみを既定で Gemini 実行対象にし、table-only rows は同一ページの `pdf-parse` text に grounded なものだけ merge する。
 - **Safety gate**: Strategist へ渡す前に決定論的ルールで chunk を除外（Restricted / blocked / masking 未完了 / クロス顧客機密）。LLM に依存しない。
 - **Masking defense-in-depth**: `requires_masking` chunk に `maskedText` がない場合、`toContextPackage` は raw text を fallback で出さず throw する。
 - **Cloud DLP**: Masker provider として導入済み。現在の固定値は `minLikelihood=POSSIBLE`、replacement token は `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-06-12-v1`。P1-D で synthetic masked name / My Number-like value 用の custom infoTypes を追加済み。未指定は `simple-rule` fallback、`MASKER_PROVIDER=cloud-dlp` で明示。
@@ -276,9 +284,9 @@ sample-data/
 
 直近の作業順は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) を正とする。背景となる未決論点・Ingest 起票の詳細は [docs/open-questions.md](docs/open-questions.md)（次フェーズ表 + §Ingest 拡張）。
 
-- **P1-E 大きなファイルの事前分割 / table fallback / locator enrichment**: [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) の T1 preflight 計測から着手。P1-D handoff（mixed PDF `table_failed`、scan invoice table loss、label/value 分断）を入力にする。
-- **P2 Phase 3-F**: 動画シナリオを source bundle 前提へ更新し、Dashboard refresh 後の画面に合わせる。
-- **P2 運用補強**: enqueue 二重 submit の挙動確認と簡易 SLO 1枚。
+- **P1-E+ scan-pdf quality floor 解消**: accepted live drift floor（`majorDriftCount=3`）を下げる。PII direction は green。sidecar 意図的 regeneration、public blank-form recall 改善、full live `--ci` gate 再評価。正本は [docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md)。
+- **official-doc-pdf table-assist production design**: compare では hybrid が public table-assist goldens を改善した一方、`mhlw-overtime-limit-guide` table-assist は約 4.5 分だった。production 接続前に cost / latency / timeout / page gating と better grounding を設計する。
+- **P2 提出補強（並行）**: Phase 3-F デモ polish（source bundle 前提・Dashboard refresh 後 UI）、enqueue 二重 submit の挙動確認と簡易 SLO 1枚。
 - **P3 cleanup / Ingest 判断**: 不要 CSS 削除、Drive folder bulk / local directory batch / standalone images の product 判断。
 
 ---
@@ -301,7 +309,9 @@ sample-data/
 | [docs/phase-3-h-2-direction.md](docs/phase-3-h-2-direction.md) | Phase 3-H-2 official-doc-pdf 本線統合（**完了**） |
 | [docs/phase-3-h-3-direction.md](docs/phase-3-h-3-direction.md) | Phase 3-H-3 slide-pdf / scan-pdf 本線統合（**完了** §8.3 M6） |
 | [docs/phase-3-h-3-scan-pdf-live-smoke.md](docs/phase-3-h-3-scan-pdf-live-smoke.md) | scan-pdf M6 dev tenant live smoke 証跡 |
+| [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) | P1-E large-file / table fallback / locator enrichment と Gemini table-assist eval 実測 |
 | [poc/document-conversion/README.md](poc/document-conversion/README.md) | Document Conversion PoC runner 一覧 |
+| [poc/document-conversion/official-doc-pdf/compare/README.md](poc/document-conversion/official-doc-pdf/compare/README.md) | official-doc-pdf converter compare harness と table-assist golden check |
 | [sample-data/document-conversion/README.md](sample-data/document-conversion/README.md) | conversion fixture inventory 正本 |
 | [docs/offering-model.md](docs/offering-model.md) | Managed SaaS / Dedicated / Customer-managed / Sanitized ingress の提供形態 |
 | [docs/iap-evidence/](docs/iap-evidence/) | Phase 3-D 完了証跡（screenshot + verification.txt） |
