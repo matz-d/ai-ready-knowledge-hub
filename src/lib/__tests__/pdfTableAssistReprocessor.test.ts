@@ -5,6 +5,11 @@ const {
   getFirestoreClientMock,
   docGetMock,
   docUpdateMock,
+  chunkCollectionGetMock,
+  chunkCollectionDocMock,
+  batchSetMock,
+  batchDeleteMock,
+  batchCommitMock,
   runTransactionMock,
   txUpdateMock,
   createFirestorePdfFlagReaderMock,
@@ -18,6 +23,11 @@ const {
   getFirestoreClientMock: vi.fn(),
   docGetMock: vi.fn(),
   docUpdateMock: vi.fn(),
+  chunkCollectionGetMock: vi.fn(),
+  chunkCollectionDocMock: vi.fn(),
+  batchSetMock: vi.fn(),
+  batchDeleteMock: vi.fn(),
+  batchCommitMock: vi.fn(),
   runTransactionMock: vi.fn(),
   txUpdateMock: vi.fn(),
   createFirestorePdfFlagReaderMock: vi.fn(),
@@ -171,9 +181,18 @@ beforeEach(() => {
       doc: vi.fn(() => ({
         get: docGetMock,
         update: docUpdateMock,
+        collection: vi.fn(() => ({
+          get: chunkCollectionGetMock,
+          doc: chunkCollectionDocMock,
+        })),
       })),
     })),
     runTransaction: runTransactionMock,
+    batch: vi.fn(() => ({
+      set: batchSetMock,
+      delete: batchDeleteMock,
+      commit: batchCommitMock,
+    })),
   });
   runTransactionMock.mockImplementation(
     async (
@@ -181,6 +200,9 @@ beforeEach(() => {
     ) => fn({ get: docGetMock, update: txUpdateMock })
   );
   installFirestoreDoc(baseFirestoreDoc);
+  chunkCollectionGetMock.mockResolvedValue({ docs: [] });
+  chunkCollectionDocMock.mockImplementation((id: string) => ({ id }));
+  batchCommitMock.mockResolvedValue(undefined);
 
   const flagReader = vi.fn(async (flagId: string) =>
     flagId === 'pdf-table-assist' || flagId === 'pdf-conversion-subtype-1'
@@ -262,6 +284,9 @@ describe('reprocessPdfWithTableAssist', () => {
     expect(orchestratePdfPathMock).toHaveBeenCalledWith(
       expect.objectContaining({
         docId: 'doc-1',
+        aiSafeStoragePath: expect.stringMatching(
+          /^masked\/doc-1\/reprocess-\d+-sample\.pdf$/
+        ),
         documentIr: tableAssistDocumentIr,
         content: 'PDF body text with table',
         curatorContent: 'PDF curator content',
@@ -287,6 +312,83 @@ describe('reprocessPdfWithTableAssist', () => {
         },
       })
     );
+  });
+
+  it('allows retrying a failed table-assist reprocess document', async () => {
+    installFirestoreDoc({
+      ...baseFirestoreDoc,
+      status: 'failed',
+      conversionError: {
+        message: 'transient conversion failure',
+        occurredAt: '2026-06-01T00:00:00.000Z',
+      },
+    });
+
+    const outcome = await reprocessPdfWithTableAssist({
+      docId: 'doc-1',
+      tenantId: 'tenant-1',
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(dispatchPdfExtractionMock).toHaveBeenCalled();
+    expect(orchestratePdfPathMock).toHaveBeenCalled();
+  });
+
+  it('restores document metadata and chunks when orchestration throws after mutation', async () => {
+    installFirestoreDoc({
+      ...baseFirestoreDoc,
+      status: 'ai_safe',
+      aiSafeStoragePath: 'masked/doc-1/sample.pdf',
+      conversionError: {
+        message: 'previous failure note',
+        occurredAt: '2026-06-01T00:00:00.000Z',
+      },
+    });
+    const oldChunkRef = { path: 'documents/doc-1/chunks/old-chunk' };
+    const newChunkRef = { path: 'documents/doc-1/chunks/new-chunk' };
+    chunkCollectionGetMock
+      .mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'old-chunk',
+            data: () => ({ id: 'old-chunk', text: 'old safe text' }),
+            ref: oldChunkRef,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'new-chunk',
+            data: () => ({ id: 'new-chunk', text: 'partial new text' }),
+            ref: newChunkRef,
+          },
+        ],
+      });
+    orchestratePdfPathMock.mockRejectedValue(new Error('transient write failure'));
+
+    await expect(
+      reprocessPdfWithTableAssist({
+        docId: 'doc-1',
+        tenantId: 'tenant-1',
+      })
+    ).rejects.toThrow('transient write failure');
+
+    expect(docUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'ai_safe',
+        aiSafeStoragePath: 'masked/doc-1/sample.pdf',
+        conversionError: expect.objectContaining({
+          message: 'previous failure note',
+        }),
+      })
+    );
+    expect(batchDeleteMock).toHaveBeenCalledWith(newChunkRef);
+    expect(batchSetMock).toHaveBeenCalledWith(
+      { id: 'old-chunk' },
+      { id: 'old-chunk', text: 'old safe text' }
+    );
+    expect(docUpdateMock).toHaveBeenCalledWith({ reprocessing: false });
   });
 
   it('clears stale chunks when the reprocessed document becomes restricted', async () => {

@@ -9,6 +9,10 @@ import {
   PDF_EXTRACTION_FAILED_MESSAGE,
   PDF_UPLOAD_BETA_DISABLED_MESSAGE,
 } from '../../../../../lib/extractors/pdfExtractionDispatcher';
+import {
+  CuratorPhaseError,
+  MaskerPhaseError,
+} from '../../../../../lib/uploadOrchestrator';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -88,11 +92,29 @@ export async function POST(
     return NextResponse.json({ error: 'tenant_required' }, { status: 401 });
   }
 
-  const outcome = await reprocessPdfWithTableAssist({
-    docId,
-    tenantId: auditContext.tenantId,
-    auditContext,
-  });
+  let outcome: Awaited<ReturnType<typeof reprocessPdfWithTableAssist>>;
+  try {
+    outcome = await reprocessPdfWithTableAssist({
+      docId,
+      tenantId: auditContext.tenantId,
+      auditContext,
+    });
+  } catch (error) {
+    console.error('[documents/table-assist] reprocess failed', error);
+    if (error instanceof CuratorPhaseError) {
+      return NextResponse.json(
+        { error: 'curator_failed', docId: error.docId },
+        { status: 500 }
+      );
+    }
+    if (error instanceof MaskerPhaseError) {
+      return NextResponse.json(
+        { error: 'masker_failed', docId: error.docId },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json({ error: 'reprocess_failed' }, { status: 502 });
+  }
 
   if (!outcome.ok) {
     return failureResponse(outcome.failure);

@@ -1,9 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { auditActorFromRequestMock, reprocessPdfWithTableAssistMock } =
+const {
+  auditActorFromRequestMock,
+  reprocessPdfWithTableAssistMock,
+  CuratorPhaseErrorMock,
+  MaskerPhaseErrorMock,
+} =
   vi.hoisted(() => ({
     auditActorFromRequestMock: vi.fn(),
     reprocessPdfWithTableAssistMock: vi.fn(),
+    CuratorPhaseErrorMock: class CuratorPhaseErrorMock extends Error {
+      docId: string;
+      constructor(docId: string, cause: unknown) {
+        super(cause instanceof Error ? cause.message : String(cause));
+        this.name = 'CuratorPhaseError';
+        this.docId = docId;
+      }
+    },
+    MaskerPhaseErrorMock: class MaskerPhaseErrorMock extends Error {
+      docId: string;
+      constructor(docId: string, cause: unknown) {
+        super(cause instanceof Error ? cause.message : String(cause));
+        this.name = 'MaskerPhaseError';
+        this.docId = docId;
+      }
+    },
   }));
 
 vi.mock('../../../../../../lib/audit/auditEvent', () => ({
@@ -12,6 +33,11 @@ vi.mock('../../../../../../lib/audit/auditEvent', () => ({
 
 vi.mock('../../../../../../lib/pdfTableAssistReprocessor', () => ({
   reprocessPdfWithTableAssist: reprocessPdfWithTableAssistMock,
+}));
+
+vi.mock('../../../../../../lib/uploadOrchestrator', () => ({
+  CuratorPhaseError: CuratorPhaseErrorMock,
+  MaskerPhaseError: MaskerPhaseErrorMock,
 }));
 
 vi.mock('../../../../../../lib/extractors/pdfExtractionDispatcher', () => ({
@@ -150,6 +176,53 @@ describe('POST /api/documents/[docId]/table-assist', () => {
     expect(response.status).toBe(409);
     await expect(parseJson(response)).resolves.toEqual({
       error: 'reprocess_in_progress',
+    });
+  });
+
+  it('maps curator phase throws to a structured 500', async () => {
+    reprocessPdfWithTableAssistMock.mockRejectedValue(
+      new CuratorPhaseErrorMock('doc-1', new Error('curator failed'))
+    );
+
+    const response = await POST(request(), {
+      params: Promise.resolve({ docId: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(500);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'curator_failed',
+      docId: 'doc-1',
+    });
+  });
+
+  it('maps masker phase throws to a structured 500', async () => {
+    reprocessPdfWithTableAssistMock.mockRejectedValue(
+      new MaskerPhaseErrorMock('doc-1', new Error('masker failed'))
+    );
+
+    const response = await POST(request(), {
+      params: Promise.resolve({ docId: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(500);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'masker_failed',
+      docId: 'doc-1',
+    });
+  });
+
+  it('maps unexpected reprocess throws to a structured 502', async () => {
+    reprocessPdfWithTableAssistMock.mockRejectedValue(
+      new Error('unexpected failure')
+    );
+
+    const response = await POST(request(), {
+      params: Promise.resolve({ docId: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(502);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'reprocess_failed',
     });
   });
 });

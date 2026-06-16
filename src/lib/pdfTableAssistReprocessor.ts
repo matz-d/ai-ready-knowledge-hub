@@ -1,4 +1,9 @@
-import type { DocumentReference, Firestore } from '@google-cloud/firestore';
+import type {
+  DocumentData,
+  DocumentReference,
+  Firestore,
+  QueryDocumentSnapshot,
+} from '@google-cloud/firestore';
 import { modelId } from '../agents/_shared/genkitClient';
 import { buildPdfCuratorContent } from './extractors/pdfExtractionDispatcher';
 import {
@@ -27,11 +32,15 @@ import {
 import { orchestratePdfPath } from './uploadOrchestrator/pdfPath';
 import type { TableAssistSummary } from './extractors/officialDocPdfTableAssist';
 
+const CHUNKS_SUBCOLLECTION = 'chunks';
+const FIRESTORE_BATCH_LIMIT = 500;
+
 const REPROCESSABLE_STATUSES = new Set<FirestoreDocumentStatus>([
   'curated',
   'ai_safe',
   'restricted',
   'blocked',
+  'failed',
 ]);
 
 /**
@@ -70,6 +79,119 @@ function isUploadedPdf(doc: FirestoreDocument): boolean {
 
 function buildAiSafeStoragePath(docId: string, fileName: string): string {
   return `masked/${docId}/${sanitizeOriginalFileName(fileName)}`;
+}
+
+function buildReprocessAiSafeStoragePath(docId: string, fileName: string): string {
+  return `masked/${docId}/reprocess-${Date.now()}-${sanitizeOriginalFileName(
+    fileName
+  )}`;
+}
+
+type ReprocessDocumentSnapshot = Pick<
+  FirestoreDocument,
+  | 'status'
+  | 'aiSafeStoragePath'
+  | 'documentType'
+  | 'businessDomain'
+  | 'sensitivity'
+  | 'freshness'
+  | 'isAuthoritativeCandidate'
+  | 'aiUsePolicy'
+  | 'sensitivitySource'
+  | 'originalCuratorSensitivity'
+  | 'sensitivityReason'
+  | 'restrictionSource'
+  | 'maskingPending'
+  | 'curator'
+  | 'curatorError'
+  | 'masker'
+  | 'maskerError'
+  | 'conversionError'
+> & {
+  latestConversionEvalId: string | null;
+};
+
+type StoredChunkSnapshot = {
+  id: string;
+  data: DocumentData;
+};
+
+function reprocessDocumentSnapshot(doc: FirestoreDocument): ReprocessDocumentSnapshot {
+  return {
+    status: doc.status,
+    aiSafeStoragePath: doc.aiSafeStoragePath,
+    documentType: doc.documentType,
+    businessDomain: doc.businessDomain,
+    sensitivity: doc.sensitivity,
+    freshness: doc.freshness,
+    isAuthoritativeCandidate: doc.isAuthoritativeCandidate,
+    aiUsePolicy: doc.aiUsePolicy,
+    sensitivitySource: doc.sensitivitySource,
+    originalCuratorSensitivity: doc.originalCuratorSensitivity,
+    sensitivityReason: doc.sensitivityReason,
+    restrictionSource: doc.restrictionSource ?? null,
+    maskingPending: doc.maskingPending ?? null,
+    curator: doc.curator,
+    curatorError: doc.curatorError,
+    masker: doc.masker,
+    maskerError: doc.maskerError,
+    conversionError: doc.conversionError ?? null,
+    latestConversionEvalId: doc.latestConversionEvalId ?? null,
+  };
+}
+
+async function readChunkSnapshot(
+  docRef: DocumentReference
+): Promise<StoredChunkSnapshot[]> {
+  const snapshot = await docRef.collection(CHUNKS_SUBCOLLECTION).get();
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    data: doc.data(),
+  }));
+}
+
+async function deleteChunkDocs(
+  db: Firestore,
+  docs: QueryDocumentSnapshot[]
+): Promise<void> {
+  for (let i = 0; i < docs.length; i += FIRESTORE_BATCH_LIMIT) {
+    const batch = db.batch();
+    for (const doc of docs.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
+      batch.delete(doc.ref);
+    }
+    await batch.commit();
+  }
+}
+
+async function restoreChunkSnapshot(
+  db: Firestore,
+  docRef: DocumentReference,
+  chunks: StoredChunkSnapshot[]
+): Promise<void> {
+  const chunkCollection = docRef.collection(CHUNKS_SUBCOLLECTION);
+  const current = await chunkCollection.get();
+  await deleteChunkDocs(db, current.docs);
+
+  for (let i = 0; i < chunks.length; i += FIRESTORE_BATCH_LIMIT) {
+    const batch = db.batch();
+    for (const chunk of chunks.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
+      batch.set(chunkCollection.doc(chunk.id), chunk.data);
+    }
+    await batch.commit();
+  }
+}
+
+async function restoreReprocessSnapshot(args: {
+  db: Firestore;
+  docRef: DocumentReference;
+  doc: ReprocessDocumentSnapshot;
+  chunks: StoredChunkSnapshot[];
+}): Promise<void> {
+  await args.docRef.update({
+    ...args.doc,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  await restoreChunkSnapshot(args.db, args.docRef, args.chunks);
 }
 
 type ReprocessLeaseResult =
@@ -214,7 +336,12 @@ export async function reprocessPdfWithTableAssist(args: {
     return { ok: false, failure: leaseFailure(lease) };
   }
 
+  const rollbackDoc = reprocessDocumentSnapshot(doc);
+  let rollbackChunks: StoredChunkSnapshot[] | null = null;
+
   try {
+    rollbackChunks = await readChunkSnapshot(docRef);
+
     const buffer = await readRawObject(doc.storagePath);
     if (hashContentSha256(buffer) !== doc.contentSha256) {
       return { ok: false, failure: { code: 'raw_content_hash_mismatch' } };
@@ -245,8 +372,9 @@ export async function reprocessPdfWithTableAssist(args: {
 
     const previousAiSafeStoragePath = doc.aiSafeStoragePath;
     const aiSafeStoragePath =
-      previousAiSafeStoragePath ??
-      buildAiSafeStoragePath(args.docId, doc.fileName);
+      previousAiSafeStoragePath === null
+        ? buildAiSafeStoragePath(args.docId, doc.fileName)
+        : buildReprocessAiSafeStoragePath(args.docId, doc.fileName);
 
     const result = await orchestratePdfPath({
       docRef,
@@ -273,6 +401,13 @@ export async function reprocessPdfWithTableAssist(args: {
     if (previousAiSafeStoragePath && result.kind !== 'ai_safe') {
       await safeDeleteMaskedObject(previousAiSafeStoragePath);
     }
+    if (
+      previousAiSafeStoragePath &&
+      result.kind === 'ai_safe' &&
+      result.aiSafeStoragePath !== previousAiSafeStoragePath
+    ) {
+      await safeDeleteMaskedObject(previousAiSafeStoragePath);
+    }
 
     return {
       ok: true,
@@ -290,6 +425,16 @@ export async function reprocessPdfWithTableAssist(args: {
         },
       },
     };
+  } catch (error) {
+    if (rollbackChunks !== null) {
+      await restoreReprocessSnapshot({
+        db,
+        docRef,
+        doc: rollbackDoc,
+        chunks: rollbackChunks,
+      });
+    }
+    throw error;
   } finally {
     await releaseReprocessLease(docRef);
   }
