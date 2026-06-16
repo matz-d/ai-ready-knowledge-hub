@@ -80,6 +80,10 @@ function buildReprocessAiSafeStoragePath(docId: string, fileName: string): strin
   )}`;
 }
 
+function buildReprocessDocumentIrRevisionId(leaseId: string): string {
+  return `reprocess-${leaseId}`;
+}
+
 type ReprocessDocumentSnapshot = Pick<
   FirestoreDocument,
   | 'status'
@@ -370,6 +374,7 @@ export async function reprocessPdfWithTableAssist(args: {
       previousAiSafeStoragePath === null
         ? buildAiSafeStoragePath(args.docId, doc.fileName)
         : buildReprocessAiSafeStoragePath(args.docId, doc.fileName);
+    const documentIrRevisionId = buildReprocessDocumentIrRevisionId(lease.leaseId);
 
     const result = await orchestratePdfPath({
       docRef,
@@ -385,6 +390,7 @@ export async function reprocessPdfWithTableAssist(args: {
       storagePath: doc.storagePath,
       aiSafeStoragePath,
       documentIr: extraction.documentIr,
+      documentIrRevisionId,
       auditContext: args.auditContext,
       conversion: extraction.conversion,
     });

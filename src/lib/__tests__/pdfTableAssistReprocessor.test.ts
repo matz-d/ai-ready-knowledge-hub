@@ -302,6 +302,7 @@ describe('reprocessPdfWithTableAssist', () => {
         aiSafeStoragePath: expect.stringMatching(
           /^masked\/doc-1\/reprocess-\d+-sample\.pdf$/
         ),
+        documentIrRevisionId: expect.stringMatching(/^reprocess-[0-9a-f-]+$/),
         documentIr: tableAssistDocumentIr,
         content: 'PDF body text with table',
         curatorContent: 'PDF curator content',
