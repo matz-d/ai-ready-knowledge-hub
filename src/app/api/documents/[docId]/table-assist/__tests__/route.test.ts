@@ -136,4 +136,20 @@ describe('POST /api/documents/[docId]/table-assist', () => {
       status: 'curating',
     });
   });
+
+  it('maps a held reprocess lease to 409 reprocess_in_progress', async () => {
+    reprocessPdfWithTableAssistMock.mockResolvedValue({
+      ok: false,
+      failure: { code: 'reprocess_in_progress' },
+    });
+
+    const response = await POST(request(), {
+      params: Promise.resolve({ docId: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'reprocess_in_progress',
+    });
+  });
 });

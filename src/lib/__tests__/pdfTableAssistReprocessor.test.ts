@@ -5,6 +5,8 @@ const {
   getFirestoreClientMock,
   docGetMock,
   docUpdateMock,
+  runTransactionMock,
+  txUpdateMock,
   createFirestorePdfFlagReaderMock,
   dispatchPdfExtractionMock,
   buildPdfCuratorContentMock,
@@ -16,6 +18,8 @@ const {
   getFirestoreClientMock: vi.fn(),
   docGetMock: vi.fn(),
   docUpdateMock: vi.fn(),
+  runTransactionMock: vi.fn(),
+  txUpdateMock: vi.fn(),
   createFirestorePdfFlagReaderMock: vi.fn(),
   dispatchPdfExtractionMock: vi.fn(),
   buildPdfCuratorContentMock: vi.fn(),
@@ -31,6 +35,7 @@ vi.mock('../../agents/_shared/genkitClient', () => ({
 
 vi.mock('../firestore', () => ({
   getFirestoreClient: getFirestoreClientMock,
+  FieldValue: { serverTimestamp: () => '__server_timestamp__' },
 }));
 
 vi.mock('../extractors/pdfExtractionDispatcher', () => ({
@@ -168,7 +173,13 @@ beforeEach(() => {
         update: docUpdateMock,
       })),
     })),
+    runTransaction: runTransactionMock,
   });
+  runTransactionMock.mockImplementation(
+    async (
+      fn: (tx: { get: typeof docGetMock; update: typeof txUpdateMock }) => unknown
+    ) => fn({ get: docGetMock, update: txUpdateMock })
+  );
   installFirestoreDoc(baseFirestoreDoc);
 
   const flagReader = vi.fn(async (flagId: string) =>
@@ -312,5 +323,88 @@ describe('reprocessPdfWithTableAssist', () => {
 
     expect(outcome.ok).toBe(true);
     expect(clearChunksForDocMock).toHaveBeenCalledWith('doc-1');
+  });
+
+  it('rejects non official-doc-pdf before acquiring a lease', async () => {
+    installFirestoreDoc({ ...baseFirestoreDoc, sourceSubtype: 'scan-pdf' });
+
+    const outcome = await reprocessPdfWithTableAssist({
+      docId: 'doc-1',
+      tenantId: 'tenant-1',
+    });
+
+    expect(outcome).toEqual({
+      ok: false,
+      failure: { code: 'not_official_doc_pdf' },
+    });
+    expect(runTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects with reprocess_in_progress when a fresh lease is held', async () => {
+    installFirestoreDoc({
+      ...baseFirestoreDoc,
+      reprocessing: true,
+      reprocessingStartedAt: new Date().toISOString(),
+    });
+
+    const outcome = await reprocessPdfWithTableAssist({
+      docId: 'doc-1',
+      tenantId: 'tenant-1',
+    });
+
+    expect(outcome).toEqual({
+      ok: false,
+      failure: { code: 'reprocess_in_progress' },
+    });
+    expect(txUpdateMock).not.toHaveBeenCalled();
+    expect(dispatchPdfExtractionMock).not.toHaveBeenCalled();
+    expect(orchestratePdfPathMock).not.toHaveBeenCalled();
+  });
+
+  it('steals a stale lease past the TTL and proceeds', async () => {
+    installFirestoreDoc({
+      ...baseFirestoreDoc,
+      reprocessing: true,
+      // Far older than REPROCESS_LEASE_TTL_MS (15 min) relative to now.
+      reprocessingStartedAt: '2026-06-01T00:00:00.000Z',
+    });
+
+    const outcome = await reprocessPdfWithTableAssist({
+      docId: 'doc-1',
+      tenantId: 'tenant-1',
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(txUpdateMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ reprocessing: true })
+    );
+    expect(dispatchPdfExtractionMock).toHaveBeenCalled();
+  });
+
+  it('releases the lease after a successful reprocess', async () => {
+    const outcome = await reprocessPdfWithTableAssist({
+      docId: 'doc-1',
+      tenantId: 'tenant-1',
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(docUpdateMock).toHaveBeenCalledWith({ reprocessing: false });
+  });
+
+  it('returns raw_content_hash_mismatch and still releases the lease', async () => {
+    readRawObjectMock.mockResolvedValue(Buffer.from('different bytes entirely'));
+
+    const outcome = await reprocessPdfWithTableAssist({
+      docId: 'doc-1',
+      tenantId: 'tenant-1',
+    });
+
+    expect(outcome).toEqual({
+      ok: false,
+      failure: { code: 'raw_content_hash_mismatch' },
+    });
+    expect(dispatchPdfExtractionMock).not.toHaveBeenCalled();
+    expect(docUpdateMock).toHaveBeenCalledWith({ reprocessing: false });
   });
 });

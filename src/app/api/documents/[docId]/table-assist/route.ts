@@ -37,6 +37,11 @@ function failureResponse(failure: PdfTableAssistReprocessFailure): NextResponse 
         { error: 'raw_content_hash_mismatch' },
         { status: 409 }
       );
+    case 'reprocess_in_progress':
+      return NextResponse.json(
+        { error: 'reprocess_in_progress' },
+        { status: 409 }
+      );
     case 'table_assist_flag_disabled':
       return NextResponse.json(
         { error: 'pdf_table_assist_disabled' },

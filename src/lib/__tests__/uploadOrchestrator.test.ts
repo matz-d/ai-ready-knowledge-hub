@@ -918,7 +918,10 @@ describe('orchestrateUploadProcessing', () => {
         ([payload]) =>
           payload &&
           typeof payload === 'object' &&
-          (payload as Record<string, unknown>).conversionError !== undefined
+          // A real conversion failure carries a truthy error object; the curator
+          // phase's idempotent `conversionError: null` reset must not count.
+          (payload as Record<string, unknown>).conversionError !== undefined &&
+          (payload as Record<string, unknown>).conversionError !== null
       );
       expect(conversionFailureCall).toBeUndefined();
     });
@@ -958,7 +961,10 @@ describe('orchestrateUploadProcessing', () => {
         ([payload]) =>
           payload &&
           typeof payload === 'object' &&
-          (payload as Record<string, unknown>).conversionError !== undefined
+          // A real conversion failure carries a truthy error object; the curator
+          // phase's idempotent `conversionError: null` reset must not count.
+          (payload as Record<string, unknown>).conversionError !== undefined &&
+          (payload as Record<string, unknown>).conversionError !== null
       );
       expect(conversionFailureCall).toBeUndefined();
     });
