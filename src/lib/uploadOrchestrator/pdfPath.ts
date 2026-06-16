@@ -131,6 +131,7 @@ async function runPdfCuratorPhase(args: {
 
     await args.docRef.update({
       status: nextStatus,
+      aiSafeStoragePath: null,
       maskingPending: maskingPending ?? null,
       updatedAt: FieldValue.serverTimestamp(),
       documentType: result.documentType,
@@ -142,6 +143,7 @@ async function runPdfCuratorPhase(args: {
       sensitivitySource: 'curator',
       originalCuratorSensitivity: null,
       sensitivityReason: null,
+      restrictionSource: null,
       curator: {
         documentType: result.documentType,
         businessDomain: result.businessDomain,
@@ -154,6 +156,9 @@ async function runPdfCuratorPhase(args: {
         modelId: curatorModelId,
       },
       curatorError: null,
+      masker: null,
+      maskerError: null,
+      conversionError: null,
     });
 
     return { result, completedAt };
@@ -184,9 +189,13 @@ export async function orchestratePdfPath(args: {
   storagePath: string;
   aiSafeStoragePath: string;
   documentIr: DocumentIr;
+  documentIrRevisionId?: string;
   auditContext?: OrchestrateAuditContext;
   conversion: PdfConversionAudit;
 }): Promise<OrchestrateResult> {
+  const documentIrRevisionId =
+    args.documentIrRevisionId ?? DOCUMENT_IR_GCS_VERSION;
+
   // Pre-flight: catch extractor/orchestrator wiring bugs (Vertex converter
   // missing inferenceDestination, or pdf-parse with one) before any chunks /
   // DocumentIR / audit are persisted. The same invariant is enforced again at
@@ -274,6 +283,7 @@ export async function orchestratePdfPath(args: {
     await writeDocumentIrSnapshot({
       bucketName,
       docId: args.docId,
+      revisionId: documentIrRevisionId,
       documentIr: args.documentIr,
     });
 
@@ -294,6 +304,7 @@ export async function orchestratePdfPath(args: {
         displayName: args.displayName,
         content: args.content,
         documentIr: args.documentIr,
+        revisionId: documentIrRevisionId,
         documentSensitivity: curatorOutput.result.sensitivity,
         chunksForEval: chunks,
       });
@@ -327,6 +338,7 @@ export async function orchestratePdfPath(args: {
       displayName: args.displayName,
       content: args.content,
       documentIr: args.documentIr,
+      revisionId: documentIrRevisionId,
       documentSensitivity: curatorOutput.result.sensitivity,
     });
 
@@ -446,6 +458,7 @@ async function persistPdfHealthStageEval(args: {
   displayName: string;
   content: string;
   documentIr: DocumentIr;
+  revisionId: string;
   documentSensitivity: CuratorOutputResult['sensitivity'];
   chunksForEval?: ReturnType<typeof documentIrToKnowledgeChunks>;
 }): Promise<{ evalStatus: AuditConversionEvalStatus }> {
@@ -475,7 +488,7 @@ async function persistPdfHealthStageEval(args: {
     );
     const written = await conversionEvalStorage.appendConversionEval({
       docId: args.docId,
-      revisionId: DOCUMENT_IR_GCS_VERSION,
+      revisionId: args.revisionId,
       stage: 'health',
       result: evalResult,
     });

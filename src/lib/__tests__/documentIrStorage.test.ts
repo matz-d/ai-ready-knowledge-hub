@@ -78,6 +78,12 @@ describe('documentIrStoragePath', () => {
     );
   });
 
+  it('returns raw/{docId}/document-ir/{revisionId}.json for custom revisions', () => {
+    expect(documentIrStoragePath('doc-1', 'reprocess-lease-1')).toBe(
+      'raw/doc-1/document-ir/reprocess-lease-1.json'
+    );
+  });
+
   it('embeds the docId verbatim', () => {
     const docId = '00000000-0000-4000-8000-000000000001';
     expect(documentIrStoragePath(docId)).toContain(docId);
@@ -92,6 +98,12 @@ describe('documentIrStoragePath', () => {
   it('throws for a whitespace-only docId', () => {
     expect(() => documentIrStoragePath('   ')).toThrow(
       'documentIrStoragePath: docId must be non-empty'
+    );
+  });
+
+  it('throws for an empty revisionId', () => {
+    expect(() => documentIrStoragePath('doc-1', '')).toThrow(
+      'documentIrStoragePath: revisionId must be non-empty'
     );
   });
 });
@@ -156,6 +168,23 @@ describe('writeDocumentIrSnapshot', () => {
     });
 
     expect(path).toBe('raw/doc-1/document-ir/v1.json');
+  });
+
+  it('writes custom revision snapshots without overwriting v1', async () => {
+    const { storage, fileSpy } = makeFakeStorage();
+
+    const path = await writeDocumentIrSnapshot({
+      bucketName: 'test-bucket',
+      docId: 'doc-1',
+      revisionId: 'reprocess-lease-1',
+      documentIr: MINIMAL_DOCUMENT_IR,
+      storage,
+    });
+
+    expect(path).toBe('raw/doc-1/document-ir/reprocess-lease-1.json');
+    expect(fileSpy).toHaveBeenCalledWith(
+      'raw/doc-1/document-ir/reprocess-lease-1.json'
+    );
   });
 
   it('validates the DocumentIR before writing — invalid IR throws without touching storage', async () => {
