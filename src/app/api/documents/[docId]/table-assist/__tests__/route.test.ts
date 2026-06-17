@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   auditActorFromRequestMock,
@@ -47,10 +47,33 @@ vi.mock('../../../../../../lib/extractors/pdfExtractionDispatcher', () => ({
 }));
 
 import { POST } from '../route';
+import { POST as POST_WORKER } from '../run/route';
 
 function request(): Request {
   return new Request('http://localhost/api/documents/doc-1/table-assist', {
     method: 'POST',
+  });
+}
+
+function workerRequest(
+  body: Record<string, unknown> = {
+    docId: 'doc-1',
+    tenantId: 'tenant-1',
+    actor: {
+      userId: 'user-1',
+      ipAddress: '127.0.0.1',
+      userAgent: 'vitest',
+    },
+  },
+  headers?: Record<string, string>
+): Request {
+  return new Request('http://localhost/api/documents/doc-1/table-assist/run', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(headers ?? {}),
+    },
+    body: JSON.stringify(body),
   });
 }
 
@@ -60,6 +83,8 @@ async function parseJson(response: Response): Promise<Record<string, unknown>> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  delete process.env.PDF_TABLE_ASSIST_WORKER_TOKEN;
+  delete process.env.CONTEXT_PACKAGE_JOB_TOKEN;
   auditActorFromRequestMock.mockReturnValue({
     tenantId: 'tenant-1',
     actor: {
@@ -103,6 +128,10 @@ beforeEach(() => {
       },
     },
   });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('POST /api/documents/[docId]/table-assist', () => {
@@ -224,5 +253,100 @@ describe('POST /api/documents/[docId]/table-assist', () => {
     await expect(parseJson(response)).resolves.toEqual({
       error: 'reprocess_failed',
     });
+  });
+});
+
+describe('POST /api/documents/[docId]/table-assist/run', () => {
+  it('runs table-assist reprocess with the tenant context from the Cloud Tasks body', async () => {
+    const response = await POST_WORKER(workerRequest(), {
+      params: Promise.resolve({ docId: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(parseJson(response)).resolves.toEqual(
+      expect.objectContaining({
+        outcome: 'reprocessed',
+        docId: 'doc-1',
+        tableAssist: expect.objectContaining({ blocksAdded: 1 }),
+      })
+    );
+    expect(reprocessPdfWithTableAssistMock).toHaveBeenCalledWith({
+      docId: 'doc-1',
+      tenantId: 'tenant-1',
+      auditContext: expect.objectContaining({
+        tenantId: 'tenant-1',
+        actor: expect.objectContaining({ userId: 'user-1' }),
+      }),
+    });
+  });
+
+  it('rejects a bad worker token when configured', async () => {
+    process.env.PDF_TABLE_ASSIST_WORKER_TOKEN = 'secret';
+
+    const response = await POST_WORKER(
+      workerRequest(undefined, { 'x-pdf-table-assist-worker-token': 'wrong' }),
+      { params: Promise.resolve({ docId: 'doc-1' }) }
+    );
+
+    expect(response.status).toBe(401);
+    expect(reprocessPdfWithTableAssistMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts the configured worker token', async () => {
+    process.env.PDF_TABLE_ASSIST_WORKER_TOKEN = 'secret';
+
+    const response = await POST_WORKER(
+      workerRequest(undefined, { 'x-pdf-table-assist-worker-token': 'secret' }),
+      { params: Promise.resolve({ docId: 'doc-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(reprocessPdfWithTableAssistMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 503 for reprocess_in_progress so Cloud Tasks retries', async () => {
+    reprocessPdfWithTableAssistMock.mockResolvedValue({
+      ok: false,
+      failure: { code: 'reprocess_in_progress' },
+    });
+
+    const response = await POST_WORKER(workerRequest(), {
+      params: Promise.resolve({ docId: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(503);
+    await expect(parseJson(response)).resolves.toEqual({
+      outcome: 'skipped',
+      failure: { code: 'reprocess_in_progress' },
+    });
+  });
+
+  it('returns 200 for terminal structured skips', async () => {
+    reprocessPdfWithTableAssistMock.mockResolvedValue({
+      ok: false,
+      failure: { code: 'not_official_doc_pdf' },
+    });
+
+    const response = await POST_WORKER(workerRequest(), {
+      params: Promise.resolve({ docId: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(parseJson(response)).resolves.toEqual({
+      outcome: 'skipped',
+      failure: { code: 'not_official_doc_pdf' },
+    });
+  });
+
+  it('rejects a mismatched body docId', async () => {
+    const response = await POST_WORKER(workerRequest({ docId: 'other-doc' }), {
+      params: Promise.resolve({ docId: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'doc_id_mismatch',
+    });
+    expect(reprocessPdfWithTableAssistMock).not.toHaveBeenCalled();
   });
 });

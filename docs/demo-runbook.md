@@ -2,9 +2,29 @@
 
 Upload / Google Workspace import → Firestore/GCS → Inventory → Context Package → source bundle export を再現するための実行手順です。
 
-現時点の提出デモでは、PDF / CSV / XLSX / Google Sheets / Google Docs の主要 ingest、Phase 4-UX の purpose-driven candidate selection、Safety Review、Preview acknowledgement、async Context Package job、NotebookLM 用 source bundle が実装済みです。**Google Sheets** は [Phase 3-A](phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。
+現時点の提出デモでは、PDF / CSV / XLSX / Google Sheets / Google Docs の主要 ingest、`/upload` の複数ファイルキュー、Phase 4-UX の purpose-driven candidate selection、Safety Review、Preview acknowledgement、async Context Package job、NotebookLM 用 source bundle が実装済みです。**Google Sheets** は [Phase 3-A](phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。
 
 デモ説明では、標準 profile は **`cloud-managed`** です。管理されたクラウド境界で文書を受け取り、Cloud DLP + Masker で安全化し、目的にひもづいた Context Package として NotebookLM / Gemini / RAG に渡す前段を作ります。NotebookLM には単一 `.md` ではなく、Context Package result panel から取得できる **source bundle zip** の全ファイルを source 追加します。
+
+## 提出デモの最短撮影順
+
+3分動画やライブ説明では、細かいセットアップではなく次の画面順を正にします。
+
+| 順 | 画面 | 見せること |
+|---:|---|---|
+| 1 | `/upload` | `sample-data/accounting-office/` の 5〜7 件を複数選択し、ファイルごとの処理状況を見せる |
+| 2 | `/` | Pipeline Funnel、KPI、文書一覧で AI利用可 / マスキング済み / 保護中を確認する |
+| 3 | `/context-package` | purpose を入力し、候補選択 → Safety Review → Preview acknowledgement を見せる |
+| 4 | result panel | Markdown copy/download と NotebookLM 用 bundle download の2導線を見せる |
+| 5 | NotebookLM | bundle の全ファイルを source 追加し、included / excluded / missing / questions の4分類が効くことを短く示す |
+
+撮影用 purpose:
+
+```text
+新人スタッフ向けに、月次の給与計算業務を安全に学べるAIを作りたい
+```
+
+ライブで処理時間が長くなる場合は、手順 1 で少数ファイルだけ実行し、手順 2 以降は投入済み corpus から始めてよいです。その場合も「通常 UI は固定 fixture を読まず、Firestore / GCS の実データを見ている」と説明します。
 
 ## 0. デモで伝える Processing Boundary
 
@@ -129,13 +149,28 @@ pnpm dev
 
 ## 4. Upload UI で投入する推奨サンプル
 
-`sample-data/accounting-office/` から以下を使うと挙動差を確認しやすいです。
+`sample-data/accounting-office/` から以下を使うと挙動差を確認しやすいです。`/upload` は複数ファイル選択に対応していますが、サーバ側は従来の `POST /api/documents` を1ファイルずつ通します。撮影では 5〜7 件に絞るとテンポが崩れません。
 
 - `給与計算チェックリスト.md`（curated 想定）
+- `料金表_2026.csv`（給与・料金系の structured source として見せやすい）
+- `就業規則テンプレート.md`（Internal / direct 寄りのテンプレート）
+- `年末調整_案内文.txt`（案内文・現行資料）
 - `顧客対応メモ_書式.md`（ai_safe 想定）
 - `顧問契約書_実案件サンプル.txt`（restricted になり得る）
 - `古い料金表_2023.csv`（運用条件により blocked / review 寄りになり得る）
 - **`.xlsx`**（Excel）も Phase 2 の upload 対象。料金表・顧客一覧などをシート単位で投入し、`chunks:regenerate` では CSV と同様に spreadsheet chunk 化できる
+
+### 4.1 複数ファイル upload の撮影ポイント
+
+1. `/upload` を開き、「ファイル（複数選択可）」で上記サンプルをまとめて選ぶ。
+2. 「アップロードして分類」を押す。
+3. キューに `待機中` / `アップロード中…` / `完了` / `失敗` がファイルごとに出ることを見せる。
+4. 失敗がある場合は、その行だけ `再試行` できることを短く見せる。全件成功を撮りたい場合は、失敗カットは省略してよい。
+5. 1件以上成功したら、画面下の Context Package への導線、またはトップページ `/` へ移動する。
+
+ナレーション例:
+
+> 「担当者はファイルを一つずつ選別する前に、まず資料フォルダをまとめて置けます。ただし処理は文書ごとに分かれていて、分類・マスキング・失敗時の再試行も個別に追えます。」
 
 ## 5. Google Sheets を取り込むデモ手順
 
@@ -230,7 +265,9 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 
 ### Inventory (`/`)
 
-- トップページの **Firestore Inventory** セクションで status/sensitivity を確認
+- トップページで **Pipeline Funnel**、KPI、**Firestore Inventory** セクションの status/sensitivity を確認
+- Pipeline Funnel では、登録された文書が AI 利用可 / マスキング済み / 保護中に分かれていることを見せる
+- KPI では `登録文書`、`AI利用可`、`マスキング実施`、`保護中（AI除外）` を短く読む
 - Firestore 読み取り不能時のみ W1 snapshot fallback が使われる
 
 ## 7. Context Package export
@@ -239,6 +276,22 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 
 - **単一 Markdown（primary）**: Gemini / RAG / コピー用。Package Manifest と Included / Excluded メタ、および `Full AI-Ready Sources` を1ファイルにまとめる。
 - **NotebookLM 用 source bundle（secondary）**: `00-CONTEXT-PACKAGE-GUIDE.md` + included 生ソースのみを zip 化。excluded / restricted はソースファイルとして含めない。NotebookLM では bundle の**全ファイル**を source 追加する（単一 `.md` を1ソースにしない）。手順の正本は [delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md)。
+
+### 7.0 UI からの撮影手順
+
+1. `/context-package` を開く。
+2. purpose に `新人スタッフ向けに、月次の給与計算業務を安全に学べるAIを作りたい` を入力する。
+3. 候補取得後、候補リストで include / exclude / needs review の違いを見せる。
+4. Safety Review で、AI に渡す予定の文書、自動除外、warning を確認する。
+5. Preview acknowledgement が必要な場合は「内容を確認しました」をチェックする。
+6. Context Package を生成する。async 有効環境では `queued` / `running` / `succeeded` の polling 表示を短く見せる。ローカル同期環境ではそのまま結果表示へ進む。
+7. result panel で `Markdown をコピー`、`Markdown をダウンロード`、`NotebookLM 用 bundle をダウンロード` を見せる。
+8. zip を解凍し、`00-CONTEXT-PACKAGE-GUIDE.md` と included source files だけがあることを見せる。
+9. NotebookLM へ bundle の全ファイルを source 追加する。
+
+締めの言い方:
+
+> 「これは AI 本体ではなく、AI に渡す前の情報準備です。使う情報、使わない情報、足りない情報、人間に確認する質問が、目的つきで残ります。」
 
 1. live corpus から生成（Firestore + GCS）
 
@@ -289,6 +342,12 @@ Cloud Run + IAP + Cloud Tasks worker + result route までの本番非同期経�
 [setup-gcp.md §8](setup-gcp.md#8-context-package-非同期-production-smoke) を正本にする。
 デモ前の運用確認では、同節の preflight → service-to-service smoke → post-smoke cleanup
 → Monitoring / alert 確認の順で実施する。
+
+### official-doc-pdf table-assist reprocess（任意カット）
+
+`POST /api/documents/:docId/table-assist` は、upload 済み official-doc-pdf を opt-in で再処理する product path です。同期 upload では table-assist は発火しません。tenant flag `pdf-table-assist` が有効で、対象が reprocessable な official-doc-pdf の場合だけ、`tableAssistMode: 'async'` として Masker 前段で grounded table rows を merge します。
+
+提出デモ本編では必須ではありません。入れる場合は「高度な表補正は、通常 upload とは別の安全な再処理経路で実行する」と一言だけに留めます。詳細は [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) と [docs/official-doc-table-assist-mainline-harness-2026-06-16.md](official-doc-table-assist-mainline-harness-2026-06-16.md) を正本にします。
 
 ## 8. E2E test policy
 

@@ -141,6 +141,12 @@ IAP 保護済み。許可ユーザ `makoto@m-grow-ai.com` のみアクセス可�
 | `CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE` | **IAP programmatic access 用 OAuth 2.0 クライアント ID**（完全な `*.apps.googleusercontent.com` 形式）。Cloud Tasks → IAP 越し worker 呼び出し用 |
 | `CONTEXT_PACKAGE_JOB_TOKEN_SECRET` | Secret Manager secret 名。例: `context-package-job-token` |
 | `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED` | `true` で UI が `mode:"auto"` を送る。**Docker build-arg で焼き込み**（下記 §Context Package 非同期） |
+| `PDF_TABLE_ASSIST_TASKS_LOCATION` | （任意）official-doc-pdf table-assist async ingest 専用 queue location。Cloud Tasks は regional のため `global` は不可。未設定時は `CONTEXT_PACKAGE_TASKS_LOCATION` を fallback |
+| `PDF_TABLE_ASSIST_TASKS_QUEUE` | （任意）official-doc-pdf table-assist async ingest 専用 queue。未設定時は `CONTEXT_PACKAGE_TASKS_QUEUE` を fallback |
+| `PDF_TABLE_ASSIST_WORKER_BASE_URL` | （任意）未設定時は `CONTEXT_PACKAGE_WORKER_BASE_URL` を fallback |
+| `PDF_TABLE_ASSIST_WORKER_SA_EMAIL` | （任意）未設定時は `CONTEXT_PACKAGE_WORKER_SA_EMAIL` を fallback |
+| `PDF_TABLE_ASSIST_WORKER_OIDC_AUDIENCE` | （任意）未設定時は `CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE` を fallback |
+| `PDF_TABLE_ASSIST_WORKER_TOKEN_SECRET` | （任意）専用 worker token secret。未設定時は `CONTEXT_PACKAGE_JOB_TOKEN` を fallback |
 
 `deploy.yml` は Cloud Run へ **`--set-env-vars` で通常環境変数一式を毎回上書き**し、共有 token が設定されている場合は Secret Manager から `--set-secrets` で参照する。Console で手動追加した env は次回 deploy で消えるため、追加が必要なら workflow の `ENV_VARS` 配列を正本として更新する。Context Package 非同期用の GitHub Variables は `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true` の deploy で必須になる。
 
@@ -149,6 +155,24 @@ IAP 保護済み。許可ユーザ `makoto@m-grow-ai.com` のみアクセス可�
 ## Context Package 非同期（Cloud Tasks + IAP worker）
 
 `POST /api/context-package` の `async` / `auto` と Cloud Tasks worker（`POST /api/context-package/jobs/{jobId}/run`）用の配線手順。Cloud Run は **直接 IAP**（Phase 3-D）のまま、worker も同一サービス URL を叩く。
+
+official-doc-pdf table-assist async ingest も同じ Cloud Tasks + IAP worker
+形状を使う。専用 `PDF_TABLE_ASSIST_*` env があればそれを使い、未設定なら
+Context Package の queue / base URL / worker SA / IAP audience / token へ
+fallback する。既存 queue を流用する場合、追加で必要なのは
+tenant flag `pdf-table-assist` を有効化することだけ。専用 queue に分ける場合は
+`PDF_TABLE_ASSIST_TASKS_QUEUE` と必要に応じて専用 worker token secret を設定する。
+
+Cloud Tasks queue location は regional のみ。Gemini 用の
+`GOOGLE_CLOUD_LOCATION=global` は Cloud Tasks では使えないため、
+`PDF_TABLE_ASSIST_TASKS_LOCATION` または `CONTEXT_PACKAGE_TASKS_LOCATION` は
+`asia-northeast1` などの region にする。
+
+worker route は Cloud Run の `--no-allow-unauthenticated` と IAP
+保護を前提にする。アプリ層の shared token は多層防御であり、Cloud Tasks
+OIDC の検証は Cloud Run / IAP 側に委譲する。worker が返す 401 / 400 は
+設定不備を Cloud Tasks retry / backlog alert として表面化させるための
+fail-closed 経路として扱う。
 
 ### 設計メモ: UI feature flag
 

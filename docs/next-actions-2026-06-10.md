@@ -1,4 +1,4 @@
-# Next Actions — 2026-06-10
+# Next Actions — 2026-06-10（2026-06-16 同期）
 
 **目的**: Phase 4-UX / delivery E2E / UI refresh 後の次アクションを、提出前に効く順へ並べ直す。古い open questions は背景として残し、本書を直近の作業順の正本にする。
 
@@ -7,7 +7,8 @@
 - NotebookLM では単一 `.md` より **source 分割 bundle** が正しい渡し方だと実証済み。`exportContextPackageSourceBundle()` と UI zip 導線（P1-A/B）は実装済み。
 - dashboard refresh で不要 UI/CSS の残りが見つかっているが、機能ブロッカーではない。
 - P1-E first slice（PR #37-#41）で T1 preflight / row-window / page-group・table-manifest、T2 table fail-soft・scan visual table fallback、T3 label/value enrichment、scan OCR prompt guard + live drift workflow まで完了。
-- 2026-06-13 の P1-D 実測で、born-digital official-doc-pdf（`pdf-parse` 経路）の field recall / table cell recall / locator が最弱領域だと判明。次は production へ繋がず、既存 `poc/document-conversion/official-doc-pdf/compare/` ハーネスに Gemini arm を足して、committed official-doc-pdf 3件で layout/table enrichment の効果を比較する。
+- 2026-06-13 の P1-D 実測で、born-digital official-doc-pdf（`pdf-parse` 経路）の field recall / table cell recall / locator が最弱領域だと判明。P1-E2 compare で hybrid table-assist を採用候補と判定済み。
+- **2026-06-16**: P1-E Step 1 mainline wiring（D 戦略）完了。同期 upload は `tableAssistMode: 'disabled'`、gated 実行は `pdf-table-assist` flag + `tableAssistMode: 'async'` のみ（reprocess API / harness）。multi-file upload UI（最大 20 件キュー）完了。table-assist product reprocess（`POST /api/documents/:docId/table-assist`）完了。
 
 ## 優先順位
 
@@ -22,7 +23,9 @@
 | P1-E | 大きなファイルの事前分割 / table fallback / locator enrichment | token limit failure を減らし、巨大 chunk / 表構造欠落 / label-value 分断を改善する | **first slice 完了**（PR #37-#41）。T1 preflight + row-window / page-group・table-manifest、T2 official-PDF table fail-soft + scan visual table fallback、T3 label/value enrichment、scan OCR prompt guard + `pnpm eval:scan-pdf:ocr-live-drift` workflow。証跡は [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6、[docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](scan-pdf-ocr-live-drift-evidence-2026-06-13.md)、[docs/scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md](scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md) | large table / PDF は sheet・row window・page-group / table-manifest で Curator 入力を bounded 化し Masker は全文を維持。P1-D handoff の employment-form / invoice scan は stable eval で改善確認済み |
 | P1-E+ | scan-pdf quality floor 解消 | PII prompt guard 後の accepted live drift floor（`majorDriftCount=3`）を下げ、提出説明可能な品質証跡を固める | **方針決定済み**。提出前は current baseline fixed。PII direction / deterministic zero は green、full live `--ci` は sidecar refresh PR まで intentionally red | sidecar refresh は後続 PR。public blank-form regeneration policy、expected fields の人間レビュー、3-run live evidence、full live `--ci` gate 再評価をまとめて実施。提出前の正本は [docs/scan-pdf-ocr-live-drift-workflow.md](scan-pdf-ocr-live-drift-workflow.md) |
 | P1-E2 | born-digital PDF Gemini layout/table compare | official-doc-pdf の table / heading / locator 弱点を、Gemini layout/table enrichment で改善できるかを負債なく判定する | **実装・検証済み**。既存 compare harness に `gemini` / `pdf-parse+gemini-tables` arm を追加。page-group / table-only / grounding filter / hallucination-candidate check を実測。table-assist 専用 golden も追加済み | 採用判断: full Gemini 置換はしない。`pdf-parse` primary + grounded Gemini table-assist を PoC 最善とする。証跡は [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6 |
-| P2 | Phase 3-F デモ polish | 動画シナリオを現状の product truth に合わせる | P1-C で export 文言は更新済み。Dashboard refresh 後の画面構成・live funnel の見せ方は未反映。**提出補強の並行テーマ** | 動画カットとナレーションが現 UI / bundle 導線と一致する |
+| P1-E3 | table-assist mainline wiring + product reprocess | compare 勝ち筋を本線 dispatcher と opt-in reprocess に接続し、同期 upload では走らせない | **完了（2026-06-16）**。`pdfExtractionDispatcher` + `tableAssistMode` 二重ゲート、WU-6a masking 回帰、`POST /api/documents/:docId/table-assist`、`reprocessPdfWithTableAssist`、mainline harness 証跡 | 同期 upload は `disabled` 固定。gated 実行は flag + `async` のみ。async ingest worker / Cloud Tasks は後続 epic。正本: [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6「2026-06-16」、[docs/decisions.md](decisions.md) `D-P1-E-TA-1`、[docs/official-doc-table-assist-mainline-harness-2026-06-16.md](official-doc-table-assist-mainline-harness-2026-06-16.md) |
+| P1-ING1 | Multi-file upload UI | 散らばった資料を `/upload` から複数選択で投入できるようにする | **完了**。`UploadForm` + `uploadQueue.ts`（最大 20 件、`UPLOAD_CONCURRENCY=1`、失敗後も継続、per-file status）。サーバは 1 ファイル = 1 `POST /api/documents` のまま | ディレクトリ一括 / zip 一括は未対応（P3 Ingest 判断）。table-assist は同期 upload では走らない |
+| P2 | Phase 3-F デモ polish | 動画シナリオを現状の product truth に合わせる | **完了**。`demo-scenario.md` / `demo-runbook.md` を multi-file upload、Dashboard / Pipeline Funnel、purpose-driven candidates、Safety Review、source bundle 前提に更新 | 動画カットとナレーションが現 UI / bundle 導線と一致する |
 | P2 | 提出前の軽い運用補強 | 「まわす」説明力を上げる | **完了**。alert / sweeper / TTL に加え、UI submit 重複 guard と簡易 SLO を追記済み | `ContextPackageForm` の in-flight lock、`operate-deliver-readiness.md` §E |
 | P3 | 不要 CSS / UI 残骸 cleanup | 保守性を上げ、次の UI 変更を軽くする | 旧 heatmap / risk-callout / status badge modifier / sensitivity 重複などが残る | 挙動変更なしで未使用 CSS と古い `inventory-demo-*` naming を整理 |
 | P3 | Ingest 拡張判断 | 次の product expansion を決める | Drive folder bulk / local directory batch / standalone images が候補 | 提出前は Drive folder bulk か local directory batch のどちらかを選定。standalone images は OCR/PII/eval 設計が重いので後続寄り |
@@ -177,9 +180,11 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 - **scan OCR**: prompt PII guard + `pnpm eval:scan-pdf:ocr-live-drift` workflow。PR #41 で live drift evidence 付き。
 
 **残タスク（P1-E+ quality floor）**:
+- **提出前判断**: ハッカソン本編デモでは scan-pdf を主役にしない限り着手しない。提出前は Context Package の判断 UX / source bundle / multi-file upload / NotebookLM 導線を優先する。
 - 提出前は current baseline fixed とし、sidecar を opportunistic に regeneration しない。
 - accepted live drift floor は `majorDriftCount=3`。PII direction / deterministic zero は green。full live `--ci` は sidecar refresh PR まで default gate にしない。
-- sidecar refresh は後続 PR として、public blank-form regeneration policy、`*.expected.json` の人間レビュー、3-run live evidence、full live `--ci` gate 再評価をまとめて実施する。
+- sidecar refresh は**後続 PR**として、public blank-form regeneration policy、`*.expected.json` の人間レビュー、3-run live evidence、full live `--ci` gate 再評価をまとめて実施する。
+- 後続 PR のゴールは「scan-pdf OCR が本番デモで使える」ではなく、「live drift の説明可能な品質床を作る」こと。期待値更新だけで green にせず、目視レビューと複数回 live evidence を同じ PR に含める。
 - 正本: [docs/scan-pdf-ocr-live-drift-workflow.md](scan-pdf-ocr-live-drift-workflow.md)、[docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](scan-pdf-ocr-live-drift-evidence-2026-06-13.md)、[docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6 の review follow-ups。
 
 **まだ scope 外**:
@@ -195,7 +200,8 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 - scan/slide 側は Gemini 系経路で stable metric が高く、born-digital PDF に Gemini layout/table understanding を当てる仮説の限界効用が大きい。
 
 **実装境界**:
-- production upload path には繋がない。PoC / eval-only。
+- 同期 upload path では table-assist を発火しない（`tableAssistMode: 'disabled'` 明示）。
+- compare harness の Gemini arms は PoC / eval-only（本線 product path とは別）。
 - 新規 `scripts/runPdfGeminiComparison.ts` は作らない。
 - 既存 `poc/document-conversion/official-doc-pdf/compare/runCompare.ts` の converter arm に `gemini` を足す。
 - 既存の `runOfficialDocPipeline({ converter })`、`DocumentIR → KnowledgeChunk → eval`、`renderCompareReport` を再利用する。
@@ -212,14 +218,49 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 - Gemini が出した値のうち、`pdf-parse` 全文に出現しないものを hallucination candidate として機械的に洗い出せる。
 - 失敗時は `pdf-parse` baseline へ戻れる。
 
+## P1-E3: table-assist mainline wiring + product reprocess（完了 2026-06-16）
+
+**なぜ D 戦略か**:
+- async document ingest worker のフル構築は context-package job 基盤相当になり、提出前スコープと競合する。
+- 先に dispatcher 配線と opt-in reprocess を land し、同期 upload のレイテンシ・マスキング境界を守る。
+
+**完了内容**:
+- `pdfExtractionDispatcher` に `tableAssistMode: 'disabled' | 'async'` と `augmentOfficialDocWithTableAssist` を配線。
+- 二重ゲート: tenant-scoped `pdf-table-assist` flag（default off）**かつ** `tableAssistMode: 'async'`。
+- 同期 `POST /api/documents` は `tableAssistMode: 'disabled'` を明示。
+- Product reprocess: `POST /api/documents/:docId/table-assist` → `reprocessPdfWithTableAssist`（lease、chunks / masked object 更新、fail-soft）。
+- Masker 前段 merge 不変（WU-6a: `pdfTableAssistMaskingRegression.test.ts`）。
+- Mainline harness 証跡: [docs/official-doc-table-assist-mainline-harness-2026-06-16.md](official-doc-table-assist-mainline-harness-2026-06-16.md)。
+
+**後続 issue 候補**:
+- [#51](https://github.com/matz-d/ai-ready-knowledge-hub/issues/51) table-assist enqueue audit: `document.convert` 実行結果だけでなく、「table-assist worker を enqueue した」事実を AuditEvent または dedicated operational event に載せる。
+- [#52](https://github.com/matz-d/ai-ready-knowledge-hub/issues/52) table-assist cost guard: `pdf-table-assist` flag ON の official-doc-pdf 全件ではなく、table extraction summary / conversion eval を見て必要な文書だけ enqueue する。提出前は restricted 終端の enqueue skip までで十分。
+
+**まだ scope 外（後続 epic）**:
+- Document detail UI からの table-assist ボタン（API は利用可能）。
+- post-terminal enrichment（terminal document / masked chunks への後付け merge）。
+
+## P1-ING1: Multi-file upload UI（完了）
+
+**完了内容**:
+- `/upload` の `UploadForm` が複数ファイル選択キュー（`uploadQueue.ts`）。
+- 最大 `MAX_UPLOAD_FILES=20`、`UPLOAD_CONCURRENCY=1`（Curator 同期 Gemini のため）。
+- 1 ファイル失敗後も残りを継続。per-file status（待機中 / アップロード中 / 完了 / 失敗）と retry。
+- サーバ ingest は 1 リクエスト = 1 ファイルのまま。table-assist は同期 upload では走らない。
+
+**まだ scope 外**:
+- ディレクトリ一括、zip 一括（P3 Ingest 判断）。
+
 ## P2: Phase 3-F デモ polish
 
-**更新対象**: `docs/demo-scenario.md`
+**更新対象**: `docs/demo-scenario.md`, `docs/demo-runbook.md`
 
-**変えること**:
-- 最後の Export は「単一 `.md` を NotebookLM に投入」ではなく、「NotebookLM には source bundle の全ファイルを source 追加」にする。
-- 単一 `.md` は汎用 artifact として残す。
-- Dashboard refresh 後の画面構成に合わせて Knowledge Inventory / live funnel の見せ方を更新する。
+**完了内容**:
+- Export は「NotebookLM には source bundle の全ファイルを source 追加」、単一 `.md` は Gemini / RAG / copy 用 primary artifact として説明。
+- Dashboard refresh 後の画面構成に合わせ、旧 heatmap ではなく Pipeline Funnel / KPI / 文書一覧を見せる流れへ更新。
+- `/upload` の multi-file キュー（最大 20 件、per-file status）をデモに反映。
+- `/context-package` の purpose → candidates → Safety Review → Preview acknowledgement → result panel の撮影順を runbook に追加。
+- official-doc-pdf table-assist reprocess は任意カットとして分離し、本編では必須にしない。
 
 ## P2: 提出前の軽い運用補強
 
@@ -269,6 +310,9 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 6. **P1-E** large file pre-splitting / table fallback / locator enrichment の first slice。（完了。PR #37-#41）
 7. **P1-E+** scan-pdf quality floor 方針決定。（完了。提出前は current baseline fixed、sidecar refresh は後続 PR）
 8. **P1-E2** born-digital PDF Gemini layout/table compare を既存 compare ハーネスに追加する。（完了。full Gemini 置換は不採用、`pdf-parse` primary + grounded Gemini table-assist を採用候補）
-9. **P2** 提出補強: Phase 3-F デモ polish と enqueue / SLO を並行で薄く固める。
-10. P1-E+ follow-up PR: scan-pdf sidecar refresh / public blank-form recall / full live `--ci` 再評価に進む。
-11. P3 CSS cleanup と Ingest 拡張判断に進む。
+9. **P1-E3** table-assist mainline wiring + product reprocess。（完了 2026-06-16。同期 upload は disabled、gated 実行は reprocess API / async context のみ）
+10. **P1-ING1** multi-file upload UI。（完了。最大 20 件キュー、per-file `POST /api/documents`）
+11. **P2** 提出補強: Phase 3-F デモ polish と enqueue / SLO。（完了）
+12. P1-E+ follow-up PR: scan-pdf sidecar refresh / public blank-form recall / full live `--ci` 再評価に進む。
+13. table-assist async ingest worker epic（Cloud Tasks 自動トリガ）を別途起票。
+14. P3 CSS cleanup と Ingest 拡張判断に進む。

@@ -189,7 +189,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 
 | 経路 | いまできること | できないこと |
 |---|---|---|
-| `/upload` | 1 ファイルずつ（txt/md/csv/xlsx/pdf 等、subtype flag 次第） | ディレクトリ一括、zip 一括、画像単体（`image/*`） |
+| `/upload` | 複数ファイル選択キュー（最大 20 件、1 件ずつ `POST /api/documents`）。txt/md/csv/xlsx/pdf 等、subtype flag 次第 | ディレクトリ一括、zip 一括、画像単体（`image/*`） |
 | `/import/google-sheets` | Sheets / Docs の **URL 1 本**、手動 re-import、鮮度バッジ | フォルダ配下一括、自動同期、Drive 全体クロール |
 | scan-pdf（M6） | **画像化された PDF** の OCR | PNG/JPEG 単体ファイル |
 
