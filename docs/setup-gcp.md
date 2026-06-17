@@ -147,6 +147,7 @@ IAP 保護済み。許可ユーザ `makoto@m-grow-ai.com` のみアクセス可�
 | `PDF_TABLE_ASSIST_WORKER_SA_EMAIL` | （任意）未設定時は `CONTEXT_PACKAGE_WORKER_SA_EMAIL` を fallback |
 | `PDF_TABLE_ASSIST_WORKER_OIDC_AUDIENCE` | （任意）未設定時は `CONTEXT_PACKAGE_WORKER_OIDC_AUDIENCE` を fallback |
 | `PDF_TABLE_ASSIST_WORKER_TOKEN_SECRET` | （任意）専用 worker token secret。未設定時は `CONTEXT_PACKAGE_JOB_TOKEN` を fallback |
+| `PDF_TABLE_ASSIST_TASK_SIGNING_SECRET_NAME` | （推奨）table-assist Cloud Tasks payload の HMAC 署名用 Secret Manager secret 名。production で async enqueue を使う場合は必須。`CONTEXT_PACKAGE_JOB_TOKEN` への fallback はしない |
 
 `deploy.yml` は Cloud Run へ **`--set-env-vars` で通常環境変数一式を毎回上書き**し、共有 token が設定されている場合は Secret Manager から `--set-secrets` で参照する。Console で手動追加した env は次回 deploy で消えるため、追加が必要なら workflow の `ENV_VARS` 配列を正本として更新する。Context Package 非同期用の GitHub Variables は `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true` の deploy で必須になる。
 
@@ -161,7 +162,10 @@ official-doc-pdf table-assist async ingest も同じ Cloud Tasks + IAP worker
 Context Package の queue / base URL / worker SA / IAP audience / token へ
 fallback する。既存 queue を流用する場合、追加で必要なのは
 tenant flag `pdf-table-assist` を有効化することだけ。専用 queue に分ける場合は
-`PDF_TABLE_ASSIST_TASKS_QUEUE` と必要に応じて専用 worker token secret を設定する。
+`PDF_TABLE_ASSIST_TASKS_QUEUE` と必要に応じて専用 worker token secret /
+`PDF_TABLE_ASSIST_TASK_SIGNING_SECRET` を設定する。enqueue は
+`{ docId, tenantId, actor, issuedAt }` を HMAC 署名し、worker は署名検証後にのみ
+tenant context を信頼する。
 
 Cloud Tasks queue location は regional のみ。Gemini 用の
 `GOOGLE_CLOUD_LOCATION=global` は Cloud Tasks では使えないため、

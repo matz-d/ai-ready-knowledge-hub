@@ -7,6 +7,11 @@
  */
 import type { CloudTasksClient } from '@google-cloud/tasks';
 import type { OrchestrateAuditContext } from './uploadOrchestrator';
+import {
+  PdfTableAssistTaskSigningNotConfiguredError,
+  isPdfTableAssistTaskSigningConfigured,
+  signPdfTableAssistTaskPayload,
+} from './pdfTableAssistTaskSigning';
 
 export interface PdfTableAssistIngestEnqueuer {
   enqueue(request: PdfTableAssistIngestRequest): Promise<void>;
@@ -113,13 +118,31 @@ function taskIdForDoc(docId: string): string {
   return `table-assist-${docId}`.replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 500);
 }
 
+function buildTaskBody(request: PdfTableAssistIngestRequest): Record<string, unknown> {
+  if (process.env.NODE_ENV === 'production') {
+    return signPdfTableAssistTaskPayload(request);
+  }
+  if (isPdfTableAssistTaskSigningConfigured()) {
+    return signPdfTableAssistTaskPayload(request);
+  }
+  return request;
+}
+
+function assertTaskSigningConfiguredForEnqueue(): void {
+  if (process.env.NODE_ENV === 'production' && !isPdfTableAssistTaskSigningConfigured()) {
+    throw new PdfTableAssistTaskSigningNotConfiguredError();
+  }
+}
+
 export const cloudTasksPdfTableAssistIngestEnqueuer: PdfTableAssistIngestEnqueuer =
   {
     async enqueue(request): Promise<void> {
+      assertTaskSigningConfiguredForEnqueue();
       const config = resolveConfig();
       const client = await getCloudTasksClient();
       const parent = client.queuePath(config.project, config.location, config.queue);
       const url = `${config.workerBaseUrl}/api/documents/${request.docId}/table-assist/run`;
+      const taskBody = buildTaskBody(request);
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -136,7 +159,7 @@ export const cloudTasksPdfTableAssistIngestEnqueuer: PdfTableAssistIngestEnqueue
             httpMethod: 'POST',
             url,
             headers,
-            body: Buffer.from(JSON.stringify(request)).toString('base64'),
+            body: Buffer.from(JSON.stringify(taskBody)).toString('base64'),
             oidcToken: {
               serviceAccountEmail: config.serviceAccountEmail,
               ...(config.oidcAudience ? { audience: config.oidcAudience } : {}),

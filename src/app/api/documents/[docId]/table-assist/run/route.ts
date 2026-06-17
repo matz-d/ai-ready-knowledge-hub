@@ -11,16 +11,11 @@ import {
   reprocessPdfWithTableAssist,
   type PdfTableAssistReprocessFailure,
 } from '../../../../../../lib/pdfTableAssistReprocessor';
+import { verifyPdfTableAssistTaskPayload } from '../../../../../../lib/pdfTableAssistTaskSigning';
 import type { OrchestrateAuditContext } from '../../../../../../lib/uploadOrchestrator';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-type WorkerBody = {
-  docId?: unknown;
-  tenantId?: unknown;
-  actor?: unknown;
-};
 
 function isAuthorized(request: Request): boolean {
   const expected =
@@ -32,36 +27,30 @@ function isAuthorized(request: Request): boolean {
   return request.headers.get('x-pdf-table-assist-worker-token') === expected;
 }
 
-async function parseWorkerBody(request: Request): Promise<WorkerBody> {
+async function parseWorkerBody(request: Request): Promise<unknown> {
   try {
-    return (await request.json()) as WorkerBody;
+    return await request.json();
   } catch {
-    return {};
+    return null;
   }
 }
 
-function parseAuditContext(body: WorkerBody): OrchestrateAuditContext | null {
-  if (typeof body.tenantId !== 'string' || body.tenantId.trim().length === 0) {
+function signatureHttpStatus(
+  _code: 'task_signature_required' | 'task_signature_invalid' | 'task_signature_expired'
+): number {
+  return 401;
+}
+
+function auditContextFromVerifiedPayload(payload: {
+  tenantId: string;
+  actor: OrchestrateAuditContext['actor'];
+}): OrchestrateAuditContext | null {
+  if (payload.tenantId.trim().length === 0) {
     return null;
   }
-  const actor = body.actor;
-  if (actor === null || typeof actor !== 'object') return null;
-
-  const candidate = actor as Record<string, unknown>;
-  const userId = candidate.userId;
-  const ipAddress = candidate.ipAddress;
-  const userAgent = candidate.userAgent;
-  if (
-    typeof userId !== 'string' ||
-    typeof ipAddress !== 'string' ||
-    typeof userAgent !== 'string'
-  ) {
-    return null;
-  }
-
   return {
-    tenantId: body.tenantId,
-    actor: { userId, ipAddress, userAgent },
+    tenantId: payload.tenantId,
+    actor: payload.actor,
   };
 }
 
@@ -91,11 +80,24 @@ export async function POST(
   }
 
   const body = await parseWorkerBody(request);
-  if (typeof body.docId === 'string' && body.docId !== docId) {
+  if (body === null || typeof body !== 'object') {
+    return NextResponse.json({ error: 'task_signature_required' }, { status: 401 });
+  }
+
+  const verified = verifyPdfTableAssistTaskPayload(body);
+  if (!verified.ok) {
+    return NextResponse.json(
+      { error: verified.code },
+      { status: signatureHttpStatus(verified.code) }
+    );
+  }
+
+  const { payload } = verified;
+  if (payload.docId !== docId) {
     return NextResponse.json({ error: 'doc_id_mismatch' }, { status: 400 });
   }
 
-  const auditContext = parseAuditContext(body);
+  const auditContext = auditContextFromVerifiedPayload(payload);
   if (auditContext === null) {
     return NextResponse.json({ error: 'tenant_required' }, { status: 400 });
   }

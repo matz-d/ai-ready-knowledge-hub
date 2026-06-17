@@ -48,6 +48,7 @@ vi.mock('../../../../../../lib/extractors/pdfExtractionDispatcher', () => ({
 
 import { POST } from '../route';
 import { POST as POST_WORKER } from '../run/route';
+import { signPdfTableAssistTaskPayload } from '../../../../../../lib/pdfTableAssistTaskSigning';
 
 function request(): Request {
   return new Request('http://localhost/api/documents/doc-1/table-assist', {
@@ -77,6 +78,35 @@ function workerRequest(
   });
 }
 
+function signedWorkerBody(
+  overrides: Partial<{
+    docId: string;
+    tenantId: string;
+    actor: {
+      userId: string;
+      ipAddress: string;
+      userAgent: string;
+    };
+  }> = {}
+): Record<string, unknown> {
+  return signPdfTableAssistTaskPayload(
+    {
+      docId: 'doc-1',
+      tenantId: 'tenant-1',
+      actor: {
+        userId: 'user-1',
+        ipAddress: '127.0.0.1',
+        userAgent: 'vitest',
+      },
+      ...overrides,
+    },
+    {
+      secret: process.env.PDF_TABLE_ASSIST_TASK_SIGNING_SECRET,
+      issuedAt: '2026-06-17T00:00:00.000Z',
+    }
+  );
+}
+
 async function parseJson(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
@@ -85,6 +115,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.PDF_TABLE_ASSIST_WORKER_TOKEN;
   delete process.env.CONTEXT_PACKAGE_JOB_TOKEN;
+  delete process.env.PDF_TABLE_ASSIST_TASK_SIGNING_SECRET;
+  vi.unstubAllEnvs();
   auditActorFromRequestMock.mockReturnValue({
     tenantId: 'tenant-1',
     actor: {
@@ -339,13 +371,65 @@ describe('POST /api/documents/[docId]/table-assist/run', () => {
   });
 
   it('rejects a mismatched body docId', async () => {
-    const response = await POST_WORKER(workerRequest({ docId: 'other-doc' }), {
-      params: Promise.resolve({ docId: 'doc-1' }),
-    });
+    const response = await POST_WORKER(
+      workerRequest({
+        docId: 'other-doc',
+        tenantId: 'tenant-1',
+        actor: {
+          userId: 'user-1',
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      }),
+      { params: Promise.resolve({ docId: 'doc-1' }) }
+    );
 
     expect(response.status).toBe(400);
     await expect(parseJson(response)).resolves.toEqual({
       error: 'doc_id_mismatch',
+    });
+    expect(reprocessPdfWithTableAssistMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a tampered tenantId when task signing is configured', async () => {
+    process.env.PDF_TABLE_ASSIST_TASK_SIGNING_SECRET = 'signing-secret';
+    const signed = signedWorkerBody();
+
+    const response = await POST_WORKER(
+      workerRequest({ ...signed, tenantId: 'evil-tenant' }),
+      { params: Promise.resolve({ docId: 'doc-1' }) }
+    );
+
+    expect(response.status).toBe(401);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'task_signature_invalid',
+    });
+    expect(reprocessPdfWithTableAssistMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts a signed task payload when task signing is configured', async () => {
+    process.env.PDF_TABLE_ASSIST_TASK_SIGNING_SECRET = 'signing-secret';
+
+    const response = await POST_WORKER(workerRequest(signedWorkerBody()), {
+      params: Promise.resolve({ docId: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(reprocessPdfWithTableAssistMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects unsigned payloads in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    process.env.PDF_TABLE_ASSIST_WORKER_TOKEN = 'secret';
+
+    const response = await POST_WORKER(
+      workerRequest(undefined, { 'x-pdf-table-assist-worker-token': 'secret' }),
+      { params: Promise.resolve({ docId: 'doc-1' }) }
+    );
+
+    expect(response.status).toBe(401);
+    await expect(parseJson(response)).resolves.toEqual({
+      error: 'task_signature_required',
     });
     expect(reprocessPdfWithTableAssistMock).not.toHaveBeenCalled();
   });

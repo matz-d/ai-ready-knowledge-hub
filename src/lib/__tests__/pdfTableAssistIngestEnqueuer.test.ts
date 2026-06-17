@@ -18,6 +18,7 @@ import {
   PdfTableAssistQueueNotConfiguredError,
   cloudTasksPdfTableAssistIngestEnqueuer,
 } from '../pdfTableAssistIngestEnqueuer';
+import { verifyPdfTableAssistTaskPayload } from '../pdfTableAssistTaskSigning';
 
 function clearEnv() {
   delete process.env.GOOGLE_CLOUD_PROJECT;
@@ -28,6 +29,8 @@ function clearEnv() {
   delete process.env.PDF_TABLE_ASSIST_WORKER_SA_EMAIL;
   delete process.env.PDF_TABLE_ASSIST_WORKER_OIDC_AUDIENCE;
   delete process.env.PDF_TABLE_ASSIST_WORKER_TOKEN;
+  delete process.env.PDF_TABLE_ASSIST_TASK_SIGNING_SECRET;
+  vi.unstubAllEnvs();
   delete process.env.CONTEXT_PACKAGE_TASKS_LOCATION;
   delete process.env.CONTEXT_PACKAGE_TASKS_QUEUE;
   delete process.env.CONTEXT_PACKAGE_WORKER_BASE_URL;
@@ -47,6 +50,7 @@ beforeEach(() => {
 
 afterEach(() => {
   clearEnv();
+  vi.unstubAllEnvs();
 });
 
 describe('cloudTasksPdfTableAssistIngestEnqueuer', () => {
@@ -59,8 +63,9 @@ describe('cloudTasksPdfTableAssistIngestEnqueuer', () => {
       'table-assist-worker@project-1.iam.gserviceaccount.com';
     process.env.PDF_TABLE_ASSIST_WORKER_OIDC_AUDIENCE = 'iap-client-id';
     process.env.PDF_TABLE_ASSIST_WORKER_TOKEN = 'secret';
+    process.env.PDF_TABLE_ASSIST_TASK_SIGNING_SECRET = 'signing-secret';
 
-    await cloudTasksPdfTableAssistIngestEnqueuer.enqueue({
+    const request = {
       docId: 'doc-1',
       tenantId: 'tenant-1',
       actor: {
@@ -68,7 +73,9 @@ describe('cloudTasksPdfTableAssistIngestEnqueuer', () => {
         ipAddress: '127.0.0.1',
         userAgent: 'vitest',
       },
-    });
+    };
+
+    await cloudTasksPdfTableAssistIngestEnqueuer.enqueue(request);
 
     expect(queuePathMock).toHaveBeenCalledWith(
       'project-1',
@@ -99,15 +106,39 @@ describe('cloudTasksPdfTableAssistIngestEnqueuer', () => {
     const body = JSON.parse(
       Buffer.from(task.httpRequest.body, 'base64').toString('utf8')
     );
-    expect(body).toEqual({
-      docId: 'doc-1',
-      tenantId: 'tenant-1',
-      actor: {
-        userId: 'user-1',
-        ipAddress: '127.0.0.1',
-        userAgent: 'vitest',
-      },
+    expect(body.docId).toBe('doc-1');
+    expect(body.tenantId).toBe('tenant-1');
+    expect(body.actor).toEqual(request.actor);
+    expect(body.issuedAt).toEqual(expect.any(String));
+    expect(body.signature).toEqual(expect.any(String));
+
+    const verified = verifyPdfTableAssistTaskPayload(body, {
+      secret: 'signing-secret',
     });
+    expect(verified.ok).toBe(true);
+  });
+
+  it('rejects enqueue in production when task signing secret is missing', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    process.env.GOOGLE_CLOUD_PROJECT = 'project-1';
+    process.env.PDF_TABLE_ASSIST_TASKS_LOCATION = 'asia-northeast1';
+    process.env.PDF_TABLE_ASSIST_TASKS_QUEUE = 'table-assist';
+    process.env.PDF_TABLE_ASSIST_WORKER_BASE_URL = 'https://service.example/';
+    process.env.PDF_TABLE_ASSIST_WORKER_SA_EMAIL =
+      'table-assist-worker@project-1.iam.gserviceaccount.com';
+
+    await expect(
+      cloudTasksPdfTableAssistIngestEnqueuer.enqueue({
+        docId: 'doc-1',
+        tenantId: 'tenant-1',
+        actor: {
+          userId: 'user-1',
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      })
+    ).rejects.toThrow(/PDF_TABLE_ASSIST_TASK_SIGNING_SECRET/);
+    expect(createTaskMock).not.toHaveBeenCalled();
   });
 
   it('falls back to the existing context-package Cloud Tasks env', async () => {

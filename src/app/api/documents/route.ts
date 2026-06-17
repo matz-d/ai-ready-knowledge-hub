@@ -42,6 +42,7 @@ import {
   cloudTasksPdfTableAssistIngestEnqueuer,
   PdfTableAssistQueueNotConfiguredError,
 } from '../../../lib/pdfTableAssistIngestEnqueuer';
+import { PdfTableAssistTaskSigningNotConfiguredError } from '../../../lib/pdfTableAssistTaskSigning';
 import type { PdfFlagEnabledReader } from '../../../lib/extractors/pdfExtractionDispatcher';
 import type { OrchestrateAuditContext } from '../../../lib/uploadOrchestrator';
 
@@ -338,7 +339,10 @@ export async function POST(request: Request) {
           });
         }
       } catch (enqueueErr) {
-        if (enqueueErr instanceof PdfTableAssistQueueNotConfiguredError) {
+        if (
+          enqueueErr instanceof PdfTableAssistQueueNotConfiguredError ||
+          enqueueErr instanceof PdfTableAssistTaskSigningNotConfiguredError
+        ) {
           console.warn('[documents] table-assist async enqueue skipped', {
             docId: result.docId,
             missing: enqueueErr.message,
