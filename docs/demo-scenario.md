@@ -17,11 +17,11 @@
 | 秒数 | シーン | 見せたいもの |
 |---|---|---|
 | 0:00-0:15 | 課題提起 | 機密文書を扱うSMEの散らばった文書の山 (デモ題材は士業事務所) |
-| 0:15-0:40 | Dump → Curator | ファイルを投入、自動分類が走る (Pre-processed可) |
-| 0:40-1:05 | Knowledge Inventory | ヒートマップで「うちの情報、こんなに偏ってたんだ」 |
+| 0:15-0:40 | Dump → Curator / Masker | 複数ファイルをまとめて投入し、ファイルごとに分類・安全化が進む (Pre-processed可) |
+| 0:40-1:05 | Dashboard / Inventory | Pipeline Funnel、KPI、文書一覧で「AIに渡せる・保護中・マスキング済み」が一目で分かる |
 | 1:05-1:20 | cloud-managed + Cloud DLP + Masker | 標準 profile では管理されたクラウド境界で受け取り、個人情報を安全化してからAI参照版を作る |
 | 1:20-1:35 | **Masker→Curator 逆feedback (A8)** | **顧問契約書を Masker が「マスク後も特定され得る」と判定 → Restricted に格上げ → AIに渡さない理由が残る瞬間** |
-| 1:35-2:15 | Purpose Query | 「新人スタッフ向けに給与計算業務を学べるAIを作りたい」と入力 |
+| 1:35-2:15 | Purpose Query → Safety Review | 「新人スタッフ向けに給与計算業務を学べるAIを作りたい」と入力し、候補・除外・要確認を生成前に確認 |
 | 2:15-2:40 | Strategist の出力 | 使える情報 / 除外すべき情報 / 足りない情報 / 質問リスト。各判断を目的に結びつけて見せる |
 | 2:40-3:00 | **クロージング + Export (A9)** | **Context Package を export → NotebookLM には source bundle、Gemini/RAG には単一 Markdown → purpose binding が残る → 下流 AI に渡す前段が完成** |
 
@@ -44,8 +44,17 @@ Phase 3-E の説明では、標準 profile は `cloud-managed` として扱う�
 
 ### デモの流れ (詳細)
 
-**1. 雑多な資料を Dump Box へ投入**
-契約書、料金表、給与計算チェックリスト、就業規則テンプレ、年末調整案内、顧客対応メモ、古い資料など。
+**1. 雑多な資料を Upload へまとめて投入**
+契約書、料金表、給与計算チェックリスト、就業規則テンプレ、年末調整案内、顧客対応メモ、古い資料などを `/upload` で複数選択する。UI はファイルごとのキューを表示し、成功・失敗・再試行を個別に扱う。サーバ側は従来どおり `POST /api/documents` を1ファイルずつ通すため、デモでは「一括で集める体験」と「安全な単票処理」の両方を見せる。
+
+おすすめの撮影用セット:
+- `給与計算チェックリスト.md`
+- `料金表_2026.csv`
+- `就業規則テンプレート.md`
+- `年末調整_案内文.txt`
+- `顧問契約書_実案件サンプル.txt`
+- `顧客対応メモ_匿名化.txt`
+- `古い料金表_2023.csv`
 
 **2. Curator Agent が自動分類**
 - 文書種別 (契約書、テンプレ、案内文、メモ、表 etc)
@@ -69,11 +78,15 @@ UI では当該文書カードに赤いバッジが付き、`ai_safe_version` �
 
 このシーンは作品の Agent性を一番明確に見せる山場。直列パイプラインではなく、エージェント間の協調と権限委譲が起きていることを伝える。
 
-**4. Knowledge Inventory を表示**
-ヒートマップで業務領域 × 文書種別の分布を可視化。「税務領域に古い資料が偏ってる」が一目で分かる。
+**4. Dashboard / Inventory を表示**
+トップページで Pipeline Funnel、KPI、文書一覧を見せる。ここでは「何件がAI利用可か」「何件がマスキング済みか」「何件が保護中か」を短く見せ、個別文書の status / sensitivity / AI利用方針へ目線を誘導する。
+
+> ナレーション例: 「集めた文書は、ただ保存されるのではなく、AIに渡せるもの・マスクして使うもの・人間確認に止めるものへ分かれます。」
 
 **5. ユーザが目的を入力**
 > 「新人スタッフ向けに、給与計算業務を学べるAIを作りたい」
+
+Purpose を入れたら、すぐ生成せず、まず候補選択 UI を見せる。include / exclude / needs review の違い、Safety Review、Pre-generation Preview を順に映す。ここで「本文をAIに渡す前に、人間が安全性を確認できる」ことを伝える。
 
 **6. Strategist Agent が AI-ready Context Package を生成**
 - **使える情報** : 給与計算チェックリスト (現行版)、就業規則テンプレ、年末調整案内文
@@ -85,6 +98,8 @@ UI では当該文書カードに赤いバッジが付き、`ai_safe_version` �
   - 「法改正時にどの資料を正本として更新しますか?」
 
 ここでは「この目的なら使える」「この目的でも渡せない」「この目的にはまだ足りない」という目的単位の説明に寄せる。技術的な内部名より、担当者が上司や顧客に説明できる判断結果として見せる。
+
+async Context Package が有効な本番デモでは、`queued` / `running` / `succeeded` の polling 表示を短く挟む。ローカル同期デモでは、このカットは省略してよい。
 
 **7. Export Context Package**
 
@@ -100,11 +115,17 @@ UI では当該文書カードに赤いバッジが付き、`ai_safe_version` �
 ## 重要な演出ポイント
 
 ### Pre-processed mode の活用
-- 50ファイルを実時間で処理するとデモ尺で苦しい
+- 複数ファイル upload は見せる。ただし 50 ファイルを実時間で処理するとデモ尺で苦しいため、撮影では 5〜7 件程度に絞る
 - 事前にCurator結果を流し込んだデモ用データ状態を用意する場合でも、通常 UI は固定 fixture を読まない
 - W1 の実 LLM 出力は `docs/w1-artifacts/inventory.snapshot.json` に回顧用 artifact として残す
 - デモ動画は実 Firestore / API 経路に投入済みの状態から開始できるようにする
 - ただし「Live mode」も用意 (Proto Pediaで判定者が触る場合)
+
+### Dashboard / Inventory の見せ方
+- 旧ヒートマップではなく、現在の UI は Pipeline Funnel、KPI、文書一覧を主役にする
+- Funnel では「登録 → 分類 → マスキング → AI利用可 / 保護中」の流れを見せる
+- KPI では `AI利用可`、`マスキング実施`、`保護中（AI除外）` の3点を読む
+- 文書一覧では、`Restricted` や `blocked` の行を深掘りし、「本文を渡さない理由が残る」ことを説明する
 
 ### マスキングの見せ方
 - 「機密で渡せない」→「マスクで渡せる」の変化を視覚的に
@@ -124,6 +145,7 @@ UI では当該文書カードに赤いバッジが付き、`ai_safe_version` �
 - Strategist の判断理由を短く可視化 (「これを使う理由」を表示。内部推論そのものは出さない)
 - Excluded セクションに Restricted 文書を `Status: Restricted / human review only` として並べる。これにより A8 の逆feedback の結果が Strategist の出力にも引き継がれていることが視覚的に伝わる
 - purpose binding を「このAIの用途に対する利用根拠」として見せる。監査用語として深掘りしすぎず、「あとから説明できる」ことを強調する
+- 生成前の候補選択では、候補 API が metadata-only の助言レイヤであり、最終的に本文を渡すかは既存生成経路の safety gate が判定する、と短く説明できる
 
 ### Export の見せ方 (A9)
 - Context Package 結果画面で2つの export を見せる: **Markdown をダウンロード**（primary）と **NotebookLM 用 bundle をダウンロード**（secondary）

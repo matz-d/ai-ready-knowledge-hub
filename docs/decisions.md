@@ -1915,7 +1915,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 **決定:**
 
-1. **D 戦略スコープ:** `pdfExtractionDispatcher` へ `tableAssistMode` と `augmentOfficialDocWithTableAssist` を配線する。同期 upload route は `tableAssistMode: 'disabled'` を明示し、production で table-assist を発火させない。async ingest worker / Cloud Tasks enqueue は本 PR 対象外。
+1. **D 戦略スコープ:** `pdfExtractionDispatcher` へ `tableAssistMode` と `augmentOfficialDocWithTableAssist` を配線する。同期 upload route は `tableAssistMode: 'disabled'` を明示し、production で table-assist を発火させない。async ingest worker / Cloud Tasks enqueue は本 PR 対象外。**Product reprocess** として `POST /api/documents/:docId/table-assist`（`reprocessPdfWithTableAssist`）を opt-in 経路として追加。Document detail UI ボタンは後続。
 2. **二重ゲート:** tenant-scoped flag `pdf-table-assist`（default off）**かつ** `tableAssistMode: 'async'` の実行コンテキストでのみ augment を呼ぶ。flag のみでは同期経路で走らせない。
 3. **Merge は Masker 前段 — post-terminal enrichment 禁止.** augment は `dispatchPdfExtraction` 内でのみ `documentIr` をマージし、Masker より前に完了する。terminal document や masked chunks への後付け enrichment は禁止。根拠テスト: `src/lib/extractors/__tests__/pdfTableAssistMaskingRegression.test.ts`（WU-6a）。
 4. **`raw/` 14日 retention 依存:** grounding は ingest 時点の pre-mask pdf-parse page text に対して行う。`D-PROD-3` の 14日 lifecycle 後に `raw/` を読み直す遅延再処理は設計パターンとして禁止。

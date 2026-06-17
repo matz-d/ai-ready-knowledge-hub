@@ -16,9 +16,9 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 
 ---
 
-## 現在のステータス (2026-06-13)
+## 現在のステータス (2026-06-16)
 
-**フェーズ**: Phase 4-UX MVP、NotebookLM source bundle（P1-A/B）、P1-F async full-coverage strategist、P1-C デモ docs 更新、P1-D Extraction & Masking Quality Gate 成熟化、**P1-E first slice（PR #37-#41）**、official-doc-pdf Gemini table-assist eval hardening まで完了。stable eval（`pnpm eval:p1d:quality --ci`）は CI blocker、live masker drift check（`pnpm eval:p1d:masker-drift`）も合格証跡あり。次は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) の **P1-E+ scan-pdf quality floor 解消**と **official-doc-pdf table-assist production design**（cost / latency / timeout / page gating）と **P2 提出補強**（デモ polish / enqueue・SLO）を並行で進める。
+**フェーズ**: Phase 4-UX MVP、NotebookLM source bundle（P1-A/B）、P1-F async full-coverage strategist、P1-C デモ docs 更新、P1-D Extraction & Masking Quality Gate 成熟化、**P1-E first slice（PR #37-#41）**、official-doc-pdf Gemini table-assist compare eval、**P1-E Step 1 mainline wiring（D 戦略）**、**multi-file upload UI**、**table-assist product reprocess API / async ingest worker** まで完了。stable eval（`pnpm eval:p1d:quality --ci`）は CI blocker、live masker drift check（`pnpm eval:p1d:masker-drift`）も合格証跡あり。次は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) の **P1-E+ scan-pdf quality floor 解消**と **P2 提出補強**（デモ polish）を並行で進める。
 
 ### 完了済み
 
@@ -58,9 +58,12 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 - **P1-F async full-coverage strategist**: batched strategist で truncation ゼロ。review 残タスクは [docs/p1-f-review-follow-up-tasks.md](docs/p1-f-review-follow-up-tasks.md)。
 - **P1-D Extraction & Masking Quality Gate**: schema v4、deterministic zero checks（CI blocker）、live Cloud DLP drift check。証跡は [docs/p1-d-evidence-2026-06-11.md](docs/p1-d-evidence-2026-06-11.md)。
 - **P1-E first slice（PR #37-#41）**: T1 large-file preflight + row-window / page-group・table-manifest、T2 official-PDF table fail-soft + scan visual table fallback、T3 scan label/value enrichment、scan OCR prompt guard + live drift workflow（`pnpm eval:scan-pdf:ocr-live-drift`）。方針・実装メモは [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md)。live drift 証跡は [docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md) / [docs/scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md)。
-- **P1-E official-doc-pdf Gemini table-assist eval hardening**: full Gemini 置換は採用せず、`pdf-parse` primary + grounded `pdf-parse+gemini-tables` を最善候補として compare-only で評価拡張。public PDF 由来の `*.table-assist.expected.json` を 3 件追加し、report に Gemini runtime（elapsed / page groups / calls / concurrency）と grounding rejected 行数・例を出す。production upload path と stable P1-D gate には未接続。実測は [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) / harness は [poc/document-conversion/official-doc-pdf/compare/README.md](poc/document-conversion/official-doc-pdf/compare/README.md)。
+- **P1-E official-doc-pdf Gemini table-assist compare eval**: full Gemini 置換は採用せず、`pdf-parse` primary + grounded `pdf-parse+gemini-tables` を最善候補として compare harness で評価拡張。public PDF 由来の `*.table-assist.expected.json` を 3 件追加。compare harness の Gemini arms は eval-only（`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1` 明示 opt-in）。実測は [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) / harness は [poc/document-conversion/official-doc-pdf/compare/README.md](poc/document-conversion/official-doc-pdf/compare/README.md)。
+- **P1-E Step 1 table-assist mainline wiring（D 戦略、2026-06-16）**: `pdfExtractionDispatcher` に `tableAssistMode` と grounded Gemini table-assist を配線。同期 upload は `tableAssistMode: 'disabled'` を明示し、flag ON でも同期経路では発火しない。`pdf-table-assist` flag（default off）**かつ** `tableAssistMode: 'async'` の実行コンテキストでのみ augment。Masker 前段 merge、fail-soft、WU-6a masking 回帰テスト、mainline harness 証跡は [docs/official-doc-table-assist-mainline-harness-2026-06-16.md](docs/official-doc-table-assist-mainline-harness-2026-06-16.md)。決定は [docs/decisions.md](docs/decisions.md) `D-P1-E-TA-1`。
+- **P1-E table-assist product reprocess / async ingest**: `POST /api/documents/:docId/table-assist` と `reprocessPdfWithTableAssist` で、upload 済み official-doc-pdf を opt-in 再処理。さらに official-doc-pdf upload 後、tenant flag `pdf-table-assist` が ON の場合だけ Cloud Tasks worker `POST /api/documents/:docId/table-assist/run` を best-effort enqueue する。`tableAssistMode: 'async'` + flag 二重ゲート、reprocess lease、chunks / masked object 更新。同期 upload 自体では Gemini table-assist を走らせない。
+- **Multi-file upload UI**: `/upload` の `UploadForm` がクライアント側キュー（最大 20 件、`UPLOAD_CONCURRENCY=1`）で複数ファイルを選択・逐次投入。サーバは従来どおり `POST /api/documents` を 1 ファイルずつ呼び、table-assist は同期 upload では走らない。
 
-### コードの位置 (P1-E first slice 完了時点)
+### コードの位置 (2026-06-16 時点)
 
 ```
 src/
@@ -98,8 +101,10 @@ src/
     columnSensitivityRules.ts
     googleSheetsSnapshotImporter.ts / googleDocsSnapshotImporter.ts / googleWorkspaceClient.ts
     workspaceFreshness.ts / workspaceImport/types.ts
-    extractors/{csvExtractor,xlsxExtractor,plainTextExtractor,pdfDocumentExtractor,slidePdfDocumentExtractor,scanPdfDocumentExtractor}.ts
-    featureFlags.ts                      # pdf-conversion-subtype-1/2/3 gating（Phase 3-H-2/3）
+    extractors/{csvExtractor,xlsxExtractor,plainTextExtractor,pdfDocumentExtractor,slidePdfDocumentExtractor,scanPdfDocumentExtractor,pdfExtractionDispatcher}.ts
+    extractors/officialDocPdfTableAssist/  # grounded Gemini table-assist（P1-E Step 1）
+    pdfTableAssistReprocessor.ts         # product reprocess path（POST .../table-assist）
+    featureFlags.ts                      # pdf-conversion-subtype-1/2/3 + pdf-table-assist gating
     documentIrStorage.ts                 # GCS document-ir/v1.json（Phase 3-H-2）
     firestoreSchema.ts / parseFirestoreDocumentData.ts
     auth/
@@ -120,8 +125,10 @@ src/
       context-package/candidates/route.ts # POST /api/context-package/candidates（候補 API）
       context-package/jobs/[jobId]/...   # async job status / result / run / cancel
       context-package/jobs/sweep/route.ts # stale-running recovery sweeper
-      documents/route.ts                 # POST /api/documents（upload → auto-chunk）
+      documents/route.ts                 # POST /api/documents（upload → auto-chunk、sync は tableAssistMode: disabled）
       documents/[docId]/route.ts         # GET /api/documents/:docId
+      documents/[docId]/table-assist/route.ts  # POST opt-in table-assist reprocess（async context）
+      documents/[docId]/table-assist/run/route.ts  # Cloud Tasks worker（upload 後 async ingest）
       import/google-sheets/route.ts      # POST /api/import/google-sheets（Sheets / Docs 振り分け）
       import/google-sheets/service-account-email/route.ts
       workspace/freshness/route.ts       # POST /api/workspace/freshness
@@ -133,7 +140,7 @@ src/
       page.tsx
     documents/[docId]/page.tsx
     import/google-sheets/ImportForm.tsx / page.tsx
-    upload/UploadForm.tsx / CuratorResultCard.tsx / MaskerResultCard.tsx / page.tsx
+    upload/UploadForm.tsx / uploadQueue.ts / CuratorResultCard.tsx / MaskerResultCard.tsx / page.tsx
     page.tsx                             # Knowledge Inventory（Firestore 正本、失敗時 W1 fallback）
     layout.tsx                           # ナビゲーション（アップロード / Sheets 取り込み / Context Package）
   _components/ReimportButton.tsx
@@ -239,15 +246,17 @@ sample-data/
 
 | エンドポイント | 用途 |
 |---|---|
-| `POST /api/documents` | 単票アップロード。multipart 検証 → `uploadOrchestrator`（GCS / Firestore / Curator / Masker）→ chunk 自動生成。 |
+| `POST /api/documents` | 1 ファイルずつアップロード（UI の multi-file queue も 1 リクエスト = 1 ファイル）。multipart 検証 → `uploadOrchestrator`（GCS / Firestore / Curator / Masker）→ chunk 自動生成。同期経路は `tableAssistMode: 'disabled'`。 |
 | `GET /api/documents/:docId` | Inventory document の詳細取得。 |
+| `POST /api/documents/:docId/table-assist` | official-doc-pdf の opt-in table-assist 再処理。`pdf-table-assist` flag ON **かつ** `tableAssistMode: 'async'` で dispatcher augment → Masker 前段 merge → chunks 更新。同期 upload では使わない。 |
+| `POST /api/documents/:docId/table-assist/run` | Cloud Tasks worker。official-doc-pdf upload 後に best-effort enqueue され、既存 reprocess service を worker context で実行する。tenant / actor は task body、認証は OIDC + `PDF_TABLE_ASSIST_WORKER_TOKEN`（未設定時は Context Package token fallback）。 |
 | `POST /api/context-package` | Purpose Query API。`{ purpose, limit? }` を受け、Strategist が chunk を選別し Context Package + Markdown を同期で返す。 |
 | `POST /api/import/google-sheets` | Google Sheets / Google Docs の URL または fileId を受け、Drive export → Phase 2 パイプラインへ。Docs URL（`docs.google.com/document/d/`）は Docs importer に自動振り分け。 |
 | `GET /api/import/google-sheets/service-account-email` | Sheets / Docs の共有先として必要な service account email を返す。 |
 | `POST /api/workspace/freshness` | Workspace document の再取り込みトリガー。 |
 | `POST /api/curator` | **UI 非使用。** Curator 単体の curl / eval / smoke 専用。 |
 
-### セキュリティ境界の現状 (Phase 3-H-3 M6 完了時点)
+### セキュリティ境界の現状 (2026-06-16 時点)
 
 - **Cloud IAP**: Cloud Run を直接 IAP で保護。`allow-unauthenticated` 不使用。匿名アクセスは IAP が 302/401 で遮断。
 - **IAP JWT 検証**: `src/lib/auth/verifyIapJwt.ts` が `x-goog-iap-jwt-assertion` を Google public keys で検証。検証通過後のみ `x-goog-authenticated-user-email` を信頼する。
@@ -255,7 +264,7 @@ sample-data/
 - **AuditEvent**: `document.import` / `document.reimport` / `document.export` / `document.convert` を `auditEvents/{eventId}` に append-only で記録。PDF 変換（subtype 2/3）では Vertex 成功時に `inferenceDestination` 必須。scan-pdf では `unmaskablePiiFindings.count` を記録。Firestore Security Rules で update/delete を拒否。
 - **PDF conversion feature flags**: `pdf-conversion-subtype-1/2/3` は Firestore `feature_flags` の allow-list + `expiresAt` で gating。同一 tenant で複数 subtype flag の同時 ON は 403。subtype 3 は **`m-grow-ai.com` のみ**（公開拡大は M6 後の別 decision）。
 - **scan-pdf fail-closed**: Gemini OCR timeout / quota / schema 失敗は pre-flight で HTTP 400。`document` / `chunk` / `document.convert` AuditEvent は作らない。本線 upload 上限は **5 MiB**（PoC runner の 30 MiB とは別）。
-- **official-doc-pdf Gemini table-assist は eval-only**: 現時点では production upload path へ接続しない。stable P1-D gate は live Gemini に依存させない。compare harness の Gemini arms は **既定ではすべて skip** し、`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1` の明示 opt-in 時のみ `sample-data/document-conversion/official-doc-pdf/` 配下の PDF（public fixture または allowlisted synthetic）へ Vertex を呼ぶ。table-only rows は同一ページの `pdf-parse` text に grounded なものだけ merge する。
+- **official-doc-pdf Gemini table-assist の二重ゲート**: 同期 upload（`POST /api/documents`）は `tableAssistMode: 'disabled'` を明示し、tenant flag が ON でも table-assist を発火しない。gated 実行は `pdf-table-assist` flag（default off）**かつ** `tableAssistMode: 'async'` のコンテキストのみ（`POST /api/documents/:docId/table-assist` reprocess、Cloud Tasks worker `.../run`、mainline harness）。augment は Masker 前段で fail-soft。stable P1-D gate は live Gemini に依存させない。compare harness の Gemini arms は **eval-only**（既定 skip、`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1` 明示 opt-in、fixture 配下のみ）。grounding 済み table rows のみ merge する。
 - **Safety gate**: Strategist へ渡す前に決定論的ルールで chunk を除外（Restricted / blocked / masking 未完了 / クロス顧客機密）。LLM に依存しない。
 - **Masking defense-in-depth**: `requires_masking` chunk に `maskedText` がない場合、`toContextPackage` は raw text を fallback で出さず throw する。
 - **Cloud DLP**: Masker provider として導入済み。現在の固定値は `minLikelihood=POSSIBLE`、replacement token は `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-06-12-v1`。P1-D で synthetic masked name / My Number-like value 用の custom infoTypes を追加済み。未指定は `simple-rule` fallback、`MASKER_PROVIDER=cloud-dlp` で明示。
@@ -285,8 +294,8 @@ sample-data/
 直近の作業順は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) を正とする。背景となる未決論点・Ingest 起票の詳細は [docs/open-questions.md](docs/open-questions.md)（次フェーズ表 + §Ingest 拡張）。
 
 - **P1-E+ scan-pdf quality floor 解消**: accepted live drift floor（`majorDriftCount=3`）を下げる。PII direction は green。sidecar 意図的 regeneration、public blank-form recall 改善、full live `--ci` gate 再評価。正本は [docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md)。
-- **official-doc-pdf table-assist production design**: compare では hybrid が public table-assist goldens を改善した一方、`mhlw-overtime-limit-guide` table-assist は約 4.5 分だった。production 接続前に cost / latency / timeout / page gating と better grounding を設計する。
-- **P2 提出補強（並行）**: Phase 3-F デモ polish（source bundle 前提・Dashboard refresh 後 UI）、enqueue 二重 submit の挙動確認と簡易 SLO 1枚。
+- **table-assist async ingest worker**: reprocess API と dispatcher 配線に加え、official-doc-pdf upload 後の Cloud Tasks enqueue / worker route を実装。upload レスポンスは同期完了のまま、enqueue は best-effort。専用 `PDF_TABLE_ASSIST_*` env が未設定なら Context Package worker env を fallback 利用できる。cost / latency（例: overtime 約 4.5 分）は [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) の実測を参照。
+- **P2 提出補強（並行）**: Phase 3-F デモ polish（source bundle 前提・Dashboard refresh 後 UI・multi-file upload 導線）。enqueue 二重 submit / 簡易 SLO は完了（`operate-deliver-readiness.md` §E）。
 - **P3 cleanup / Ingest 判断**: 不要 CSS 削除、Drive folder bulk / local directory batch / standalone images の product 判断。
 
 ---
@@ -309,7 +318,8 @@ sample-data/
 | [docs/phase-3-h-2-direction.md](docs/phase-3-h-2-direction.md) | Phase 3-H-2 official-doc-pdf 本線統合（**完了**） |
 | [docs/phase-3-h-3-direction.md](docs/phase-3-h-3-direction.md) | Phase 3-H-3 slide-pdf / scan-pdf 本線統合（**完了** §8.3 M6） |
 | [docs/phase-3-h-3-scan-pdf-live-smoke.md](docs/phase-3-h-3-scan-pdf-live-smoke.md) | scan-pdf M6 dev tenant live smoke 証跡 |
-| [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) | P1-E large-file / table fallback / locator enrichment と Gemini table-assist eval 実測 |
+| [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) | P1-E large-file / table fallback / locator enrichment、table-assist D 戦略・二重ゲート |
+| [docs/official-doc-table-assist-mainline-harness-2026-06-16.md](docs/official-doc-table-assist-mainline-harness-2026-06-16.md) | table-assist mainline harness 証跡（merge / fail-soft） |
 | [poc/document-conversion/README.md](poc/document-conversion/README.md) | Document Conversion PoC runner 一覧 |
 | [poc/document-conversion/official-doc-pdf/compare/README.md](poc/document-conversion/official-doc-pdf/compare/README.md) | official-doc-pdf converter compare harness と table-assist golden check |
 | [sample-data/document-conversion/README.md](sample-data/document-conversion/README.md) | conversion fixture inventory 正本 |

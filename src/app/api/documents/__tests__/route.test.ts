@@ -7,6 +7,8 @@ const {
   getKnowledgeHubBucketNameMock,
   dispatchPdfExtractionMock,
   buildPdfCuratorContentMock,
+  createFirestorePdfFlagReaderMock,
+  cloudTasksPdfTableAssistEnqueueMock,
   getFirestoreClientMock,
   curatorPhaseErrorClass,
   maskerPhaseErrorClass,
@@ -36,6 +38,8 @@ const {
     getKnowledgeHubBucketNameMock: vi.fn(),
     dispatchPdfExtractionMock: vi.fn(),
     buildPdfCuratorContentMock: vi.fn(),
+    createFirestorePdfFlagReaderMock: vi.fn(),
+    cloudTasksPdfTableAssistEnqueueMock: vi.fn(),
     getFirestoreClientMock: vi.fn(),
     curatorPhaseErrorClass: CuratorPhaseErrorMock,
     maskerPhaseErrorClass: MaskerPhaseErrorMock,
@@ -64,12 +68,24 @@ vi.mock('../../../../lib/chunkRegenerator', () => ({
 vi.mock('../../../../lib/extractors/pdfExtractionDispatcher', () => ({
   buildPdfCuratorContent: buildPdfCuratorContentMock,
   dispatchPdfExtraction: dispatchPdfExtractionMock,
-  createFirestorePdfFlagReader: vi.fn(),
+  createFirestorePdfFlagReader: createFirestorePdfFlagReaderMock,
   PDF_UPLOAD_BETA_DISABLED_MESSAGE:
     'PDF アップロードはベータ機能です。テナントのアクセス権を確認してください。',
   PDF_CONFLICTING_SUBTYPE_FLAGS_MESSAGE:
     'PDF 変換の feature flag が競合しています。同一テナントで PDF 変換 subtype flag (official-doc-pdf / slide-pdf / scan-pdf) を複数同時に有効にできません。',
   PDF_EXTRACTION_FAILED_MESSAGE: 'PDF ファイルを解析できませんでした。',
+}));
+
+vi.mock('../../../../lib/pdfTableAssistIngestEnqueuer', () => ({
+  cloudTasksPdfTableAssistIngestEnqueuer: {
+    enqueue: cloudTasksPdfTableAssistEnqueueMock,
+  },
+  PdfTableAssistQueueNotConfiguredError: class PdfTableAssistQueueNotConfiguredError extends Error {
+    constructor(missing: string[]) {
+      super(`missing ${missing.join(', ')}`);
+      this.name = 'PdfTableAssistQueueNotConfiguredError';
+    }
+  },
 }));
 
 vi.mock('../../../../lib/firestore', () => ({
@@ -159,6 +175,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   getKnowledgeHubBucketNameMock.mockReturnValue('bucket-1');
   getFirestoreClientMock.mockReturnValue({ collection: vi.fn() });
+  createFirestorePdfFlagReaderMock.mockReturnValue(
+    vi.fn(async (flagId: string) => flagId === 'pdf-conversion-subtype-1')
+  );
+  cloudTasksPdfTableAssistEnqueueMock.mockResolvedValue(undefined);
   dispatchPdfExtractionMock.mockResolvedValue(defaultPdfDispatchSuccess);
   buildPdfCuratorContentMock.mockImplementation(
     (result: { textContent: string }) => result.textContent
@@ -854,6 +874,81 @@ describe('POST /api/documents', () => {
         })
       );
       expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+      expect(cloudTasksPdfTableAssistEnqueueMock).not.toHaveBeenCalled();
+    });
+
+    it('enqueues async table-assist after official PDF upload when tenant flag is on', async () => {
+      createFirestorePdfFlagReaderMock.mockReturnValue(
+        vi.fn(async (flagId: string) =>
+          flagId === 'pdf-conversion-subtype-1' ||
+          flagId === 'pdf-table-assist'
+        )
+      );
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(200);
+      expect(cloudTasksPdfTableAssistEnqueueMock).toHaveBeenCalledWith({
+        docId: 'doc-1',
+        tenantId: 'local-dev',
+        actor: expect.objectContaining({
+          userId: 'local-dev@localhost.local',
+        }),
+      });
+    });
+
+    it('keeps upload successful when async table-assist enqueue fails', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      createFirestorePdfFlagReaderMock.mockReturnValue(
+        vi.fn(async (flagId: string) =>
+          flagId === 'pdf-conversion-subtype-1' ||
+          flagId === 'pdf-table-assist'
+        )
+      );
+      cloudTasksPdfTableAssistEnqueueMock.mockRejectedValue(
+        new Error('queue unavailable')
+      );
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(200);
+      expect(cloudTasksPdfTableAssistEnqueueMock).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[documents] table-assist async enqueue failed',
+        expect.objectContaining({ docId: 'doc-1' })
+      );
+      errorSpy.mockRestore();
+    });
+
+    it('does not enqueue async table-assist for restricted PDF results', async () => {
+      createFirestorePdfFlagReaderMock.mockReturnValue(
+        vi.fn(async (flagId: string) =>
+          flagId === 'pdf-conversion-subtype-1' ||
+          flagId === 'pdf-table-assist'
+        )
+      );
+      orchestrateUploadProcessingMock.mockResolvedValue({
+        kind: 'restricted',
+        docId: 'doc-restricted',
+        storagePath: 'raw/doc-restricted/sample.pdf',
+        curator: {
+          documentType: '契約書',
+          businessDomain: '顧客対応',
+          sensitivity: 'Confidential',
+          freshness: 'current',
+          isAuthoritativeCandidate: true,
+          aiUsePolicy: 'requires_masking',
+          rationale: 'masking',
+        },
+        curatorCompletedAt: new Date('2026-05-08T03:00:00.000Z'),
+        restrictionSource: 'safety_gate',
+        sensitivityReason: 'unmaskable pii',
+      });
+
+      const response = await POST(buildRequestWithFile(pdfFile()));
+
+      expect(response.status).toBe(200);
+      expect(cloudTasksPdfTableAssistEnqueueMock).not.toHaveBeenCalled();
     });
 
     it('passes page-group manifest as PDF Curator input while preserving full text content', async () => {

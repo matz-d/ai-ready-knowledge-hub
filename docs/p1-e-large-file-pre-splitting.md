@@ -211,8 +211,10 @@ Use the existing PoC compare harness:
 - Reuse `runOfficialDocPipeline({ converter })`, `DocumentIR -> KnowledgeChunk`,
   and `renderCompareReport` so the report stays comparable with the existing
   `pdf-parse` / MarkItDown arms.
-- Keep this eval-only. No upload route, no feature flag, no sidecar regeneration,
-  and no production fallback until the comparison says it is worth doing.
+- Keep compare harness Gemini arms eval-only. No synchronous upload wiring, no
+  sidecar regeneration from compare, and no production fallback until the
+  comparison says it is worth doing. (Mainline product path for gated
+  table-assist is separate: dispatcher + reprocess API as of 2026-06-16.)
 - Use committed official-doc-pdf fixtures first because they have golden
   expectations. `local-data/annual-report-doc-2025-viewing-ja.pdf` stays
   local-only and qualitative because it has no expected sidecar.
@@ -547,3 +549,32 @@ context-package job lease/sweeper/OIDC patterns; not part of this PR.
   table-assist-derived chunks in the live masker drift evaluation set so Cloud
   DLP / Gemini masker over-mask and under-mask behavior is measured on grounded
   table rows, not only on deterministic `simple-rule` regression fixtures.
+
+### 2026-06-16: Product reprocess path + multi-file upload UI（完了）
+
+**Product reprocess (table-assist):**
+
+- `POST /api/documents/:docId/table-assist` exposes opt-in reprocess for
+  uploaded official-doc-pdf documents.
+- `reprocessPdfWithTableAssist` reads `raw/{docId}/`, dispatches with
+  `tableAssistMode: 'async'` + `pdf-table-assist` flag, merges before Masker,
+  updates chunks / masked object, and records `tableAssist` audit summary.
+- Reprocess lease (`reprocessing` / `reprocessingLeaseId`) prevents concurrent
+  runs; fail-soft on augment failure preserves pdf-parse IR.
+- This is the **current product entrypoint** for gated table-assist. It is not
+  wired into synchronous upload (`tableAssistMode: 'disabled'` on
+  `POST /api/documents`).
+- Document detail UI button is not shipped yet; API / curl / admin script is the
+  supported path until a follow-up UI task.
+
+**Multi-file upload UI:**
+
+- `/upload` `UploadForm` + `uploadQueue.ts`: client-side queue up to
+  `MAX_UPLOAD_FILES=20`, `UPLOAD_CONCURRENCY=1`, per-file status and retry.
+- Server ingest remains one `POST /api/documents` per file. Table-assist does
+  not run on this synchronous path.
+
+**Still out of scope (separate epic):**
+
+- PDF async ingest worker / Cloud Tasks enqueue (automatic post-upload augment).
+- Compare harness Gemini arms remain eval-only (`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1`).

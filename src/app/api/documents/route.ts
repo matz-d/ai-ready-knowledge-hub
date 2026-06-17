@@ -38,6 +38,13 @@ import {
 import { replaceChunksForDoc } from '../../../lib/chunkRegenerator';
 import { auditActorFromRequest, recordAuditEvent } from '../../../lib/audit/auditEvent';
 import { getFirestoreClient } from '../../../lib/firestore';
+import {
+  cloudTasksPdfTableAssistIngestEnqueuer,
+  PdfTableAssistQueueNotConfiguredError,
+} from '../../../lib/pdfTableAssistIngestEnqueuer';
+import { PdfTableAssistTaskSigningNotConfiguredError } from '../../../lib/pdfTableAssistTaskSigning';
+import type { PdfFlagEnabledReader } from '../../../lib/extractors/pdfExtractionDispatcher';
+import type { OrchestrateAuditContext } from '../../../lib/uploadOrchestrator';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -169,20 +176,24 @@ export async function POST(request: Request) {
   // Done before the orchestration try/catch so failure modes are clean 4xx/403,
   // not confused with 5xx CuratorPhaseError / MaskerPhaseError.
   let pdfExtractionResult: PdfExtractionResult | undefined;
+  let pdfAuditContext: OrchestrateAuditContext | undefined;
+  let pdfFlagReader: PdfFlagEnabledReader | undefined;
 
   if (extCheck === '.pdf') {
     let tenantId: string;
     try {
-      ({ tenantId } = auditActorFromRequest(request));
+      pdfAuditContext = auditActorFromRequest(request);
+      tenantId = pdfAuditContext.tenantId;
     } catch {
       tenantId = '';
     }
     const db = getFirestoreClient();
+    pdfFlagReader = createFirestorePdfFlagReader(db, tenantId);
     // Sync upload must never run table-assist; only the async worker may pass 'async'.
     const pdfDispatchOutcome = await dispatchPdfExtraction({
       buffer,
       fileName: displayName,
-      isFlagEnabled: createFirestorePdfFlagReader(db, tenantId),
+      isFlagEnabled: pdfFlagReader,
       tableAssistMode: 'disabled',
     });
 
@@ -244,15 +255,6 @@ export async function POST(request: Request) {
   }
 
   const contentType = mime ? mime : defaultContentTypeForExt(extCheck);
-  let pdfAuditContext: ReturnType<typeof auditActorFromRequest> | undefined;
-  if (pdfExtractionResult) {
-    try {
-      pdfAuditContext = auditActorFromRequest(request);
-    } catch (auditErr) {
-      console.warn('[documents] auditActorFromRequest failed', auditErr);
-      pdfAuditContext = undefined;
-    }
-  }
 
   try {
     const result = await orchestrateUploadProcessing({
@@ -320,6 +322,38 @@ export async function POST(request: Request) {
       });
     } catch (auditErr) {
       console.error('[documents] recordAuditEvent failed', auditErr);
+    }
+
+    if (
+      pdfExtractionResult?.documentIr.source.sourceSubtype === 'official-doc-pdf' &&
+      result.kind !== 'restricted' &&
+      pdfAuditContext !== undefined &&
+      pdfFlagReader !== undefined
+    ) {
+      try {
+        if (await pdfFlagReader('pdf-table-assist')) {
+          await cloudTasksPdfTableAssistIngestEnqueuer.enqueue({
+            docId: result.docId,
+            tenantId: pdfAuditContext.tenantId,
+            actor: pdfAuditContext.actor,
+          });
+        }
+      } catch (enqueueErr) {
+        if (
+          enqueueErr instanceof PdfTableAssistQueueNotConfiguredError ||
+          enqueueErr instanceof PdfTableAssistTaskSigningNotConfiguredError
+        ) {
+          console.warn('[documents] table-assist async enqueue skipped', {
+            docId: result.docId,
+            missing: enqueueErr.message,
+          });
+        } else {
+          console.error('[documents] table-assist async enqueue failed', {
+            docId: result.docId,
+            error: enqueueErr,
+          });
+        }
+      }
     }
 
     return NextResponse.json(body);
