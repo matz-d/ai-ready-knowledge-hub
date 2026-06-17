@@ -433,4 +433,18 @@ describe('POST /api/documents/[docId]/table-assist/run', () => {
     });
     expect(reprocessPdfWithTableAssistMock).not.toHaveBeenCalled();
   });
+
+  it('accepts a signed payload in production when no worker token is configured', async () => {
+    // "signing configured, token omitted" must not be silently rejected at the
+    // token gate: the required signature is the production auth invariant.
+    vi.stubEnv('NODE_ENV', 'production');
+    process.env.PDF_TABLE_ASSIST_TASK_SIGNING_SECRET = 'signing-secret';
+
+    const response = await POST_WORKER(workerRequest(signedWorkerBody()), {
+      params: Promise.resolve({ docId: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(reprocessPdfWithTableAssistMock).toHaveBeenCalledTimes(1);
+  });
 });

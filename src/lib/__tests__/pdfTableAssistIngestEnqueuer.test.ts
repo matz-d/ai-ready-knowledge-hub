@@ -103,6 +103,7 @@ describe('cloudTasksPdfTableAssistIngestEnqueuer', () => {
     });
 
     const task = createTaskMock.mock.calls[0][0].task;
+    expect(task.dispatchDeadline).toEqual({ seconds: 600 });
     const body = JSON.parse(
       Buffer.from(task.httpRequest.body, 'base64').toString('utf8')
     );

@@ -6,6 +6,7 @@
  * raw hash, Masker-before-chunk, rollback, and single-flight lease invariants
  * are enforced in both manual and automatic paths.
  */
+import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import {
   reprocessPdfWithTableAssist,
@@ -17,14 +18,32 @@ import type { OrchestrateAuditContext } from '../../../../../../lib/uploadOrches
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+function tokensMatch(provided: string | null, expected: string): boolean {
+  const providedBytes = Buffer.from(provided ?? '');
+  const expectedBytes = Buffer.from(expected);
+  if (providedBytes.length !== expectedBytes.length) {
+    return false;
+  }
+  return timingSafeEqual(providedBytes, expectedBytes);
+}
+
 function isAuthorized(request: Request): boolean {
   const expected =
     process.env.PDF_TABLE_ASSIST_WORKER_TOKEN ??
     process.env.CONTEXT_PACKAGE_JOB_TOKEN;
+  // The shared token is defense-in-depth on top of Cloud Run IAP/OIDC and the
+  // required Cloud Tasks payload signature (verified below). When no token is
+  // configured we defer to those layers instead of failing closed here, so a
+  // "signing configured, token omitted" production deployment is not silently
+  // rejected at the token gate while still being signature-gated. This mirrors
+  // the enqueuer, which requires signing but treats the token as optional.
   if (!expected) {
-    return process.env.NODE_ENV !== 'production';
+    return true;
   }
-  return request.headers.get('x-pdf-table-assist-worker-token') === expected;
+  return tokensMatch(
+    request.headers.get('x-pdf-table-assist-worker-token'),
+    expected
+  );
 }
 
 async function parseWorkerBody(request: Request): Promise<unknown> {
@@ -33,12 +52,6 @@ async function parseWorkerBody(request: Request): Promise<unknown> {
   } catch {
     return null;
   }
-}
-
-function signatureHttpStatus(
-  _code: 'task_signature_required' | 'task_signature_invalid' | 'task_signature_expired'
-): number {
-  return 401;
 }
 
 function auditContextFromVerifiedPayload(payload: {
@@ -86,10 +99,10 @@ export async function POST(
 
   const verified = verifyPdfTableAssistTaskPayload(body);
   if (!verified.ok) {
-    return NextResponse.json(
-      { error: verified.code },
-      { status: signatureHttpStatus(verified.code) }
-    );
+    // All signature failures (required / invalid / expired) reject with 401.
+    // Cloud Tasks retries any non-2xx until maxAttempts regardless of the exact
+    // 4xx code, so the code is informational and surfaced only in the body.
+    return NextResponse.json({ error: verified.code }, { status: 401 });
   }
 
   const { payload } = verified;

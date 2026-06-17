@@ -23,6 +23,19 @@ export type PdfTableAssistIngestRequest = {
   actor: OrchestrateAuditContext['actor'];
 };
 
+/**
+ * Cloud Tasks dispatch deadline for the table-assist worker call.
+ *
+ * Grounded Gemini table-assist on large official-doc-pdf has been measured at
+ * ~4.5 min (see docs/p1-e-large-file-pre-splitting.md). The deadline gives the
+ * worker headroom above that before Cloud Tasks abandons the attempt.
+ *
+ * IMPORTANT: the Cloud Run request timeout on the worker service must be >=
+ * this value. If Cloud Run times out first (default 300s), it returns 504 and
+ * Cloud Tasks retries the expensive Gemini calls. Keep the two aligned.
+ */
+export const PDF_TABLE_ASSIST_TASK_DISPATCH_DEADLINE_SECONDS = 600;
+
 export class PdfTableAssistQueueNotConfiguredError extends Error {
   constructor(problems: string[]) {
     super(
@@ -155,6 +168,9 @@ export const cloudTasksPdfTableAssistIngestEnqueuer: PdfTableAssistIngestEnqueue
         parent,
         task: {
           name: `${parent}/tasks/${taskIdForDoc(request.docId)}`,
+          dispatchDeadline: {
+            seconds: PDF_TABLE_ASSIST_TASK_DISPATCH_DEADLINE_SECONDS,
+          },
           httpRequest: {
             httpMethod: 'POST',
             url,

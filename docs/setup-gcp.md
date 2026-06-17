@@ -174,9 +174,18 @@ Cloud Tasks queue location は regional のみ。Gemini 用の
 
 worker route は Cloud Run の `--no-allow-unauthenticated` と IAP
 保護を前提にする。アプリ層の shared token は多層防御であり、Cloud Tasks
-OIDC の検証は Cloud Run / IAP 側に委譲する。worker が返す 401 / 400 は
-設定不備を Cloud Tasks retry / backlog alert として表面化させるための
-fail-closed 経路として扱う。
+OIDC の検証は Cloud Run / IAP 側に委譲する。本番では署名（`PDF_TABLE_ASSIST_TASK_SIGNING_SECRET`）が
+必須ゲートで、shared token は任意。token 未設定でも署名検証で fail-closed する。
+worker が返す 401 / 400 は設定不備を Cloud Tasks retry / backlog alert として
+表面化させるための fail-closed 経路として扱う。
+
+**timeout 整合（必須）**: grounded Gemini table-assist は大きな official-doc-pdf で
+約 4.5 分かかる実測がある（[p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md)）。
+enqueue する task の `dispatchDeadline` は **600 秒**（`PDF_TABLE_ASSIST_TASK_DISPATCH_DEADLINE_SECONDS`）。
+worker を載せる Cloud Run サービスの **request timeout はこの値以上**（`gcloud run deploy ... --timeout=600`）に
+しないと、Cloud Run が 504 で先に worker を kill し、Cloud Tasks が高コストな
+Gemini 呼び出しを retry してしまう。cost guard（[#52](https://github.com/matz-d/ai-ready-knowledge-hub/issues/52)）が
+入るまでは、queue の `--max-attempts` を小さめ（例: 3）にして retry 暴走を抑える。
 
 ### 設計メモ: UI feature flag
 
