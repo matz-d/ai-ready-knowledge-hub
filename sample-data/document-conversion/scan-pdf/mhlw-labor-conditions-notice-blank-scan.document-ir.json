@@ -3,7 +3,7 @@
   "source": {
     "fileName": "mhlw-labor-conditions-notice-blank-scan.pdf",
     "mediaType": "application/pdf",
-    "sourceKind": "poc",
+    "sourceKind": "upload",
     "sourceSubtype": "scan-pdf"
   },
   "pages": [
@@ -12,20 +12,20 @@
       "blocks": [
         {
           "blockId": "p1-ocr1",
-          "kind": "paragraph",
-          "text": "(一般労働者用;常用、有期雇用型)",
+          "kind": "heading",
+          "text": "（一般労働者用；常用、有期雇用型）",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              24,
-              646,
-              41,
-              930
+              735,
+              25,
+              985,
+              38
             ]
           },
           "metadata": {
             "extractionProvider": "gemini-vertex-ocr",
-            "ocrConfidence": 0.95
+            "ocrConfidence": 0.98
           }
         },
         {
@@ -35,15 +35,15 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              54,
-              417,
-              72,
-              590
+              418,
+              57,
+              582,
+              73
             ]
           },
           "metadata": {
             "extractionProvider": "gemini-vertex-ocr",
-            "ocrConfidence": 0.98
+            "ocrConfidence": 0.99
           }
         },
         {
@@ -53,10 +53,10 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              82,
-              814,
-              95,
-              937
+              818,
+              85,
+              985,
+              97
             ]
           },
           "metadata": {
@@ -71,10 +71,10 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              104,
-              271,
-              117,
-              291
+              145,
+              113,
+              161,
+              125
             ]
           },
           "metadata": {
@@ -85,50 +85,50 @@
         {
           "blockId": "p1-ocr5",
           "kind": "paragraph",
-          "text": "事業場名称・所在地\n使用者職氏名",
+          "text": "事業場名称・所在地",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              118,
-              436,
-              148,
-              596
+              442,
+              113,
+              558,
+              125
             ]
           },
           "metadata": {
             "extractionProvider": "gemini-vertex-ocr",
-            "ocrConfidence": 0.97
+            "ocrConfidence": 0.98
           }
         },
         {
           "blockId": "p1-ocr6",
-          "kind": "table",
-          "text": "契約期間 | 期間の定めなし、期間の定めあり ( 年 月 日～ 年 月 日)\n※以下は、「契約期間」について「期間の定めあり」とした場合に記入\n1 契約の更新の有無\n[自動的に更新する・更新する場合があり得る・契約の更新はしない・その他 ( )]\n2 契約の更新は次により判断する。\n[ ・契約期間満了時の業務量 ・勤務成績、態度 ・能力\n・会社の経営状況 ・従事している業務の進捗状況\n・その他 ( ) ]\n3 更新上限の有無 (無・有 (更新 回まで/通算契約期間 年まで))\n【労働契約法に定める同一の企業との間での通算契約期間が5年を超える有期労働契約の締結の場合】\n本契約期間中に会社に対して期間の定めのない労働契約(無期労働契約)の締結の申込みをすることにより、本契約期間の末日の翌日( 年 月 日)から、無期労働契約での雇用に転換することができる。この場合の本契約からの労働条件の変更の有無 ( 無 ・ 有 (別紙のとおり) )\n【有期雇用特別措置法による特例の対象者の場合】\n無期転換申込権が発生しない期間: I (高度専門)・II (定年後の高齢者)\nI 特定有期業務の開始から完了までの期間 ( 年 か月 (上限10年))\nII 定年後引き続き雇用されている期間",
+          "kind": "paragraph",
+          "text": "使用者職氏名",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              151,
-              88,
-              390,
-              944
+              450,
+              131,
+              550,
+              143
             ]
           },
           "metadata": {
             "extractionProvider": "gemini-vertex-ocr",
-            "ocrConfidence": 0.95
+            "ocrConfidence": 0.98
           }
         },
         {
           "blockId": "p1-ocr7",
           "kind": "table",
-          "text": "就業の場所 | (雇入れ直後) (変更の範囲)",
+          "text": "契約期間 期間の定めなし、期間の定めあり（ 年 月 日〜 年 月 日） ※以下、「契約期間」について「期間の定めあり」とした場合に記入",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              387,
-              88,
-              407,
-              944
+              61,
+              150,
+              985,
+              186
             ]
           },
           "metadata": {
@@ -138,33 +138,33 @@
         },
         {
           "blockId": "p1-ocr8",
-          "kind": "table",
-          "text": "従事すべき業務の内容 | (雇入れ直後) (変更の範囲)\n【有期雇用特別措置法による特例の対象者(高度専門)の場合】\n・特定有期業務 ( 開始日: 完了日: )",
+          "kind": "paragraph",
+          "text": "1 契約の更新の有無",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              407,
-              88,
-              454,
-              944
+              61,
+              191,
+              215,
+              203
             ]
           },
           "metadata": {
             "extractionProvider": "gemini-vertex-ocr",
-            "ocrConfidence": 0.95
+            "ocrConfidence": 0.98
           }
         },
         {
           "blockId": "p1-ocr9",
-          "kind": "table",
-          "text": "始業、終業の時刻、休憩時間、就業時転換((1)~(5)のうち該当するもの一つに○を付けること。)、所定時間外労働の有無に関する事項 | 1 始業・終業の時刻等\n(1) 始業 ( 時 分) 終業 ( 時 分)\n【以下のような制度が労働者に適用される場合】\n(2) 変形労働時間制等; ( ) 単位の変形労働時間制・交替制として、次の勤務時間の組み合わせによる。\n- 始業 ( 時 分) 終業 ( 時 分) (適用日 )\n- 始業 ( 時 分) 終業 ( 時 分) (適用日 )\n- 始業 ( 時 分) 終業 ( 時 分) (適用日 )\n(3) フレックスタイム制; 始業及び終業の時刻は労働者の決定に委ねる。\n(ただし、フレキシブルタイム (始業) 時 分から 時 分、\n(終業) 時 分から 時 分、\nコアタイム 時 分から 時 分)\n(4) 事業場外みなし労働時間制; 始業 ( 時 分) 終業 ( 時 分)\n(5) 裁量労働制; 始業 ( 時 分) 終業 ( 時 分) を基本とし、労働者の決定に委ねる。\n○詳細は、就業規則第 条～第 条、第 条～第 条、第 条～第 条\n2 休憩時間 ( ) 分\n3 所定時間外労働の有無 ( 有 、 無 )",
+          "kind": "paragraph",
+          "text": "〔自動的に更新する・更新する場合があり得る・契約の更新はしない・その他（ ）〕",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              454,
-              88,
-              749,
-              944
+              61,
+              209,
+              985,
+              221
             ]
           },
           "metadata": {
@@ -174,33 +174,33 @@
         },
         {
           "blockId": "p1-ocr10",
-          "kind": "table",
-          "text": "休日 | ・定例日; 毎週 曜日、国民の祝日、その他 ( )\n・非定例日; 週・月当たり 日、その他 ( )\n・1年単位の変形労働時間制の場合-年間 日\n○詳細は、就業規則第 条～第 条、第 条～第 条",
+          "kind": "paragraph",
+          "text": "2 契約の更新は次により判断する。",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              750,
-              88,
-              814,
-              944
+              61,
+              227,
+              315,
+              239
             ]
           },
           "metadata": {
             "extractionProvider": "gemini-vertex-ocr",
-            "ocrConfidence": 0.95
+            "ocrConfidence": 0.98
           }
         },
         {
           "blockId": "p1-ocr11",
-          "kind": "table",
-          "text": "休暇 | 1 年次有給休暇 6か月継続勤務した場合→ 日\n継続勤務6か月以内の年次有給休暇 (有・無)\n→ か月経過で 日\n時間単位年休 (有・無)\n2 代替休暇 (有・無)\n3 その他の休暇 有給 ( )\n無給 ( )\n○詳細は、就業規則第 条～第 条、第 条～第 条",
+          "kind": "paragraph",
+          "text": "・契約期間満了時の業務量 ・勤務成績、態度 ・能力",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              814,
-              88,
-              939,
-              944
+              61,
+              245,
+              885,
+              257
             ]
           },
           "metadata": {
@@ -211,14 +211,608 @@
         {
           "blockId": "p1-ocr12",
           "kind": "paragraph",
-          "text": "(次頁に続く)",
+          "text": "・会社の経営状況 ・従事している業務の進捗状況",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              943,
-              453,
-              956,
-              550
+              61,
+              263,
+              885,
+              275
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr13",
+          "kind": "paragraph",
+          "text": "・その他（ ）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              281,
+              885,
+              293
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr14",
+          "kind": "paragraph",
+          "text": "3 更新上限の有無（無・有（更新 回まで／通算契約期間 年まで））",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              299,
+              985,
+              311
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr15",
+          "kind": "paragraph",
+          "text": "【労働契約法に定める同一の企業との間での通算契約期間が5年を超える有期労働契約の締結の場合】",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              317,
+              985,
+              329
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr16",
+          "kind": "paragraph",
+          "text": "本契約期間中に会社に対して期間の定めのない労働契約（無期労働契約）の締結の申込みをすること",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              335,
+              985,
+              347
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr17",
+          "kind": "paragraph",
+          "text": "により、本契約期間の末日の翌日（ 年 月 日）から、無期労働契約での雇用に転換することができ",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              353,
+              985,
+              365
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr18",
+          "kind": "paragraph",
+          "text": "る。この場合の本契約からの労働条件の変更の有無（無・有（別紙のとおり））",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              371,
+              985,
+              383
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr19",
+          "kind": "paragraph",
+          "text": "【有期雇用特別措置法による特例の対象者の場合】",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              389,
+              350,
+              401
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr20",
+          "kind": "paragraph",
+          "text": "無期転換申込権が発生しない期間：I（高度専門）・II（定年後の高齢者）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              407,
+              885,
+              419
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr21",
+          "kind": "paragraph",
+          "text": "I 特定有期業務の開始から完了までの期間（ 年 か月（上限10年））",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              425,
+              885,
+              437
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr22",
+          "kind": "paragraph",
+          "text": "II 定年後引き続いて雇用されている期間",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              443,
+              450,
+              455
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr23",
+          "kind": "table",
+          "text": "就業の場所 （雇入れ直後） （変更の範囲） 従事すべき業務の内容 （雇入れ直後） （変更の範囲） 【有期雇用特別措置法による特例の対象者（高度専門）の場合】 ・特定有期業務（ 開始日： 完了日： ）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              461,
+              985,
+              515
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr24",
+          "kind": "paragraph",
+          "text": "始業、終業の時刻、休憩時間、就業時転換((1)〜(5)のうち該当するものの一つに○を付けること。)、所定時間外労働の有無に関する事項",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              521,
+              230,
+              665
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr25",
+          "kind": "paragraph",
+          "text": "1 始業・終業の時刻等",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              521,
+              400,
+              533
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.98
+          }
+        },
+        {
+          "blockId": "p1-ocr26",
+          "kind": "paragraph",
+          "text": "(1) 始業（ 時 分） 終業（ 時 分）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              539,
+              750,
+              551
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr27",
+          "kind": "paragraph",
+          "text": "【以下のような制度が労働者に適用される場合】",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              557,
+              600,
+              569
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr28",
+          "kind": "paragraph",
+          "text": "(2) 変形労働時間制等；（ ）単位の変形労働時間制・交替制として、次の勤務時間",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              575,
+              985,
+              587
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr29",
+          "kind": "paragraph",
+          "text": "の組み合わせによる。",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              593,
+              400,
+              605
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr30",
+          "kind": "paragraph",
+          "text": "─ 始業（ 時 分） 終業（ 時 分） （適用日 ）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              611,
+              800,
+              623
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr31",
+          "kind": "paragraph",
+          "text": "─ 始業（ 時 分） 終業（ 時 分） （適用日 ）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              629,
+              800,
+              641
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr32",
+          "kind": "paragraph",
+          "text": "─ 始業（ 時 分） 終業（ 時 分） （適用日 ）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              647,
+              800,
+              659
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr33",
+          "kind": "paragraph",
+          "text": "(3) ﾌﾚｯｸｽﾀｲﾑ制；始業及び終業の時刻は労働者の決定に委ねる。",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              665,
+              800,
+              677
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr34",
+          "kind": "paragraph",
+          "text": "(ただし、ﾌﾚｷｼﾌﾞﾙﾀｲﾑ（始業） 時 分から 時 分、",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              683,
+              985,
+              695
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr35",
+          "kind": "paragraph",
+          "text": "(終業） 時 分から 時 分、",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              701,
+              985,
+              713
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr36",
+          "kind": "paragraph",
+          "text": "ｺｱﾀｲﾑ 時 分から 時 分)",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              719,
+              985,
+              731
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr37",
+          "kind": "paragraph",
+          "text": "(4) 事業場外みなし労働時間制；始業（ 時 分） 終業（ 時 分）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              737,
+              985,
+              749
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr38",
+          "kind": "paragraph",
+          "text": "(5) 裁量労働制；始業（ 時 分） 終業（ 時 分）を基本とし、労働者の決定に委ね",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              755,
+              985,
+              767
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr39",
+          "kind": "paragraph",
+          "text": "る。",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              773,
+              260,
+              785
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr40",
+          "kind": "paragraph",
+          "text": "○詳細は、就業規則 第〜条、第〜条、第〜条、第〜条",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              791,
+              800,
+              803
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr41",
+          "kind": "paragraph",
+          "text": "2 休憩時間（ ）分",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              809,
+              400,
+              821
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr42",
+          "kind": "paragraph",
+          "text": "3 所定時間外労働の有無（有， 無）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              240,
+              827,
+              600,
+              839
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr43",
+          "kind": "table",
+          "text": "休 日 ・定例日；毎週 曜日、国民の祝日、その他（ ） ・非定例日；週・月当たり 日、その他（ ） ・1年単位の変形労働時間の場合一年間 日 ○詳細は、就業規則 第〜条、第〜条、第〜条",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              845,
+              985,
+              915
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr44",
+          "kind": "table",
+          "text": "休 暇 1 年次有給休暇 6か月継続勤務した場合→ 日 継続勤務6か月以内の年次有給休暇 （有・無） → か月経過で 日 時間単位年休（有・無） 2 代替休暇（有・無） 3 その他の休暇 有給（ ） 無給（ ） ○詳細は、就業規則 第〜条、第〜条、第〜条",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              61,
+              921,
+              985,
+              995
+            ]
+          },
+          "metadata": {
+            "extractionProvider": "gemini-vertex-ocr",
+            "ocrConfidence": 0.95
+          }
+        },
+        {
+          "blockId": "p1-ocr45",
+          "kind": "paragraph",
+          "text": "（次頁に続く）",
+          "locator": {
+            "pageNumber": 1,
+            "bbox": [
+              450,
+              1001,
+              550,
+              1013
             ]
           },
           "metadata": {

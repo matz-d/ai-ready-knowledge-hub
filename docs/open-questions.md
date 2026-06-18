@@ -179,7 +179,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | Phase 3-H `office-native` | `.pptx` / `.docx` 原本の conversion subtype 4 | Phase 3-H 優先 4・時間があれば |
 | Phase 3-G | `cloud-sanitized-ingress` prototype | 高セキュリティ顧客向け後続 |
 
-**次のアクション**: P0（Phase 4-UX 手動通し）、P1-A/B（source bundle）、P1-F（full-coverage strategist）、P1-C（デモ docs）、P1-D（quality gate 成熟化）は完了。直近の実装順は [docs/next-actions-2026-06-10.md](next-actions-2026-06-10.md) を正とする。**次は P1-E**（大ファイル preflight / table fallback / locator enrichment）→ P2（デモ polish / 運用補強）→ P3（cleanup / Ingest 判断）。Ingest 拡張（画像単体・Drive/ローカル一括・Drive 同期）は product 判断として本書に残す。scan-pdf 公開拡大は **`unmaskablePiiFindings` 閾値再評価**を別 decision で扱う（`D-P3-H-7 Q4` 後続）。
+**次のアクション**: P0（Phase 4-UX 手動通し）、P1-A/B（source bundle）、P1-F（full-coverage strategist）、P1-C（デモ docs）、P1-D（quality gate 成熟化）、P1-E3（table-assist mainline + reprocess + async worker、PR #53 まで）は完了。直近の実装順は [docs/next-actions-2026-06-10.md](next-actions-2026-06-10.md) を正とする。**次は P1-E+ follow-up**（scan-pdf sidecar refresh / full live `--ci` 再評価）→ table-assist hardening（#51 audit / #52 cost guard）→ P3（cleanup / Ingest 判断）。Ingest 拡張（画像単体・Drive/ローカル一括・Drive 同期）は product 判断として本書に残す。scan-pdf 公開拡大は **`unmaskablePiiFindings` 閾値再評価**を別 decision で扱う（`D-P3-H-7 Q4` 後続）。
 
 ### Ingest 拡張（起票 2026-05-21）
 

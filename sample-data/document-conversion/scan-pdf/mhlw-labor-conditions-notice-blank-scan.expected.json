@@ -34,47 +34,56 @@
   "expectedValues": [
     {
       "field": "契約期間",
-      "expectedValue": "期間の定めなし"
+      "expectedValue": "期間の定めなし",
+      "tier": "extended"
     },
     {
       "field": "就業の場所",
-      "expectedValue": "雇入れ直後"
+      "expectedValue": "雇入れ直後",
+      "tier": "extended"
     },
     {
       "field": "休憩時間",
-      "expectedValue": "( ) 分"
+      "expectedValue": "( ) 分",
+      "tier": "extended"
     },
     {
       "field": "時間単位年休",
-      "expectedValue": "有・無"
+      "expectedValue": "有・無",
+      "tier": "extended"
     }
   ],
   "expectedTableCells": [
     {
       "tableId": "p1-ocr6",
       "rowLabel": "契約期間",
-      "expectedValue": "期間の定めなし"
+      "expectedValue": "期間の定めなし",
+      "tier": "extended"
     },
     {
       "tableId": "p1-ocr7",
       "rowLabel": "就業の場所",
-      "expectedValue": "雇入れ直後"
+      "expectedValue": "雇入れ直後",
+      "tier": "extended"
     },
     {
       "tableId": "p1-ocr9",
       "rowLabel": "休憩時間",
-      "expectedValue": "分"
+      "expectedValue": "分",
+      "tier": "extended"
     },
     {
       "tableId": "p1-ocr10",
       "rowLabel": "休日",
-      "expectedValue": "国民の祝日"
+      "expectedValue": "国民の祝日",
+      "tier": "extended"
     },
     {
       "tableId": "p1-ocr11",
       "rowLabel": "休暇",
-      "expectedValue": "時間単位年休"
+      "expectedValue": "時間単位年休",
+      "tier": "extended"
     }
   ],
-  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW public blank labor conditions notice scan, no PII. DocumentIR is the committed stable OCR baseline copied from poc/document-conversion/output/scan-pdf."
+  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW public blank labor conditions notice scan, no PII. DocumentIR is the committed stable OCR baseline copied from poc/document-conversion/output/scan-pdf. Regenerated 2026-06-18 from mainline extractScanPdfFromBuffer (model=gemini-3.1-flash-lite, recall=1.00); curated expected tiers/values/table cells preserved."
 }

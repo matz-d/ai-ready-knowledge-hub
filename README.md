@@ -16,9 +16,9 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 
 ---
 
-## 現在のステータス (2026-06-16)
+## 現在のステータス (2026-06-18)
 
-**フェーズ**: Phase 4-UX MVP、NotebookLM source bundle（P1-A/B）、P1-F async full-coverage strategist、P1-C デモ docs 更新、P1-D Extraction & Masking Quality Gate 成熟化、**P1-E first slice（PR #37-#41）**、official-doc-pdf Gemini table-assist compare eval、**P1-E Step 1 mainline wiring（D 戦略）**、**multi-file upload UI**、**table-assist product reprocess API / async ingest worker** まで完了。stable eval（`pnpm eval:p1d:quality --ci`）は CI blocker、live masker drift check（`pnpm eval:p1d:masker-drift`）も合格証跡あり。次は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) の **P1-E+ scan-pdf quality floor 解消**と **P2 提出補強**（デモ polish）を並行で進める。
+**フェーズ**: Phase 4-UX MVP、NotebookLM source bundle（P1-A/B）、P1-F async full-coverage strategist、P1-C デモ docs 更新、P1-D Extraction & Masking Quality Gate 成熟化、**P1-E first slice（PR #37-#41）**、official-doc-pdf Gemini table-assist compare eval、**P1-E Step 1 mainline wiring（D 戦略）**、**multi-file upload UI**、**table-assist product reprocess API / async ingest worker** まで完了。2026-06-18 に table-assist async ingest と multi-file upload の production live smoke も完了。stable eval（`pnpm eval:p1d:quality --ci`）は CI blocker、live masker drift check（`pnpm eval:p1d:masker-drift`）も合格証跡あり。次は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) の **P1-E+ scan-pdf quality floor 解消**、table-assist hardening、P3 cleanup / Ingest 判断へ進む。
 
 ### 完了済み
 
@@ -60,10 +60,10 @@ Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡して�
 - **P1-E first slice（PR #37-#41）**: T1 large-file preflight + row-window / page-group・table-manifest、T2 official-PDF table fail-soft + scan visual table fallback、T3 scan label/value enrichment、scan OCR prompt guard + live drift workflow（`pnpm eval:scan-pdf:ocr-live-drift`）。方針・実装メモは [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md)。live drift 証跡は [docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md) / [docs/scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md)。
 - **P1-E official-doc-pdf Gemini table-assist compare eval**: full Gemini 置換は採用せず、`pdf-parse` primary + grounded `pdf-parse+gemini-tables` を最善候補として compare harness で評価拡張。public PDF 由来の `*.table-assist.expected.json` を 3 件追加。compare harness の Gemini arms は eval-only（`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1` 明示 opt-in）。実測は [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) / harness は [poc/document-conversion/official-doc-pdf/compare/README.md](poc/document-conversion/official-doc-pdf/compare/README.md)。
 - **P1-E Step 1 table-assist mainline wiring（D 戦略、2026-06-16）**: `pdfExtractionDispatcher` に `tableAssistMode` と grounded Gemini table-assist を配線。同期 upload は `tableAssistMode: 'disabled'` を明示し、flag ON でも同期経路では発火しない。`pdf-table-assist` flag（default off）**かつ** `tableAssistMode: 'async'` の実行コンテキストでのみ augment。Masker 前段 merge、fail-soft、WU-6a masking 回帰テスト、mainline harness 証跡は [docs/official-doc-table-assist-mainline-harness-2026-06-16.md](docs/official-doc-table-assist-mainline-harness-2026-06-16.md)。決定は [docs/decisions.md](docs/decisions.md) `D-P1-E-TA-1`。
-- **P1-E table-assist product reprocess / async ingest**: `POST /api/documents/:docId/table-assist` と `reprocessPdfWithTableAssist` で、upload 済み official-doc-pdf を opt-in 再処理。さらに official-doc-pdf upload 後、tenant flag `pdf-table-assist` が ON の場合だけ Cloud Tasks worker `POST /api/documents/:docId/table-assist/run` を best-effort enqueue する。`tableAssistMode: 'async'` + flag 二重ゲート、reprocess lease、chunks / masked object 更新。同期 upload 自体では Gemini table-assist を走らせない。
-- **Multi-file upload UI**: `/upload` の `UploadForm` がクライアント側キュー（最大 20 件、`UPLOAD_CONCURRENCY=1`）で複数ファイルを選択・逐次投入。サーバは従来どおり `POST /api/documents` を 1 ファイルずつ呼び、table-assist は同期 upload では走らない。
+- **P1-E table-assist product reprocess / async ingest**: `POST /api/documents/:docId/table-assist` と `reprocessPdfWithTableAssist` で、upload 済み official-doc-pdf を opt-in 再処理。さらに official-doc-pdf upload 後、tenant flag `pdf-table-assist` が ON の場合だけ Cloud Tasks worker `POST /api/documents/:docId/table-assist/run` を best-effort enqueue する。`tableAssistMode: 'async'` + flag 二重ゲート、reprocess lease、chunks / masked object 更新。同期 upload 自体では Gemini table-assist を走らせない。production live smoke は [docs/table-assist-async-ingest-live-smoke-2026-06-18.md](docs/table-assist-async-ingest-live-smoke-2026-06-18.md)。
+- **Multi-file upload UI**: `/upload` の `UploadForm` がクライアント側キュー（最大 20 件、`UPLOAD_CONCURRENCY=1`）で複数ファイルを選択・逐次投入。サーバは従来どおり `POST /api/documents` を 1 ファイルずつ呼び、table-assist は同期 upload では走らない。10 files production live smoke は [docs/upload-multi-file-live-smoke-2026-06-18.md](docs/upload-multi-file-live-smoke-2026-06-18.md)。
 
-### コードの位置 (2026-06-16 時点)
+### コードの位置 (2026-06-18 時点)
 
 ```
 src/
@@ -294,8 +294,8 @@ sample-data/
 直近の作業順は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) を正とする。背景となる未決論点・Ingest 起票の詳細は [docs/open-questions.md](docs/open-questions.md)（次フェーズ表 + §Ingest 拡張）。
 
 - **P1-E+ scan-pdf quality floor 解消**: accepted live drift floor（`majorDriftCount=3`）を下げる。PII direction は green。sidecar 意図的 regeneration、public blank-form recall 改善、full live `--ci` gate 再評価。正本は [docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md)。
-- **table-assist async ingest worker**: reprocess API と dispatcher 配線に加え、official-doc-pdf upload 後の Cloud Tasks enqueue / worker route を実装。upload レスポンスは同期完了のまま、enqueue は best-effort。専用 `PDF_TABLE_ASSIST_*` env が未設定なら Context Package worker env を fallback 利用できる。cost / latency（例: overtime 約 4.5 分）は [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) の実測を参照。
-- **P2 提出補強（並行）**: Phase 3-F デモ polish（source bundle 前提・Dashboard refresh 後 UI・multi-file upload 導線）。enqueue 二重 submit / 簡易 SLO は完了（`operate-deliver-readiness.md` §E）。
+- **table-assist hardening（後続）**: PR #53 で async ingest worker は完了（`D-P1-E-TA-2`）。残りは [#51](https://github.com/matz-d/ai-ready-knowledge-hub/issues/51) enqueue audit、[#52](https://github.com/matz-d/ai-ready-knowledge-hub/issues/52) cost guard、Document detail UI ボタン。
+- **P2 提出補強**: Phase 3-F デモ polish（source bundle 前提・Dashboard refresh 後 UI・multi-file upload 導線）は完了。enqueue 二重 submit / 簡易 SLO も完了（`operate-deliver-readiness.md` §E）。
 - **P3 cleanup / Ingest 判断**: 不要 CSS 削除、Drive folder bulk / local directory batch / standalone images の product 判断。
 
 ---
@@ -320,6 +320,8 @@ sample-data/
 | [docs/phase-3-h-3-scan-pdf-live-smoke.md](docs/phase-3-h-3-scan-pdf-live-smoke.md) | scan-pdf M6 dev tenant live smoke 証跡 |
 | [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) | P1-E large-file / table fallback / locator enrichment、table-assist D 戦略・二重ゲート |
 | [docs/official-doc-table-assist-mainline-harness-2026-06-16.md](docs/official-doc-table-assist-mainline-harness-2026-06-16.md) | table-assist mainline harness 証跡（merge / fail-soft） |
+| [docs/table-assist-async-ingest-live-smoke-2026-06-18.md](docs/table-assist-async-ingest-live-smoke-2026-06-18.md) | table-assist async ingest production live smoke |
+| [docs/upload-multi-file-live-smoke-2026-06-18.md](docs/upload-multi-file-live-smoke-2026-06-18.md) | `/upload` multi-file queue production live smoke |
 | [poc/document-conversion/README.md](poc/document-conversion/README.md) | Document Conversion PoC runner 一覧 |
 | [poc/document-conversion/official-doc-pdf/compare/README.md](poc/document-conversion/official-doc-pdf/compare/README.md) | official-doc-pdf converter compare harness と table-assist golden check |
 | [sample-data/document-conversion/README.md](sample-data/document-conversion/README.md) | conversion fixture inventory 正本 |

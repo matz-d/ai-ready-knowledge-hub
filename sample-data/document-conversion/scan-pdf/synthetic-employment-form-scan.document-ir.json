@@ -17,15 +17,15 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              218,
-              70,
-              780,
-              100
+              88,
+              88,
+              886,
+              118
             ]
           },
           "metadata": {
             "extractionProvider": "gemini-vertex-ocr",
-            "ocrConfidence": 0.98
+            "ocrConfidence": 0.99
           }
         },
         {
@@ -35,15 +35,15 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              218,
-              110,
-              780,
-              125
+              88,
+              131,
+              692,
+              147
             ]
           },
           "metadata": {
             "extractionProvider": "gemini-vertex-ocr",
-            "ocrConfidence": 0.97
+            "ocrConfidence": 0.98
           }
         },
         {
@@ -53,10 +53,10 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              218,
-              160,
-              340,
-              175
+              104,
+              175,
+              268,
+              191
             ]
           },
           "metadata": {
@@ -66,20 +66,20 @@
         },
         {
           "blockId": "p1-ocr4",
-          "kind": "image_text",
+          "kind": "paragraph",
           "text": "XXXX Taro",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              385,
-              155,
-              500,
-              180
+              352,
+              175,
+              465,
+              191
             ]
           },
           "metadata": {
             "extractionProvider": "gemini-vertex-ocr",
-            "ocrConfidence": 0.99
+            "ocrConfidence": 0.95
           }
         },
         {
@@ -89,10 +89,10 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              218,
-              210,
-              280,
-              225
+              104,
+              225,
+              189,
+              241
             ]
           },
           "metadata": {
@@ -102,20 +102,20 @@
         },
         {
           "blockId": "p1-ocr6",
-          "kind": "image_text",
+          "kind": "paragraph",
           "text": "1-2-3 XXXX-cho, Shibuya-ku, Tokyo",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              385,
-              205,
-              700,
-              230
+              352,
+              225,
+              635,
+              241
             ]
           },
           "metadata": {
             "extractionProvider": "gemini-vertex-ocr",
-            "ocrConfidence": 0.99
+            "ocrConfidence": 0.98
           }
         },
         {
@@ -125,10 +125,10 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              218,
-              260,
-              270,
-              275
+              104,
+              275,
+              168,
+              291
             ]
           },
           "metadata": {
@@ -138,15 +138,15 @@
         },
         {
           "blockId": "p1-ocr8",
-          "kind": "image_text",
+          "kind": "paragraph",
           "text": "090-1234-5678",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              385,
-              255,
-              550,
-              280
+              352,
+              275,
+              495,
+              291
             ]
           },
           "metadata": {
@@ -161,10 +161,10 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              218,
-              310,
-              260,
-              325
+              104,
+              325,
+              158,
+              341
             ]
           },
           "metadata": {
@@ -174,15 +174,15 @@
         },
         {
           "blockId": "p1-ocr10",
-          "kind": "image_text",
+          "kind": "paragraph",
           "text": "taro.xxxx@example.test",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              385,
-              305,
-              620,
-              330
+              352,
+              325,
+              535,
+              341
             ]
           },
           "metadata": {
@@ -197,10 +197,10 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              218,
-              360,
-              310,
-              375
+              104,
+              375,
+              225,
+              391
             ]
           },
           "metadata": {
@@ -210,15 +210,15 @@
         },
         {
           "blockId": "p1-ocr12",
-          "kind": "image_text",
+          "kind": "paragraph",
           "text": "EMP-XXXX-042",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              385,
-              355,
-              550,
-              380
+              352,
+              375,
+              485,
+              391
             ]
           },
           "metadata": {
@@ -233,10 +233,10 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              218,
-              410,
-              310,
-              425
+              104,
+              425,
+              241,
+              441
             ]
           },
           "metadata": {
@@ -246,15 +246,15 @@
         },
         {
           "blockId": "p1-ocr14",
-          "kind": "image_text",
+          "kind": "paragraph",
           "text": "Mizuho Bank 0001 / 1234567",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              385,
-              405,
-              650,
-              430
+              352,
+              425,
+              595,
+              441
             ]
           },
           "metadata": {
@@ -269,10 +269,10 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              218,
-              460,
-              330,
-              475
+              104,
+              475,
+              265,
+              491
             ]
           },
           "metadata": {
@@ -282,15 +282,15 @@
         },
         {
           "blockId": "p1-ocr16",
-          "kind": "image_text",
+          "kind": "paragraph",
           "text": "1234-5678-9012",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              385,
-              455,
-              550,
-              480
+              352,
+              475,
+              505,
+              491
             ]
           },
           "metadata": {
@@ -305,10 +305,10 @@
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              218,
-              510,
-              290,
-              525
+              104,
+              525,
+              205,
+              541
             ]
           },
           "metadata": {
@@ -318,15 +318,15 @@
         },
         {
           "blockId": "p1-ocr18",
-          "kind": "image_text",
+          "kind": "paragraph",
           "text": "2026-04-01",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              385,
-              505,
-              520,
-              530
+              352,
+              525,
+              465,
+              541
             ]
           },
           "metadata": {
@@ -336,15 +336,15 @@
         },
         {
           "blockId": "p1-ocr19",
-          "kind": "heading",
+          "kind": "paragraph",
           "text": "Notes",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              218,
-              580,
-              270,
-              595
+              104,
+              585,
+              165,
+              601
             ]
           },
           "metadata": {
@@ -355,19 +355,19 @@
         {
           "blockId": "p1-ocr20",
           "kind": "paragraph",
-          "text": "Masker should be able to span-mask exact strings such as phone, email, address, bank\naccount, and My Number-like values. If OCR fragments the text, safety_readiness may\nreport unmaskable findings.",
+          "text": "Masker should be able to span-mask exact strings such as phone, email, address, bank account, and My Number-like values. If OCR fragments the text, safety_readiness may report unmaskable findings.",
           "locator": {
             "pageNumber": 1,
             "bbox": [
-              230,
-              620,
-              760,
-              670
+              104,
+              625,
+              865,
+              675
             ]
           },
           "metadata": {
             "extractionProvider": "gemini-vertex-ocr",
-            "ocrConfidence": 0.98
+            "ocrConfidence": 0.99
           }
         }
       ]

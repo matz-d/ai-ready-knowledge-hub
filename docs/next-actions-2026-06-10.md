@@ -1,4 +1,4 @@
-# Next Actions — 2026-06-10（2026-06-16 同期）
+# Next Actions — 2026-06-10（2026-06-18 同期）
 
 **目的**: Phase 4-UX / delivery E2E / UI refresh 後の次アクションを、提出前に効く順へ並べ直す。古い open questions は背景として残し、本書を直近の作業順の正本にする。
 
@@ -9,6 +9,9 @@
 - P1-E first slice（PR #37-#41）で T1 preflight / row-window / page-group・table-manifest、T2 table fail-soft・scan visual table fallback、T3 label/value enrichment、scan OCR prompt guard + live drift workflow まで完了。
 - 2026-06-13 の P1-D 実測で、born-digital official-doc-pdf（`pdf-parse` 経路）の field recall / table cell recall / locator が最弱領域だと判明。P1-E2 compare で hybrid table-assist を採用候補と判定済み。
 - **2026-06-16**: P1-E Step 1 mainline wiring（D 戦略）完了。同期 upload は `tableAssistMode: 'disabled'`、gated 実行は `pdf-table-assist` flag + `tableAssistMode: 'async'` のみ（reprocess API / harness）。multi-file upload UI（最大 20 件キュー）完了。table-assist product reprocess（`POST /api/documents/:docId/table-assist`）完了。
+- **2026-06-17**: P1-E Step 2 async ingest worker（PR #53）完了。official-doc-pdf upload 後の Cloud Tasks enqueue + worker `POST /api/documents/:docId/table-assist/run`。upload は同期完了のまま、enqueue は best-effort。`reprocessPdfWithTableAssist` を worker と共有。
+- **2026-06-18**: table-assist async ingest production live smoke 完了（fresh PDF upload → worker 200 → queue empty、`health/pass`）。`/upload` multi-file queue も 10 files live smoke 完了。証跡は [table-assist-async-ingest-live-smoke-2026-06-18.md](table-assist-async-ingest-live-smoke-2026-06-18.md) / [upload-multi-file-live-smoke-2026-06-18.md](upload-multi-file-live-smoke-2026-06-18.md)。
+- **2026-06-18**: P1-E+ scan-pdf golden sidecar refresh の false-green 経路を封鎖。`--refresh-expected` が curated `expectedFieldTiers`/`expectedValues`/`expectedTableCells` を黙って落とす挙動を `assertScanPdfExpectedRefreshDoesNotWeaken`（append-only guard）+ 回帰テストで塞ぎ、public blank-form は `preserve-reviewed`、synthetic は `append-live-fields` policy で現行 OCR に refresh。full live 3-run は `majorDriftCount` `3 → 0` で green。これは drift baseline の正直化であり、table / locator 抽出品質の改善は引き続き別タスク。判断 [D-P1-E-PLUS-1](decisions.md)、証跡 [p1-e-plus-scan-pdf-quality-floor-2026-06-18.md](p1-e-plus-scan-pdf-quality-floor-2026-06-18.md)。
 
 ## 優先順位
 
@@ -21,10 +24,10 @@
 | P1-C | Demo / docs を bundle 前提へ更新 | デモの最後を product truth に合わせる | 完了。`docs/demo-scenario.md` と `docs/demo-runbook.md` を bundle 前提へ更新 | デモシナリオが「NotebookLM には source bundle を渡す」に更新される |
 | P1-D | Extraction & Masking Quality Gate | 「安全に止める」だけでなく「止めすぎない」「構造化データ精度が十分」を示す | 完了（PR #35）。stable quality gate（schema v4、CI blocker）、live masker drift check（`piiLeakCount = 0`）、P1-E handoff doc。recall metrics は report-only。scan-pdf sidecar は raw OCR baseline のまま | curator over-restriction は live-only。stable `falseMaskedTokenCount` は sidecar hygiene check。P1-E へ table/locator/大容量症状を handoff 済み |
 | P1-E | 大きなファイルの事前分割 / table fallback / locator enrichment | token limit failure を減らし、巨大 chunk / 表構造欠落 / label-value 分断を改善する | **first slice 完了**（PR #37-#41）。T1 preflight + row-window / page-group・table-manifest、T2 official-PDF table fail-soft + scan visual table fallback、T3 label/value enrichment、scan OCR prompt guard + `pnpm eval:scan-pdf:ocr-live-drift` workflow。証跡は [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6、[docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](scan-pdf-ocr-live-drift-evidence-2026-06-13.md)、[docs/scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md](scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md) | large table / PDF は sheet・row window・page-group / table-manifest で Curator 入力を bounded 化し Masker は全文を維持。P1-D handoff の employment-form / invoice scan は stable eval で改善確認済み |
-| P1-E+ | scan-pdf quality floor 解消 | PII prompt guard 後の accepted live drift floor（`majorDriftCount=3`）を下げ、提出説明可能な品質証跡を固める | **方針決定済み**。提出前は current baseline fixed。PII direction / deterministic zero は green、full live `--ci` は sidecar refresh PR まで intentionally red | sidecar refresh は後続 PR。public blank-form regeneration policy、expected fields の人間レビュー、3-run live evidence、full live `--ci` gate 再評価をまとめて実施。提出前の正本は [docs/scan-pdf-ocr-live-drift-workflow.md](scan-pdf-ocr-live-drift-workflow.md) |
+| P1-E+ | scan-pdf quality floor 解消 | PII prompt guard 後の accepted live drift floor を下げ、提出説明可能な品質証跡を固める | **drift floor 解消済み（2026-06-18、作業ツリー）**。refresh safety guard を land し、public blank-form は `preserve-reviewed`、synthetic は `append-live-fields` policy で現行 OCR に refresh。full live 3-run は `majorDriftCount=0`、PII direction / deterministic zero / extraction failures も 0。`--refresh-expected` が curated 期待値を黙って落とす false-green 経路は `assertScanPdfExpectedRefreshDoesNotWeaken` で塞いだ（[D-P1-E-PLUS-1](decisions.md)） | **残**: drift gate は green だが、product-quality は未解決。NTA blank-form の table-cell recall / locator、MHLW `休憩時間 / 分` の unit/cell recovery、synthetic invoice の value/table/locator を report-only 指標として追う。full live `--ci` は drift gate として維持し、scan-pdf をデモ主役にする場合は table / locator enrichment を別 PR で進める。証跡 [docs/p1-e-plus-scan-pdf-quality-floor-2026-06-18.md](p1-e-plus-scan-pdf-quality-floor-2026-06-18.md)、workflow 正本 [docs/scan-pdf-ocr-live-drift-workflow.md](scan-pdf-ocr-live-drift-workflow.md) |
 | P1-E2 | born-digital PDF Gemini layout/table compare | official-doc-pdf の table / heading / locator 弱点を、Gemini layout/table enrichment で改善できるかを負債なく判定する | **実装・検証済み**。既存 compare harness に `gemini` / `pdf-parse+gemini-tables` arm を追加。page-group / table-only / grounding filter / hallucination-candidate check を実測。table-assist 専用 golden も追加済み | 採用判断: full Gemini 置換はしない。`pdf-parse` primary + grounded Gemini table-assist を PoC 最善とする。証跡は [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6 |
-| P1-E3 | table-assist mainline wiring + product reprocess | compare 勝ち筋を本線 dispatcher と opt-in reprocess に接続し、同期 upload では走らせない | **完了（2026-06-16）**。`pdfExtractionDispatcher` + `tableAssistMode` 二重ゲート、WU-6a masking 回帰、`POST /api/documents/:docId/table-assist`、`reprocessPdfWithTableAssist`、mainline harness 証跡 | 同期 upload は `disabled` 固定。gated 実行は flag + `async` のみ。async ingest worker / Cloud Tasks は後続 epic。正本: [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6「2026-06-16」、[docs/decisions.md](decisions.md) `D-P1-E-TA-1`、[docs/official-doc-table-assist-mainline-harness-2026-06-16.md](official-doc-table-assist-mainline-harness-2026-06-16.md) |
-| P1-ING1 | Multi-file upload UI | 散らばった資料を `/upload` から複数選択で投入できるようにする | **完了**。`UploadForm` + `uploadQueue.ts`（最大 20 件、`UPLOAD_CONCURRENCY=1`、失敗後も継続、per-file status）。サーバは 1 ファイル = 1 `POST /api/documents` のまま | ディレクトリ一括 / zip 一括は未対応（P3 Ingest 判断）。table-assist は同期 upload では走らない |
+| P1-E3 | table-assist mainline wiring + product reprocess + async ingest worker | compare 勝ち筋を本線 dispatcher に接続し、同期 upload では走らせない。opt-in reprocess と upload 後の async worker で gated 実行 | **完了（2026-06-18 live smoke 済み）**。Step 1（2026-06-16）: dispatcher + reprocess API + mainline harness。Step 2（PR #53）: `pdfTableAssistIngestEnqueuer`、worker route、`reprocessPdfWithTableAssist` 共有。production smoke は fresh PDF → worker 200 → queue empty | 同期 upload は `disabled` 固定。gated 実行は flag + `async` のみ（reprocess API / worker）。enqueue audit (#51) と cost guard (#52) は後続。正本: [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6「2026-06-16」「2026-06-17」、[docs/decisions.md](decisions.md) `D-P1-E-TA-1` / `D-P1-E-TA-2`、[docs/table-assist-async-ingest-live-smoke-2026-06-18.md](table-assist-async-ingest-live-smoke-2026-06-18.md) |
+| P1-ING1 | Multi-file upload UI | 散らばった資料を `/upload` から複数選択で投入できるようにする | **完了（2026-06-18 live smoke 済み）**。`UploadForm` + `uploadQueue.ts`（最大 20 件、`UPLOAD_CONCURRENCY=1`、失敗後も継続、per-file status）。本番 `/upload` で 10 files が 10/10 完了 | ディレクトリ一括 / zip 一括は未対応（P3 Ingest 判断）。現 smoke は「複数ファイル選択キュー」の検証であり、directory picker ではない。証跡: [docs/upload-multi-file-live-smoke-2026-06-18.md](upload-multi-file-live-smoke-2026-06-18.md) |
 | P2 | Phase 3-F デモ polish | 動画シナリオを現状の product truth に合わせる | **完了**。`demo-scenario.md` / `demo-runbook.md` を multi-file upload、Dashboard / Pipeline Funnel、purpose-driven candidates、Safety Review、source bundle 前提に更新 | 動画カットとナレーションが現 UI / bundle 導線と一致する |
 | P2 | 提出前の軽い運用補強 | 「まわす」説明力を上げる | **完了**。alert / sweeper / TTL に加え、UI submit 重複 guard と簡易 SLO を追記済み | `ContextPackageForm` の in-flight lock、`operate-deliver-readiness.md` §E |
 | P3 | 不要 CSS / UI 残骸 cleanup | 保守性を上げ、次の UI 変更を軽くする | 旧 heatmap / risk-callout / status badge modifier / sensitivity 重複などが残る | 挙動変更なしで未使用 CSS と古い `inventory-demo-*` naming を整理 |
@@ -179,12 +182,12 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 - **T3**: scan-pdf label/value enrichment（同一行の隣接 value を label chunk へ複製、`scanLabelValueLink` 記録）。
 - **scan OCR**: prompt PII guard + `pnpm eval:scan-pdf:ocr-live-drift` workflow。PR #41 で live drift evidence 付き。
 
-**残タスク（P1-E+ quality floor）**:
+**残タスク（P1-E+ quality floor / product quality）**:
 - **提出前判断**: ハッカソン本編デモでは scan-pdf を主役にしない限り着手しない。提出前は Context Package の判断 UX / source bundle / multi-file upload / NotebookLM 導線を優先する。
-- 提出前は current baseline fixed とし、sidecar を opportunistic に regeneration しない。
-- accepted live drift floor は `majorDriftCount=3`。PII direction / deterministic zero は green。full live `--ci` は sidecar refresh PR まで default gate にしない。
-- sidecar refresh は**後続 PR**として、public blank-form regeneration policy、`*.expected.json` の人間レビュー、3-run live evidence、full live `--ci` gate 再評価をまとめて実施する。
-- 後続 PR のゴールは「scan-pdf OCR が本番デモで使える」ではなく、「live drift の説明可能な品質床を作る」こと。期待値更新だけで green にせず、目視レビューと複数回 live evidence を同じ PR に含める。
+- **2026-06-18 進捗（[D-P1-E-PLUS-1](decisions.md)）**: refresh safety guard を land。`--refresh-expected` が curated `expectedFieldTiers`/`expectedValues`/`expectedTableCells` を黙って落とす false-green 経路を `assertScanPdfExpectedRefreshDoesNotWeaken`（append-only）+ 回帰テストで封鎖。public blank-form は `preserve-reviewed` policy で未レビュー OCR 文字列を expected に足さず、synthetic は `append-live-fields` policy で現行 OCR に refresh。full live 3-run は `majorDriftCount=0` で green。証跡 [docs/p1-e-plus-scan-pdf-quality-floor-2026-06-18.md](p1-e-plus-scan-pdf-quality-floor-2026-06-18.md)。
+- PII direction / deterministic zero / extraction failures は green。full live `--ci` は **drift gate** として維持できる。ただし stable report-only metrics は低下しており、これは stale baseline を正直化した結果であって product extraction 改善ではない。
+- product-quality の残りは public blank-form の table / locator enrichment。特に `nta-withholding-form-blank-scan` の table-cell recall / locator、`mhlw-labor-conditions-notice-blank-scan` の `休憩時間 / 分` unit/cell recovery、`synthetic-invoice-with-pii-scan` の value precision / table-cell recall / locator coverage を追う。
+- 後続 PR のゴールは「scan-pdf OCR が本番デモで使える」品質改善であり、期待値更新だけで green にする作業ではない。scan-pdf をデモ主役にしないなら、table / locator enrichment は後続に回す判断を維持する。
 - 正本: [docs/scan-pdf-ocr-live-drift-workflow.md](scan-pdf-ocr-live-drift-workflow.md)、[docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](scan-pdf-ocr-live-drift-evidence-2026-06-13.md)、[docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6 の review follow-ups。
 
 **まだ scope 外**:
@@ -218,13 +221,13 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 - Gemini が出した値のうち、`pdf-parse` 全文に出現しないものを hallucination candidate として機械的に洗い出せる。
 - 失敗時は `pdf-parse` baseline へ戻れる。
 
-## P1-E3: table-assist mainline wiring + product reprocess（完了 2026-06-16）
+## P1-E3: table-assist mainline wiring + product reprocess + async ingest worker（完了 2026-06-17）
 
-**なぜ D 戦略か**:
+**なぜ D 戦略か**（`D-P1-E-TA-1`）:
 - async document ingest worker のフル構築は context-package job 基盤相当になり、提出前スコープと競合する。
-- 先に dispatcher 配線と opt-in reprocess を land し、同期 upload のレイテンシ・マスキング境界を守る。
+- 先に dispatcher 配線と opt-in reprocess を land し、同期 upload のレイテンシ・マスキング境界を守る。async トリガは Step 2（PR #53）で後続 land。
 
-**完了内容**:
+**Step 1 完了内容（2026-06-16）**:
 - `pdfExtractionDispatcher` に `tableAssistMode: 'disabled' | 'async'` と `augmentOfficialDocWithTableAssist` を配線。
 - 二重ゲート: tenant-scoped `pdf-table-assist` flag（default off）**かつ** `tableAssistMode: 'async'`。
 - 同期 `POST /api/documents` は `tableAssistMode: 'disabled'` を明示。
@@ -232,13 +235,26 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 - Masker 前段 merge 不変（WU-6a: `pdfTableAssistMaskingRegression.test.ts`）。
 - Mainline harness 証跡: [docs/official-doc-table-assist-mainline-harness-2026-06-16.md](official-doc-table-assist-mainline-harness-2026-06-16.md)。
 
+**Step 2 完了内容（PR #53、2026-06-17）**:
+- `pdfTableAssistIngestEnqueuer`: official-doc-pdf upload 成功後、flag ON かつ restricted 以外なら Cloud Tasks を best-effort enqueue。queue / signing 未設定は upload 成功を壊さない。
+- Worker: `POST /api/documents/:docId/table-assist/run` → `reprocessPdfWithTableAssist`（manual reprocess と同一 invariants）。
+- Env: `PDF_TABLE_ASSIST_*` 優先、`CONTEXT_PACKAGE_*` fallback。dispatch deadline 600s。
+- 決定ログ: [docs/decisions.md](decisions.md) `D-P1-E-TA-2`。
+
+**Production live smoke（2026-06-18）**:
+- Fresh `synthetic-official-doc-table-assist-golden.pdf` upload returned HTTP `200` and enqueued the worker.
+- Cloud Tasks worker returned HTTP `200`; queue drained to empty; conversion eval `health/pass`.
+- Cloud Run env is `FIRESTORE_PREFER_REST=false` and timeout `600s`; this avoids the prior Firestore REST serializer failure (`toProto3JSON: don't know how to convert value 2`) and aligns with table-assist dispatch deadline.
+- Evidence: [docs/table-assist-async-ingest-live-smoke-2026-06-18.md](table-assist-async-ingest-live-smoke-2026-06-18.md)。
+
 **後続 issue 候補**:
 - [#51](https://github.com/matz-d/ai-ready-knowledge-hub/issues/51) table-assist enqueue audit: `document.convert` 実行結果だけでなく、「table-assist worker を enqueue した」事実を AuditEvent または dedicated operational event に載せる。
 - [#52](https://github.com/matz-d/ai-ready-knowledge-hub/issues/52) table-assist cost guard: `pdf-table-assist` flag ON の official-doc-pdf 全件ではなく、table extraction summary / conversion eval を見て必要な文書だけ enqueue する。提出前は restricted 終端の enqueue skip までで十分。
 
-**まだ scope 外（後続 epic）**:
-- Document detail UI からの table-assist ボタン（API は利用可能）。
+**まだ scope 外**:
+- Document detail UI からの table-assist ボタン（API / worker は利用可能）。
 - post-terminal enrichment（terminal document / masked chunks への後付け merge）。
+- upload API の 202 + polling や document ingest 全体の async 化（table-assist 専用 worker のみ land 済み）。
 
 ## P1-ING1: Multi-file upload UI（完了）
 
@@ -247,6 +263,7 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 - 最大 `MAX_UPLOAD_FILES=20`、`UPLOAD_CONCURRENCY=1`（Curator 同期 Gemini のため）。
 - 1 ファイル失敗後も残りを継続。per-file status（待機中 / アップロード中 / 完了 / 失敗）と retry。
 - サーバ ingest は 1 リクエスト = 1 ファイルのまま。table-assist は同期 upload では走らない。
+- 2026-06-18 production live smoke: `sample-data/accounting-office/` 10 files を本番 `/upload` で複数選択し、10/10 完了。1 件は期待どおり `restricted`、残りは継続処理。証跡: [docs/upload-multi-file-live-smoke-2026-06-18.md](upload-multi-file-live-smoke-2026-06-18.md)。
 
 **まだ scope 外**:
 - ディレクトリ一括、zip 一括（P3 Ingest 判断）。
@@ -308,11 +325,11 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 4. P1-C demo scenario を bundle 前提へ更新する。（完了）
 5. P1-D Extraction & Masking Quality Gate の成熟化。（完了。PR #35、証跡は [docs/p1-d-evidence-2026-06-11.md](p1-d-evidence-2026-06-11.md)）
 6. **P1-E** large file pre-splitting / table fallback / locator enrichment の first slice。（完了。PR #37-#41）
-7. **P1-E+** scan-pdf quality floor 方針決定。（完了。提出前は current baseline fixed、sidecar refresh は後続 PR）
+7. **P1-E+** scan-pdf quality floor 方針決定 + refresh safety guard land（2026-06-18）。（refresh の false-green 経路を封鎖し、public blank-form `preserve-reviewed` refresh まで実施。full live 3-run は `majorDriftCount=0`。[D-P1-E-PLUS-1](decisions.md)）
 8. **P1-E2** born-digital PDF Gemini layout/table compare を既存 compare ハーネスに追加する。（完了。full Gemini 置換は不採用、`pdf-parse` primary + grounded Gemini table-assist を採用候補）
-9. **P1-E3** table-assist mainline wiring + product reprocess。（完了 2026-06-16。同期 upload は disabled、gated 実行は reprocess API / async context のみ）
+9. **P1-E3** table-assist mainline wiring + product reprocess + async ingest worker。（完了 2026-06-17。Step 1: dispatcher / reprocess API。Step 2 PR #53: Cloud Tasks enqueue + worker route。同期 upload は disabled のまま）
 10. **P1-ING1** multi-file upload UI。（完了。最大 20 件キュー、per-file `POST /api/documents`）
 11. **P2** 提出補強: Phase 3-F デモ polish と enqueue / SLO。（完了）
-12. P1-E+ follow-up PR: scan-pdf sidecar refresh / public blank-form recall / full live `--ci` 再評価に進む。
-13. table-assist async ingest worker epic（Cloud Tasks 自動トリガ）を別途起票。
+12. **P1-E+ follow-up PR**: drift gate は green 化済み。残りは scan-pdf をデモ主役にする場合の product-quality 改善（public blank-form table / locator enrichment、report-only recall 指標の floor 設計）。
+13. table-assist hardening: [#51](https://github.com/matz-d/ai-ready-knowledge-hub/issues/51) enqueue audit、[#52](https://github.com/matz-d/ai-ready-knowledge-hub/issues/52) cost guard。
 14. P3 CSS cleanup と Ingest 拡張判断に進む。

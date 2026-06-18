@@ -7,7 +7,15 @@
 import './loadEnv';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { documentIrToKnowledgeChunks } from '../src/eval/conversion/documentIrToKnowledgeChunk';
+import {
+  documentIrToKnowledgeChunks,
+  P1dExpectedFixtureSchema,
+  type P1dExpectedFixture,
+} from '../src/eval/conversion';
+import {
+  mergeScanPdfExpectedRefresh,
+  summarizeExpectedCoverage,
+} from '../src/eval/conversion/scanPdfGoldenSidecarRefresh';
 import { evalSemanticRetention } from '../src/eval/conversion/golden/evalSemanticRetention';
 import { extractScanPdfFromBuffer } from '../src/lib/extractors/scanPdfDocumentExtractor';
 
@@ -17,21 +25,38 @@ const FIXTURE_ROOT = path.resolve(
 );
 
 const GOLDEN_FIXTURES = [
-  'synthetic-employment-form-scan',
-  'synthetic-invoice-with-pii-scan',
+  {
+    documentId: 'mhlw-labor-conditions-notice-blank-scan',
+    expectedRefreshPolicy: 'preserve-reviewed',
+  },
+  {
+    documentId: 'nta-withholding-form-blank-scan',
+    expectedRefreshPolicy: 'preserve-reviewed',
+  },
+  {
+    documentId: 'synthetic-employment-form-scan',
+    expectedRefreshPolicy: 'append-live-fields',
+  },
+  {
+    documentId: 'synthetic-invoice-with-pii-scan',
+    expectedRefreshPolicy: 'append-live-fields',
+  },
 ] as const;
 
-const refreshExpected = process.argv.includes('--refresh-expected');
-const onlyFixture = process.argv.find(
-  (arg) => !arg.startsWith('--') && GOLDEN_FIXTURES.includes(arg as (typeof GOLDEN_FIXTURES)[number])
-);
-const fixturesToRun = onlyFixture ? [onlyFixture] : [...GOLDEN_FIXTURES];
+type GoldenFixture = (typeof GOLDEN_FIXTURES)[number];
+type GoldenFixtureId = GoldenFixture['documentId'];
 
-type ExpectedFixture = {
-  documentId: string;
-  expectedFields: string[];
-  notes?: string;
-};
+const refreshExpected = process.argv.includes('--refresh-expected');
+const goldenFixtureIds = new Set<GoldenFixtureId>(
+  GOLDEN_FIXTURES.map((fixture) => fixture.documentId)
+);
+const onlyFixture = process.argv.find(
+  (arg): arg is GoldenFixtureId =>
+    !arg.startsWith('--') && goldenFixtureIds.has(arg as GoldenFixtureId)
+);
+const fixturesToRun = onlyFixture
+  ? GOLDEN_FIXTURES.filter((fixture) => fixture.documentId === onlyFixture)
+  : [...GOLDEN_FIXTURES];
 
 function selectRecallFieldsFromChunks(
   chunks: ReturnType<typeof documentIrToKnowledgeChunks>
@@ -51,15 +76,17 @@ function selectRecallFieldsFromChunks(
   return fields;
 }
 
-async function loadExpected(documentId: string): Promise<ExpectedFixture> {
+async function loadExpected(documentId: string): Promise<P1dExpectedFixture> {
   const filePath = path.join(FIXTURE_ROOT, `${documentId}.expected.json`);
-  return JSON.parse(await readFile(filePath, 'utf8')) as ExpectedFixture;
+  const raw = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
+  return P1dExpectedFixtureSchema.parse(raw);
 }
 
 async function main(): Promise<void> {
   const summary: Array<Record<string, unknown>> = [];
 
-  for (const documentId of fixturesToRun) {
+  for (const fixture of fixturesToRun) {
+    const documentId = fixture.documentId;
     const pdfPath = path.join(FIXTURE_ROOT, `${documentId}.pdf`);
     const buffer = await readFile(pdfPath);
     const extracted = await extractScanPdfFromBuffer({
@@ -83,24 +110,25 @@ async function main(): Promise<void> {
       title: extracted.documentIr.source.fileName,
     });
 
-    let expectedUpdate: ExpectedFixture | undefined;
+    let expectedUpdate: P1dExpectedFixture | undefined;
     if (refreshExpected) {
       const prior = await loadExpected(documentId);
-      const candidateFields = selectRecallFieldsFromChunks(chunks);
+      const candidateFields =
+        fixture.expectedRefreshPolicy === 'append-live-fields'
+          ? selectRecallFieldsFromChunks(chunks)
+          : [];
       const { semanticRetention } = evalSemanticRetention({
         chunks,
-        expectedFields: candidateFields,
+        expectedFields:
+          candidateFields.length > 0 ? candidateFields : prior.expectedFields,
       });
-      expectedUpdate = {
-        documentId,
-        expectedFields: candidateFields,
-        notes: (
-          `${prior.notes ?? ''} ` +
-          `Regenerated ${new Date().toISOString().slice(0, 10)} from mainline ` +
-          `extractScanPdfFromBuffer (model=${extracted.conversion.model}, ` +
-          `recall=${semanticRetention.keyFieldRecall?.toFixed(2)}).`
-        ).trim(),
-      };
+      expectedUpdate = mergeScanPdfExpectedRefresh({
+        prior,
+        candidateFields,
+        regeneratedAt: new Date().toISOString().slice(0, 10),
+        model: extracted.conversion.model,
+        recall: semanticRetention.keyFieldRecall,
+      });
       const expectedPath = path.join(FIXTURE_ROOT, `${documentId}.expected.json`);
       await writeFile(
         expectedPath,
@@ -116,7 +144,8 @@ async function main(): Promise<void> {
       model: extracted.conversion.model,
       region: extracted.conversion.region,
       refreshedExpected: Boolean(expectedUpdate),
-      expectedFieldCount: expectedUpdate?.expectedFields.length,
+      expectedRefreshPolicy: fixture.expectedRefreshPolicy,
+      ...(expectedUpdate ? summarizeExpectedCoverage(expectedUpdate) : {}),
     });
   }
 

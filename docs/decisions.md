@@ -1928,6 +1928,61 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 **撤退条件:** async worker epic 着手時に `tableAssistMode: 'async'` を worker から渡す。post-terminal merge や同期経路での Gemini 発火が必要になった場合は新 decision を起こし、WU-6a 相当の masking 回帰を先に追加する。
 
+**後続:** async ingest worker epic は [D-P1-E-TA-2](#d-p1-e-ta-2-p1-e-step-2-table-assist-async-ingest-worker2026-06-17確定)（PR #53）で land 済み。`D-P1-E-TA-1` のスコープ判断は変更しない。
+
+---
+
+## D-P1-E-TA-2: P1-E Step 2 table-assist async ingest worker（2026-06-17、確定）
+
+**日付**: 2026-06-17（[PR #53](https://github.com/matz-d/ai-ready-knowledge-hub/pull/53) merge）
+**状態**: 確定。`D-P1-E-TA-1` の D 戦略不変条件は維持したまま、後続 epic として async トリガを land する。
+
+**背景:** `D-P1-E-TA-1` は dispatcher 配線と opt-in reprocess を先に land し、async ingest worker / Cloud Tasks enqueue を後続 epic とした。PR #53 はその epic の最小実装であり、同期 upload 経路で Gemini を走らせることはしない。
+
+**決定:**
+
+1. **Upload は同期完了のまま、enqueue は best-effort。** `POST /api/documents` は引き続き `tableAssistMode: 'disabled'`。official-doc-pdf upload が **restricted 以外**で terminal に到達し、tenant flag `pdf-table-assist` が ON のときだけ `pdfTableAssistIngestEnqueuer` が Cloud Tasks を enqueue する。enqueue 失敗・queue / signing 未設定は upload 成功を壊さない（warn / error log のみ）。
+2. **Worker は reprocess service を再利用。** `POST /api/documents/:docId/table-assist/run` は Cloud Tasks worker。実処理は `reprocessPdfWithTableAssist` を呼び、`tableAssistMode: 'async'` + flag 二重ゲート、Masker 前段 merge、lease、fail-soft を manual reprocess と共有する。
+3. **認証・運用 env。** 専用 `PDF_TABLE_ASSIST_*` env を優先し、未設定時は Context Package worker env（`CONTEXT_PACKAGE_*`）へ fallback できる。production の async enqueue には task payload signing（`PDF_TABLE_ASSIST_TASK_SIGNING_SECRET_NAME`）を必須とする。dispatch deadline は 600s（worker Cloud Run timeout と揃える）。
+4. **不変条件は `D-P1-E-TA-1` を継承。** 同期 upload での table-assist 発火禁止、Masker 前段 merge、post-terminal enrichment 禁止、`raw/` 14日依存、Curator / hash 不変、fail-soft は変更しない。
+
+**本 PR 対象外（引き続き後続）:**
+- Document detail UI からの table-assist ボタン（API / worker は利用可能）。
+- upload API の 202 + polling や document ingest 全体の async 化（table-assist 専用 worker のみ）。
+- [#51](https://github.com/matz-d/ai-ready-knowledge-hub/issues/51) enqueue audit event。
+- [#52](https://github.com/matz-d/ai-ready-knowledge-hub/issues/52) cost guard（table extraction summary を見て enqueue 対象を絞る）。
+
+**撤退条件:** 同期 upload で table-assist を走らせる必要が出た場合、または post-terminal merge が必要になった場合は新 decision を起こし、WU-6a 相当の masking 回帰を先に追加する。
+
+**Production live smoke（2026-06-18）:** revision `ai-ready-knowledge-hub-00069-2fn` で fresh official-doc-pdf upload → Cloud Tasks enqueue → worker `POST /api/documents/:docId/table-assist/run` → reprocess → queue empty まで確認。`FIRESTORE_PREFER_REST=true` は Firestore REST serializer が `schemaVersion: 2` 系の値を扱えず `toProto3JSON: don't know how to convert value 2` を起こしたため、production deploy 正本は `FIRESTORE_PREFER_REST=false` に戻した。Cloud Run timeout は worker dispatch deadline と合わせて `600s`。証跡は [docs/table-assist-async-ingest-live-smoke-2026-06-18.md](table-assist-async-ingest-live-smoke-2026-06-18.md)。
+
+---
+
+## D-P1-E-PLUS-1: scan-pdf golden sidecar refresh は curated expected を弱体化させない（2026-06-18、確定）
+
+**日付**: 2026-06-18
+**状態**: 確定。コード・テスト・証跡で land 済み（未コミット・作業ツリー上）。live drift floor は解消済み。scan-pdf の table / locator product-quality 改善は引き続き後続 PR。
+
+**背景:** scan-pdf golden sidecar を現行 OCR に追従させる `scripts/regenerateScanPdfGoldenSidecars.ts --refresh-expected` は、`*.expected.json` を「生成された先頭 12 chunk」で丸ごと置換し、curated な `expectedFieldTiers` / `expectedValues` / `expectedTableCells` を **黙って落としていた**。落とすと `coreFieldRecall` / `valuePrecision` / `tableCellRecall` が「未計測」になり、stable gate の deterministic zero は依然 pass するため、**評価を薄めただけなのに live drift floor が下がって品質改善に見える** false-green 経路が成立していた。これは今回の作業で最も危険な経路。
+
+**決定:**
+
+1. **refresh の唯一の正規経路を `mergeScanPdfExpectedRefresh` に集約する**（`src/eval/conversion/scanPdfGoldenSidecarRefresh.ts`）。新規 OCR field は append できるが、prior の `expectedFields` / `expectedFieldTiers` / `expectedValues` / `expectedTableCells` を 1 つでも drop すると `assertScanPdfExpectedRefreshDoesNotWeaken` が throw する（単調性 = append-only を保証）。
+2. **`not_applicable` と「0 件」を区別する。** `expectedTableCells: 'not_applicable'` は `null`（= 未計測でなく「表なし宣言」）として扱い、refresh で `not_applicable` 以外へ変えることも禁止する。「表が無い」と「表期待を測っていない」の混同による floor 偽改善を型レベルで塞ぐ。
+3. **回帰テストで固定する**（`src/eval/conversion/__tests__/scanPdfGoldenSidecarRefresh.test.ts`）。「期待値を落としたら throw」「`not_applicable` は厳密保存」「candidateFields が空でも reviewed expected を保存」を assert。
+4. **fixture ごとに refresh policy を明示する。** Public blank-form は `preserve-reviewed` とし、sidecar は現行 OCR に refresh するが、未レビュー live OCR 文字列を expected fields へ append しない。Synthetic は `append-live-fields` とし、structured expectations を保持したまま新規 OCR fields を append できる。
+
+**結果:** structured expectations を保持したまま public blank-form 2 本と synthetic 2 本を現行 OCR に揃えた結果、full live 3-run は `majorDriftCount=0` で green。PII direction / deterministic zero / extraction failures も 0。refresh 後の `synthetic-invoice-with-pii-scan` sidecar は現行 OCR で視覚表を table block 化するようになり、heuristic fixture が `tableCandidates: 0 → 1` に更新された。`nta-withholding-form-blank-scan` は table candidates が `1 → 8` になったが、table-cell recall / locator はまだ弱く、これは drift ではなく product-quality follow-up として扱う。
+
+**代替案:**
+- (a) refresh を手作業注意に委ねる（不採用：今回まさにそれで弱体化していた）。
+- (b) refresh 自体を禁止し sidecar を凍結（不採用：OCR 改善に追従できず、現行挙動と golden が乖離する）。
+- (c) **append-only guard + 回帰テスト**（採用）。OCR 追従と測定整合性を両立できる。
+
+**撤退条件:** 期待値を意図的に縮小する必要が生じた場合（fixture 廃止など）は guard をすり抜けず、新 decision で明示的に縮小理由を残す。full live `--ci` は drift gate であり、scan-pdf をデモ主役にする場合は table-cell recall / locator coverage の product-quality threshold を別 decision で定義する。
+
+**証跡:** [docs/p1-e-plus-scan-pdf-quality-floor-2026-06-18.md](p1-e-plus-scan-pdf-quality-floor-2026-06-18.md)。
+
 ---
 
 ## 関連ドキュメント

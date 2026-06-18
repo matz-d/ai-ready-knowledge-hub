@@ -65,6 +65,7 @@ Next.js / Cloud Run の実行サービスアカウントに少なくとも次が
 `KNOWLEDGE_HUB_BUCKET` を設定する。詳細は `.env.local.example`。
 
 ローカルの Next.js dev / Route Handler で Firestore SDK が gRPC 経路のエラーになる場合、`.env.local` に `FIRESTORE_PREFER_REST=true` を設定して REST 経路を優先する。
+ただし production Cloud Run は `FIRESTORE_PREFER_REST=false` を正とする。2026-06-18 の official-doc-pdf upload smoke で、REST 経路は Firestore serializer が `schemaVersion: 2` 系の値を扱えず `toProto3JSON: don't know how to convert value 2` を起こしたため、deploy workflow も `false` に戻している。
 
 ## Verification Commands
 
@@ -186,6 +187,7 @@ worker を載せる Cloud Run サービスの **request timeout はこの値以�
 しないと、Cloud Run が 504 で先に worker を kill し、Cloud Tasks が高コストな
 Gemini 呼び出しを retry してしまう。cost guard（[#52](https://github.com/matz-d/ai-ready-knowledge-hub/issues/52)）が
 入るまでは、queue の `--max-attempts` を小さめ（例: 3）にして retry 暴走を抑える。
+`deploy.yml` は `--timeout=600` を正本設定として持つ。Console や `gcloud run services update` で一時変更した場合も、次回 deploy でこの値へ戻る。
 
 ### 設計メモ: UI feature flag
 

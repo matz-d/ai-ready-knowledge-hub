@@ -538,6 +538,7 @@ documents or masked chunks, production live smoke on the sync path.
 **Follow-up (separate epic):** Production async caller that passes
 `tableAssistMode: 'async'` from a document ingest worker — reuses
 context-package job lease/sweeper/OIDC patterns; not part of this PR.
+**Completed 2026-06-17** in PR #53; see `D-P1-E-TA-2` and §6「2026-06-17」below.
 
 **Follow-up hardening (tracked outside this PR):**
 
@@ -576,5 +577,63 @@ context-package job lease/sweeper/OIDC patterns; not part of this PR.
 
 **Still out of scope (separate epic):**
 
-- PDF async ingest worker / Cloud Tasks enqueue (automatic post-upload augment).
 - Compare harness Gemini arms remain eval-only (`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1`).
+
+### 2026-06-17: P1-E Step 2 async ingest worker（PR #53 — locked）
+
+**Scope:** Land the `D-P1-E-TA-1` follow-up epic: automatic post-upload table-assist via
+Cloud Tasks, without changing the synchronous upload path or `D-P1-E-TA-1`
+invariants. See [decisions.md](decisions.md) `D-P1-E-TA-2`.
+
+**Completed:**
+
+- `pdfTableAssistIngestEnqueuer` enqueues Cloud Tasks after a successful
+  official-doc-pdf upload when tenant flag `pdf-table-assist` is ON and the
+  document is not `restricted`. Enqueue is best-effort; queue / signing
+  misconfiguration logs a warning and does not fail the upload response.
+- Worker route `POST /api/documents/:docId/table-assist/run` reuses
+  `reprocessPdfWithTableAssist` so manual reprocess and async worker share
+  `tableAssistMode: 'async'`, flag gate, Masker-before-chunk merge, lease,
+  and fail-soft behavior.
+- Env: dedicated `PDF_TABLE_ASSIST_*` with `CONTEXT_PACKAGE_*` fallback.
+  Production async enqueue requires task payload signing
+  (`PDF_TABLE_ASSIST_TASK_SIGNING_SECRET_NAME`). Dispatch deadline 600s;
+  align Cloud Run worker request timeout accordingly.
+
+**Still not in scope:**
+
+- Document detail UI button for table-assist.
+- Upload API 202 + polling or full document-ingest async lifecycle.
+- [#51](https://github.com/matz-d/ai-ready-knowledge-hub/issues/51) enqueue
+  audit events; [#52](https://github.com/matz-d/ai-ready-knowledge-hub/issues/52)
+  cost guard (selective enqueue beyond restricted-terminal skip).
+
+### 2026-06-18: Production live smoke（table-assist async ingest + multi-file upload）
+
+**table-assist async ingest:**
+
+- Fresh upload fixture:
+  `sample-data/document-conversion/official-doc-pdf/synthetic-official-doc-table-assist-golden.pdf`.
+- Production revision: `ai-ready-knowledge-hub-00069-2fn`.
+- `POST /api/documents` returned HTTP `200`; resulting doc:
+  `519d92d2-f138-4865-9467-2c5bd4abb7b1`.
+- Cloud Tasks dispatched
+  `POST /api/documents/:docId/table-assist/run`; worker returned HTTP `200`.
+- Queue drained to empty; conversion eval `health/pass`.
+- Production deploy now uses `FIRESTORE_PREFER_REST=false` and Cloud Run
+  `--timeout=600`. This fixed the prior Firestore REST serializer failure
+  `toProto3JSON: don't know how to convert value 2` and aligns worker timeout
+  with the table-assist dispatch deadline.
+- Evidence:
+  [docs/table-assist-async-ingest-live-smoke-2026-06-18.md](table-assist-async-ingest-live-smoke-2026-06-18.md).
+
+**multi-file upload UI:**
+
+- Production `/upload` accepted 10 selected files from
+  `sample-data/accounting-office/` and completed `10/10`.
+- One synthetic contract sample was correctly restricted; remaining files
+  continued to completion.
+- This validates the shipped multi-file queue, not a directory picker or zip
+  bulk ingest path.
+- Evidence:
+  [docs/upload-multi-file-live-smoke-2026-06-18.md](upload-multi-file-live-smoke-2026-06-18.md).
