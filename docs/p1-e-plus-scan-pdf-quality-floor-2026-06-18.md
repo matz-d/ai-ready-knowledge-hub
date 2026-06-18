@@ -277,14 +277,15 @@ product-quality weaknesses are visible in stable metrics, not drift:
   - `tableCellRecall = 0.75`
   - `locatorCoverage = 0.8214285714285714`
 
-## Current Position
+## Position After Baseline Refresh
 
 P1-E+ is safer than before because baseline refresh can no longer erase
 structured expectations, and the full live drift gate is green against the
 refreshed baseline. This resolves the false-green / stale-baseline risk.
 
-It does not fully solve scan-pdf extraction quality. The remaining product work
-is table and locator enrichment, especially for public blank forms:
+At this point, baseline refresh alone did not fully solve scan-pdf extraction
+quality. The remaining product work was table and locator enrichment, especially
+for public blank forms:
 
 1. Improve NTA blank-form table-cell recovery.
 2. Improve MHLW blank-form unit/cell recovery for `休憩時間 / 分`.
@@ -292,3 +293,86 @@ is table and locator enrichment, especially for public blank forms:
    quality threshold.
 4. Consider separate report-only thresholds for table-cell recall / locator
    coverage if scan-pdf becomes a demo lead.
+
+## Product-Quality Follow-Up Applied
+
+After the baseline refresh PR, the remaining scan-pdf product-quality gaps were
+handled without changing the global Gemini OCR prompt:
+
+- `synthetic-invoice-with-pii-scan.expected.json` was aligned with the synthetic
+  PDF generator and current sidecar:
+  - `請求書番号` -> `請求番号`
+  - `齋藤 試花` -> `青柳 試花`
+  - `決算書作成・申告準備` -> `決算書類作成・申告準備`
+- MHLW blank-form inline unit rows such as `2 休憩時間（ ）分` are now
+  deterministically synthesized as table chunks with
+  `scanInlineFormUnitFallback`.
+- NTA withholding-slip blank forms are detected only by a strong public-template
+  fingerprint (`給与所得の源泉徴収票` + `支払金額` + `源泉徴収税額` + `支払者`).
+  For that template, static blank-form labels and unit cells are supplemented
+  with `scanKnownPublicFormTemplateFallback`. This adds labels / units only; it
+  does not infer filled-in values.
+
+Global OCR prompt experiment:
+
+- A prompt candidate asking Gemini to preserve blank-form unit cells improved
+  NTA field/value recall in a focused run, but it also changed
+  `synthetic-employment-form-scan` into a table-bearing output and violated the
+  fixture's `expectedTableCells: not_applicable` invariant.
+- The prompt candidate was therefore reverted. The accepted change is the
+  deterministic adapter fallback above, keeping the user prompt fingerprint at
+  `00b770a2196707de8cdd5db55af7fdb817107878a8708130cb78c60c56d2a431`.
+
+Stable committed-sidecar gate after the product-quality follow-up:
+
+```bash
+pnpm eval:p1d:quality --ci \
+  --out tmp/p1-e-product-quality/stable-after-template-fallback-report.json
+```
+
+PR-docs readiness rerun used the same gate and wrote
+`tmp/p1-e-product-quality/stable-after-docs-report.json`.
+
+Result:
+
+- Passed.
+- `fieldRecallAverage = 1`
+- `coreFieldRecallAverage = 1`
+- `valuePrecisionAverage = 0.8148148148148148`
+- `tableCellRecallAverage = 0.5714285714285714`
+- `locatorCoverageAverage = 0.9644031565696191`
+- Deterministic zero checks remained 0.
+
+Targeted fixture outcomes:
+
+| Fixture | Field recall | Core field recall | Value precision | Table cell recall | Locator coverage |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `mhlw-labor-conditions-notice-blank-scan` | 1 | 1 | 1 | 1 | 1 |
+| `nta-withholding-form-blank-scan` | 1 | 1 | 1 | 1 | 1 |
+| `synthetic-invoice-with-pii-scan` | 1 | 1 | 1 | 1 | 1 |
+
+Live evidence after the product-quality follow-up:
+
+| Run | Report | Exit | Notes |
+| --- | --- | ---: | --- |
+| NTA focused | `tmp/p1-e-product-quality/nta-template-only-report.json` | 0 | old prompt fingerprint, NTA metrics all 1.0 |
+| Full live | `tmp/p1-e-product-quality/full-live-template-only-report.json` | 1 | MHLW / NTA / invoice / unmaskable passed; `synthetic-employment-form-scan` hit Vertex 429 quota |
+| Synthetic employment retry | `tmp/p1-e-product-quality/synthetic-employment-template-only-report.json` | 0 | focused retry passed with old prompt fingerprint |
+
+The full live failure was a Vertex `RESOURCE_EXHAUSTED` 429, not a quality or
+schema regression. The failed fixture passed on focused retry after waiting.
+
+Verification:
+
+```bash
+pnpm vitest run \
+  src/lib/extractors/__tests__/scanPdfGeminiOcr.test.ts \
+  src/eval/conversion/__tests__/documentIrToKnowledgeChunk.test.ts
+pnpm eval:p1d:quality --ci
+pnpm test
+pnpm typecheck
+```
+
+All verification commands above passed. Full live `--ci` should be rerun when
+Vertex quota is quiet if a single all-fixture live artifact is required for the
+PR, but the targeted evidence covers the 429-only gap.

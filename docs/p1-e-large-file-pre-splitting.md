@@ -188,6 +188,30 @@ Recommended PR boundary:
 
 - Cut a PR before scan OCR prompt changes. The current slice contains T1 preflight, CSV/XLSX row-window chunking, PDF page-group curator manifest, T2 official-PDF table fail-soft with fail-closed compensation, local T3 label/value enrichment, and local T2 scan visual table fallback. These conversion-adapter changes do not call Gemini or regenerate scan sidecars. Scan OCR prompt/model changes should be a follow-up PR because they affect model output and require separate P1-D live drift evidence.
 
+### 2026-06-18: P1-E+ scan-pdf product-quality follow-up
+
+The follow-up PR kept the earlier boundary: global scan OCR prompt changes were
+tested, but not accepted. A stronger prompt improved NTA in a focused run, then
+made `synthetic-employment-form-scan` table-bearing and violated its
+`expectedTableCells: not_applicable` invariant, so the prompt diff was reverted.
+
+Accepted changes are deterministic `DocumentIR -> KnowledgeChunk` adapter
+improvements only:
+
+- MHLW inline blank unit rows such as `2 休憩時間（ ）分` are synthesized as
+  table chunks with `scanInlineFormUnitFallback`.
+- NTA withholding-slip blank forms receive public-template static label / unit
+  cells only when a strong fingerprint is present, via
+  `scanKnownPublicFormTemplateFallback`.
+- `synthetic-invoice-with-pii-scan.expected.json` was aligned with the synthetic
+  generator and current sidecar.
+
+Stable `pnpm eval:p1d:quality --ci` now reports all targeted MHLW / NTA /
+invoice field/core/value/table/locator metrics as `1.0`. Full live all-fixture
+`--ci` had one Vertex 429 for `synthetic-employment-form-scan`; that fixture
+passed on focused retry. Evidence is in
+[docs/p1-e-plus-scan-pdf-quality-floor-2026-06-18.md](p1-e-plus-scan-pdf-quality-floor-2026-06-18.md).
+
 ### 2026-06-13: born-digital PDF Gemini comparison before more production work
 
 Current P1-D stable metrics show that the weakest structured conversion area is

@@ -1961,7 +1961,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 ## D-P1-E-PLUS-1: scan-pdf golden sidecar refresh は curated expected を弱体化させない（2026-06-18、確定）
 
 **日付**: 2026-06-18
-**状態**: 確定。コード・テスト・証跡で land 済み（未コミット・作業ツリー上）。live drift floor は解消済み。scan-pdf の table / locator product-quality 改善は引き続き後続 PR。
+**状態**: 確定。コード・テスト・証跡で land 済み（未コミット・作業ツリー上）。live drift floor は解消済み。さらに targeted product-quality follow-up として、NTA / MHLW / invoice の table / locator 弱点は deterministic adapter 改善で対応済み。より広い scan-pdf 品質 threshold は、scan-pdf をデモ主役にする場合の別判断とする。
 
 **背景:** scan-pdf golden sidecar を現行 OCR に追従させる `scripts/regenerateScanPdfGoldenSidecars.ts --refresh-expected` は、`*.expected.json` を「生成された先頭 12 chunk」で丸ごと置換し、curated な `expectedFieldTiers` / `expectedValues` / `expectedTableCells` を **黙って落としていた**。落とすと `coreFieldRecall` / `valuePrecision` / `tableCellRecall` が「未計測」になり、stable gate の deterministic zero は依然 pass するため、**評価を薄めただけなのに live drift floor が下がって品質改善に見える** false-green 経路が成立していた。これは今回の作業で最も危険な経路。
 
@@ -1973,6 +1973,8 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 4. **fixture ごとに refresh policy を明示する。** Public blank-form は `preserve-reviewed` とし、sidecar は現行 OCR に refresh するが、未レビュー live OCR 文字列を expected fields へ append しない。Synthetic は `append-live-fields` とし、structured expectations を保持したまま新規 OCR fields を append できる。
 
 **結果:** structured expectations を保持したまま public blank-form 2 本と synthetic 2 本を現行 OCR に揃えた結果、full live 3-run は `majorDriftCount=0` で green。PII direction / deterministic zero / extraction failures も 0。refresh 後の `synthetic-invoice-with-pii-scan` sidecar は現行 OCR で視覚表を table block 化するようになり、heuristic fixture が `tableCandidates: 0 → 1` に更新された。`nta-withholding-form-blank-scan` は table candidates が `1 → 8` になったが、table-cell recall / locator はまだ弱く、これは drift ではなく product-quality follow-up として扱う。
+
+**Product-quality follow-up（2026-06-18）:** global scan OCR prompt を強める案は、NTA focused run では field/value recall を改善した一方で、`synthetic-employment-form-scan` の `expectedTableCells: not_applicable` 不変条件を壊したため不採用とした。採用したのは deterministic adapter 改善のみ。`synthetic-invoice-with-pii-scan.expected.json` を synthetic PDF generator と現行 sidecar に合わせ、MHLW inline blank unit row（例: `2 休憩時間（ ）分`）は `scanInlineFormUnitFallback` で table chunk 化し、NTA 源泉徴収票は強い public template fingerprint が成立する場合だけ `scanKnownPublicFormTemplateFallback` で静的 labels / unit cells を補う。補うのは公開 blank-form の labels / units だけで、記入値は推測しない。stable `pnpm eval:p1d:quality --ci` では MHLW / NTA / invoice の field/core/value/table/locator が all 1.0。full live all-fixture は Vertex 429 で一度全体完走できなかったが、該当 fixture は focused retry で green。
 
 **代替案:**
 - (a) refresh を手作業注意に委ねる（不採用：今回まさにそれで弱体化していた）。
