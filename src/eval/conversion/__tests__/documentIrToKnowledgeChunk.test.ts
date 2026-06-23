@@ -511,6 +511,45 @@ describe('documentIrToKnowledgeChunks', () => {
     );
   });
 
+  it('does not synthesize inline form-unit table chunks for filled or unitless rows', () => {
+    const ir = buildIr(
+      [
+        // Filled value inside the parentheses: this is real data, not a blank
+        // entry field, so it must not become a synthesized table row.
+        {
+          blockId: 'p1-ocr50',
+          kind: 'paragraph',
+          text: '支払金額（ 33,000 ）円',
+          locator: { pageNumber: 1, bbox: [240, 809, 400, 821] },
+        },
+        // Unit present but no parentheses: filled-in form, must not fire.
+        {
+          blockId: 'p1-ocr51',
+          kind: 'paragraph',
+          text: '休憩時間 60分',
+          locator: { pageNumber: 1, bbox: [240, 829, 400, 841] },
+        },
+      ],
+      'scan-pdf'
+    );
+
+    const chunks = documentIrToKnowledgeChunks({
+      ...defaultOptions(),
+      documentIr: ir,
+    });
+
+    expect(
+      chunks.filter((chunk) => chunk.structureType === 'table')
+    ).toHaveLength(0);
+    expect(
+      chunks.some((chunk) =>
+        (chunk.extractionWarnings ?? []).some((warning) =>
+          warning.includes('scanInlineFormUnitFallback')
+        )
+      )
+    ).toBe(false);
+  });
+
   it('drops note blocks', () => {
     const ir = buildIr([
       paragraphBlock('p1-b1', 'kept'),

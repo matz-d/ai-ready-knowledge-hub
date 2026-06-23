@@ -1961,7 +1961,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 ## D-P1-E-PLUS-1: scan-pdf golden sidecar refresh は curated expected を弱体化させない（2026-06-18、確定）
 
 **日付**: 2026-06-18
-**状態**: 確定。コード・テスト・証跡で land 済み（未コミット・作業ツリー上）。live drift floor は解消済み。さらに targeted product-quality follow-up として、NTA / MHLW / invoice の table / locator 弱点は deterministic adapter 改善で対応済み。より広い scan-pdf 品質 threshold は、scan-pdf をデモ主役にする場合の別判断とする。
+**状態**: 確定。コード・テスト・証跡で land 済み（[PR #55](https://github.com/matz-d/ai-ready-knowledge-hub/pull/55) として OPEN、必須チェック全 green）。live drift floor は解消済み。さらに targeted product-quality follow-up として、NTA / MHLW / invoice の table / locator 弱点は deterministic adapter 改善で対応済み。より広い scan-pdf 品質 threshold は、scan-pdf をデモ主役にする場合の別判断とする。
 
 **背景:** scan-pdf golden sidecar を現行 OCR に追従させる `scripts/regenerateScanPdfGoldenSidecars.ts --refresh-expected` は、`*.expected.json` を「生成された先頭 12 chunk」で丸ごと置換し、curated な `expectedFieldTiers` / `expectedValues` / `expectedTableCells` を **黙って落としていた**。落とすと `coreFieldRecall` / `valuePrecision` / `tableCellRecall` が「未計測」になり、stable gate の deterministic zero は依然 pass するため、**評価を薄めただけなのに live drift floor が下がって品質改善に見える** false-green 経路が成立していた。これは今回の作業で最も危険な経路。
 
@@ -1975,6 +1975,12 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 **結果:** structured expectations を保持したまま public blank-form 2 本と synthetic 2 本を現行 OCR に揃えた結果、full live 3-run は `majorDriftCount=0` で green。PII direction / deterministic zero / extraction failures も 0。refresh 後の `synthetic-invoice-with-pii-scan` sidecar は現行 OCR で視覚表を table block 化するようになり、heuristic fixture が `tableCandidates: 0 → 1` に更新された。`nta-withholding-form-blank-scan` は table candidates が `1 → 8` になったが、table-cell recall / locator はまだ弱く、これは drift ではなく product-quality follow-up として扱う。
 
 **Product-quality follow-up（2026-06-18）:** global scan OCR prompt を強める案は、NTA focused run では field/value recall を改善した一方で、`synthetic-employment-form-scan` の `expectedTableCells: not_applicable` 不変条件を壊したため不採用とした。採用したのは deterministic adapter 改善のみ。`synthetic-invoice-with-pii-scan.expected.json` を synthetic PDF generator と現行 sidecar に合わせ、MHLW inline blank unit row（例: `2 休憩時間（ ）分`）は `scanInlineFormUnitFallback` で table chunk 化し、NTA 源泉徴収票は強い public template fingerprint が成立する場合だけ `scanKnownPublicFormTemplateFallback` で静的 labels / unit cells を補う。補うのは公開 blank-form の labels / units だけで、記入値は推測しない。stable `pnpm eval:p1d:quality --ci` では MHLW / NTA / invoice の field/core/value/table/locator が all 1.0。full live all-fixture は Vertex 429 で一度全体完走できなかったが、該当 fixture は focused retry で green。
+
+**Adapter レビュー follow-up（2026-06-23、PR #55 review 由来）:**
+
+1. **deterministic adapter の N/A 不変条件との相互作用は fail-closed であることを確認・テスト追加。** adapter はデータ依存で table chunk を合成するため、`expectedTableCells: not_applicable` 宣言の fixture に誤発火すると table-cell 分母を歪めうる。これは `p1dQualityGate.ts` の `validateNotApplicableTableCells` の **chunk structureType チェック**（生 IR を見る source-evidence チェックとは別系統）が eval load 時に throw して塞ぐ。実測で `synthetic-employment-form-scan`（唯一の N/A）には committed / live OCR どちらでも inline-unit / NTA fingerprint とも発火しないことを確認。さらに `p1dQualityGate.test.ts` に「合成 chunk が table structureType を含むと throw」する回帰テストを追加し、adapter 経路の fail-closed を pin した。inline-unit の発火境界（記入済み・paren 無し行を拒否）も `documentIrToKnowledgeChunk.test.ts` に負側テストを追加。
+2. **invoice expected の hygiene 修正は refresh guard を迂回した手編集。** 上記の `請求書番号`→`請求番号`、`齋藤 試花`→`青柳 試花`、`決算書作成`→`決算書類作成` は `*.expected.json` の直接編集であり `--refresh-expected` を通っていないため `assertScanPdfExpectedRefreshDoesNotWeaken` が走っていない。guard は「誤値の是正」と「弱体化」を区別できず、この変更は guard を通せば throw していたはず。今回は合成 PDF generator（`poc/document-conversion/scan-pdf/fixtures/generate-synthetic-invoice.ts`: `請求番号` L200 / `青柳 試花` L209 / `決算書類作成` L16）と一致する正当な是正であることを手動確認し、end-state も orphan tier キー 0 で整合。**guard が `--refresh-expected` 経路限定で手編集の drop を検出できない点は既知の盲点**で、load 時 guard への拡張を [#56](https://github.com/matz-d/ai-ready-knowledge-hub/issues/56) に follow-up issue 化した。
+3. **NTA テンプレ補完は 2026 年版様式前提。** `isNtaWithholdingSlipTemplate` の fingerprint と `buildScanKnownPublicFormTemplateTableBlocks` の静的行は現行 NTA 給与所得の源泉徴収票レイアウト（`templateId: nta-withholding-slip-blank`）を前提とする旨をコード上に明記。様式改定時は fingerprint と静的行を一緒に見直す（補完は labels / units のみで記入値非推測のため、drift は recall 劣化であってデータ漏洩ではない）。
 
 **代替案:**
 - (a) refresh を手作業注意に委ねる（不採用：今回まさにそれで弱体化していた）。

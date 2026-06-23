@@ -423,6 +423,15 @@ function buildScanImageTextTableBlocks(input: {
   return tableBlocks;
 }
 
+// Heuristic for scan-pdf blank forms only. It matches `<label>（ ）<unit>` where
+// the parentheses are empty/whitespace (a blank entry field) and the trailing
+// unit is one of a fixed set. Filled values (`支払金額（ 33,000 ）円`) and unit
+// rows without parentheses (`休憩時間 60分`) are intentionally rejected. The
+// boundary is deliberately loose on the label side: arbitrary prose with the
+// same shape (`第2項（ ）年`) can also match. That is accepted because the
+// output is tagged `scanInlineFormUnitFallback`, and any golden fixture that
+// declares `expectedTableCells: not_applicable` would fail-closed at eval load
+// via the chunk table-structure check in p1dQualityGate.
 function parseInlineBlankUnitFormRow(
   text: string
 ): { label: string; unit: string } | null {
@@ -482,6 +491,13 @@ function normalizeTemplateFingerprint(text: string): string {
   return text.normalize('NFKC').replace(/\s+/gu, '');
 }
 
+// Fingerprint + static supplement is version-specific: the labels/units emitted
+// by buildScanKnownPublicFormTemplateTableBlocks assume the current (2026) NTA
+// 給与所得の源泉徴収票 layout, recorded as templateId `nta-withholding-slip-blank`.
+// If NTA revises the form, the supplemented rows can diverge from the real
+// layout and this fingerprint + the static rows must be revisited together. The
+// supplement only adds blank-form labels/units and never infers filled values,
+// so a layout drift degrades recall rather than leaking data.
 function isNtaWithholdingSlipTemplate(
   blocks: readonly DocumentIrBlock[]
 ): boolean {
