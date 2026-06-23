@@ -39,7 +39,7 @@ Next.js は「本格Webアプリ基盤」ではなく、**薄いデモUI + Cloud
 
 プロダクトの知性は Genkit / Vertex AI 側に置き、Next.js は審査員に価値を伝える舞台装置として薄く保つ。詳細は [docs/decisions.md](decisions.md) の A10 を参照。
 
-W1/W2 の初期デプロイでは Cloud Run Buildpacks に任せる方針だったが、Phase 3-D では GitHub Actions + Artifact Registry の evidence を優先し、`next.config.ts` の `output: 'standalone'` と multi-stage Dockerfile を正とする。詳細は [docs/phase-3-d-direction.md](phase-3-d-direction.md) を参照。
+W1/W2 の初期デプロイでは Cloud Run Buildpacks に任せる方針だったが、Phase 3-D では GitHub Actions + Artifact Registry の evidence を優先し、`next.config.ts` の `output: 'standalone'` と multi-stage Dockerfile を正とする。詳細は [docs/phase-3-d-direction.md](archive/phase-3-d-direction.md) を参照。
 
 ---
 
@@ -183,4 +183,4 @@ MVPでは Vector Search と embeddings 生成は行わず、タグ検索 + LLM�
 
 - [docs/architecture.md](architecture.md) — システム構成図
 - [docs/decisions.md](decisions.md) — 意思決定の経緯
-- [docs/hackathon.md](hackathon.md) — 必須要件・審査基準
+- [docs/hackathon.md](archive/hackathon.md) — 必須要件・審査基準

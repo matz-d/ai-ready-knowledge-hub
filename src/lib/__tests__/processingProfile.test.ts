@@ -9,14 +9,17 @@ import {
 } from '../processingProfile';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PHASE_3_E_DOC = join(__dirname, '../../../docs/phase-3-e-direction.md');
+const PHASE_3_E_DOC = join(
+  __dirname,
+  '../../../docs/archive/phase-3-e-direction.md'
+);
 
 function readPhase3EDoc(): string {
   return readFileSync(PHASE_3_E_DOC, 'utf8');
 }
 
 describe('processingProfile presets', () => {
-  it('cloud-managed matches the MVP preset triple documented in phase-3-e-direction.md §3.3', () => {
+  it('cloud-managed matches the MVP preset triple documented in archived phase-3-e-direction.md §3.3', () => {
     const preset: ProcessingProfile = PROCESSING_PROFILE_PRESETS['cloud-managed'];
     expect(preset).toEqual({
       profileName: 'cloud-managed',
@@ -31,7 +34,7 @@ describe('processingProfile presets', () => {
     );
   });
 
-  it('cloud-sanitized-ingress matches the MVP preset triple documented in phase-3-e-direction.md §3.3', () => {
+  it('cloud-sanitized-ingress matches the MVP preset triple documented in archived phase-3-e-direction.md §3.3', () => {
     const preset: ProcessingProfile =
       PROCESSING_PROFILE_PRESETS['cloud-sanitized-ingress'];
     expect(preset).toEqual({

@@ -234,7 +234,7 @@ PR は move-only commit と（やるなら）テスト追加 commit を分ける
 - [ ] **feature flag 退役判断**: `pdf-conversion-subtype-1/2/3` が全テナント恒久 ON なら
       flag 読みを削除し、`FEATURE_FLAG_IDS` を空に戻す（Firestore read 削減 +
       死分岐除去）。本番 Firestore の flag document 現値を確認してから。
-- [ ] **docs/ アーカイブ移動**: INDEX.md（Phase 0）運用が安定したら、
+- [x] **docs/ アーカイブ移動**: INDEX.md（Phase 0）運用が安定したら、
       歴史文書を `docs/archive/` へ実際に移動し相互リンクを修正。
 
 ### 明示的に「やらない」こと

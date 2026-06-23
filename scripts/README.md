@@ -14,7 +14,7 @@
 | `runMaskerPipeline.ts` | `pnpm masker:pipeline [path]` | 原本 → SimpleMasker → residualRisk → status 判定 |
 | `runDlpMaskerSmoke.ts` | `pnpm masker:dlp:smoke [path]` | Cloud DLP provider 疎通確認 |
 | `regenerateChunks.ts` | `pnpm chunks:regenerate <docId>` | Firestore `documents/{docId}/chunks` 全置換 |
-| `generateInventorySnapshot.ts` | `pnpm inventory:snapshot` | `docs/w1-artifacts/inventory.snapshot.json` 再生成 |
+| `generateInventorySnapshot.ts` | `pnpm inventory:snapshot` | `docs/archive/w1-artifacts/inventory.snapshot.json` 再生成 |
 | `runContextPackageDemo.ts` | `pnpm context:demo` / `:live` / `:w1` | Context Package Markdown 出力デモ |
 | `runStrategist.ts` | `pnpm strategist` | Strategist flow 手動 smoke |
 | `scanMiniShaiHuludIocs.ts` | `pnpm security:ioc:mini-shai-hulud` | npm サプライチェーン IOC スキャン |

@@ -1,355 +1,182 @@
 # AI-Ready Knowledge Hub
 
-> SMEの散らばった情報を、AIが使える会社の記憶に変える。
+> SME の散らばった文書を、AI に安全に渡せる Context Package へ変換する。
 
-[DevOps × AI Agent Hackathon 2026](https://findy.notion.site/devops-ai-agent-hackathon-2026) (Findy × Google Cloud) 提出作品。
+[DevOps x AI Agent Hackathon 2026](https://findy.notion.site/devops-ai-agent-hackathon-2026) (Findy x Google Cloud) 提出作品です。
 
----
+## 概要
 
-## 一行説明
+SME では、AI に使わせたい社内情報が PDF、CSV、Google Sheets、メモ、テンプレート、古い資料、個人知に散らばっています。NotebookLM、Gemini、RAG などを使いたくても、どの情報を渡してよいか、顧客情報や個人情報を含む資料をそのまま渡してよいかを判断しにくいのが現場の課題です。
 
-機密文書を扱うSMEのPDF・CSV・メモ・テンプレートなどの雑多な情報を一箇所に集約し、AIが自動で分類・意味マッピングするエージェント。さらに目的を入力すると、Gemini / NotebookLM / RAG に渡すべき情報セット、不足している暗黙知、人間に確認すべき質問を生成し、AI活用前の Context Package を作成する。
+AI-Ready Knowledge Hub は、その前段を担当します。文書をアップロードすると AI エージェントが分類・抽出・マスキングし、目的を入力すると「使える情報」「除外すべき情報」「足りない情報」「人間に確認すべき質問」を整理した Context Package を生成します。
 
-初期デモ題材は会計・社労士事務所。ただし本作品は士業の専門判断を代替するものではなく、機密文書と暗黙知を多く持つSMEの「AI活用前の準備」を支援する前段プラットフォームとして位置づける。
+本作品は NotebookLM / Gemini / RAG を置き換えるものではありません。下流 AI に投入する情報を、実務で使える粒度とセキュリティ観点で準備するための前段プラットフォームです。
 
-Phase 3-E の営業・デモ上の主張は、「この目的でAIに渡してよい理由を説明できる」こと。標準 profile は `cloud-managed` で、社内文書を管理されたクラウド境界で受け取り、Cloud DLP + Masker で個人情報や再識別リスクを安全化し、Context Package export には目的とのひもづきが残る。つまり NotebookLM / Gemini / RAG を置き換えるのではなく、それらへ投入する前に、使う情報・除外する情報・足りない情報を説明可能な形に整える。
+## デモで見せること
 
----
+デモ題材は会計・社労士事務所です。士業の専門判断を代替するものではなく、機密文書と暗黙知を多く持つ SME の「AI 活用前の準備」を支援するユースケースとして扱います。
 
-## 現在のステータス (2026-06-18)
+1. `/upload` から複数ファイルをまとめて投入する
+2. Inventory で AI 利用可、マスキング済み、保護中の文書を確認する
+3. `/context-package` で目的を入力する
+4. 候補選択、Safety Review、Preview acknowledgement を確認する
+5. Markdown または NotebookLM 用 source bundle zip として出力する
 
-**フェーズ**: Phase 4-UX MVP、NotebookLM source bundle（P1-A/B）、P1-F async full-coverage strategist、P1-C デモ docs 更新、P1-D Extraction & Masking Quality Gate 成熟化、**P1-E first slice（PR #37-#41）**、official-doc-pdf Gemini table-assist compare eval、**P1-E Step 1 mainline wiring（D 戦略）**、**multi-file upload UI**、**table-assist product reprocess API / async ingest worker** まで完了。2026-06-18 に table-assist async ingest と multi-file upload の production live smoke も完了。stable eval（`pnpm eval:p1d:quality --ci`）は CI blocker、live masker drift check（`pnpm eval:p1d:masker-drift`）も合格証跡あり。次は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) の **P1-E+ scan-pdf quality floor 解消**、table-assist hardening、P3 cleanup / Ingest 判断へ進む。
+撮影用 purpose:
 
-### 完了済み
-
-- **W1 技術検証**: Genkit + Vertex AI で Curator 6 分類 + Masker A8 residualRisk + A9 Markdown export + Cloud Run デプロイを確認。
-- **Phase 1 (Upload Walking Skeleton)**: `/upload` → GCS + Firestore + Curator + Masker → 結果表示。実 GCP 接続確認済み。
-- **Phase 1 follow-up (Cloud DLP)**: Masker provider に `cloud-dlp` を選択可能。`MASKER_PROVIDER=cloud-dlp` で明示。
-- **Phase 2 (KnowledgeChunk)**: CSV / `.xlsx` を spreadsheet chunk として `documents/{docId}/chunks/{chunkId}` に保存。`.txt` / `.md` は paragraph chunk として 1 文書 1 chunk。
-- **Phase 3-A (Google Sheets import)**: Drive `files.export` で Sheets を `.xlsx` スナップショットに変換し Phase 2 パイプラインへ。
-- **Phase 3-B (Workspace resync)**: schemaVersion 2 + 鮮度バッジ + `POST /api/workspace/freshness` で再取り込み。
-- **Phase 3-C (App Loop)**:
-  - Strategist flow（目的別 chunk 選別 LLM）を実装。safety gate（決定論的 PII フィルタ）で前段防御。
-  - `StrategistOrchestrator` service 層（Firestore Inventory + chunks 取得 → safety gate → Strategist）。
-  - `buildStrategistContextPackage()` で Strategist 結果を既存 `ContextPackageExportInput` に変換し Markdown を出力。
-  - `POST /api/context-package` 同期 API。
-  - `/context-package` UI（Purpose 入力 → 結果表示 → `.md` ダウンロード）。
-  - Google Docs import route を接続。`docs.google.com/document/d/` URL を Docs importer に振り分け。
-  - upload 直後の chunk 自動生成（`replaceChunksForDoc`、失敗時 500）。
-  - malformed Inventory document は skip-and-warn で全体を落とさない。
-  - source coverage 確認済み: upload `.txt` / `.md` / `.csv` / `.xlsx` + Google Sheets + Google Docs のすべてが Purpose Query まで到達。
-- **Phase 3-D (CI/CD + IAP + AuditEvent)**:
-  - `Dockerfile`（multi-stage / pnpm / Node 22 / standalone / 非 root）と `.dockerignore` を追加。image サイズ 442MB。
-  - `.github/workflows/deploy.yml`：`main` push で test / typecheck / build → Docker build/push → `gcloud run deploy`。WIF 認証（Service Account JSON key 不使用）。
-  - Artifact Registry `knowledge-hub` repo に `:latest` と `:<SHORT_SHA>` の 2 tag で push。
-  - Cloud Run IAP 直接保護。`--no-allow-unauthenticated` 固定。IAP service agent に `roles/run.invoker` 付与済み。
-  - `src/lib/auth/verifyIapJwt.ts` で `x-goog-iap-jwt-assertion` を検証し、signature OK 後のみ `x-goog-authenticated-user-email` を信頼。
-  - `document.import` / `document.reimport` / `document.export` の AuditEvent を対象 route の成功後に append-only で記録（`auditEvents/{eventId}`）。
-  - `firestore.rules` で `auditEvents` の update/delete を拒否（Admin SDK 規律が正本）。
-  - deploy 3 分 32 秒。証跡 screenshot: `docs/iap-evidence/`。
-- **Phase 3-E (Processing Boundary + Cloud DLP Trust Modes)**: `cloud-managed` 標準 profile、Cloud DLP 固定値、Context Package `purposeBinding`、`cloud-sanitized-ingress` contract-only、Document Conversion Eval 契約を docs / 型 / tests で同期。
-- **Phase 3-H (Document Conversion PoC)**: `poc/document-conversion/` で 4 subtype の runner・fixture・`DocumentIR` 評価縦串を確立。正本は `docs/phase-3-h-direction.md`。
-- **Phase 3-H-2 (official-doc-pdf 本線 + Eval 育成)**: `pdf-conversion-subtype-1` flag、`pdfDocumentExtractor`、`document.convert` AuditEvent、Conversion Eval health/heuristic/golden CI（`.github/workflows/conversion-eval.yml`）。2026-05-20 完了。正本は `docs/phase-3-h-2-direction.md`。
-- **Phase 3-H-3 subtype 2 (slide-pdf 本線)**: `pdf-conversion-subtype-2` flag、`slidePdfDocumentExtractor`、Vertex 成功時 `inferenceDestination` 必須、slide 専用 heuristic / golden、live smoke 証跡 `docs/phase-3-h-3-slide-pdf-live-smoke.md`（2026-05-20、PR #3）。
-- **Phase 3-H-3 subtype 3 / M6 (scan-pdf 本線)**: `pdf-conversion-subtype-3` flag（**`m-grow-ai.com` のみ**）、`scanPdfDocumentExtractor`（Gemini OCR、timeout 60s / 入力 5 MiB、pre-flight fail-closed）、`unmaskablePiiFindings` 記録、scan-pdf golden sidecar、CI health gate 必須化、live smoke 証跡 `docs/phase-3-h-3-scan-pdf-live-smoke.md`（2026-05-21）。DoD 正本は `docs/phase-3-h-3-direction.md` §8.3。
-- **Phase 4-UX MVP (purpose-driven candidate selection)**: `src/services/candidateSelection/` の deterministic ranking / classification、`POST /api/context-package/candidates`、候補選択 UI、Safety Review、Pre-generation Preview を実装。候補 API は metadata-only の助言レイヤで、本文・chunk・GCS・`aiSafeContent`・LLM を読まない。
-- **Context Package Production Hardening**: async job の cancel / stale-running sweeper / terminal TTL と、large result の GCS offload を実装し、production smoke 完了。GitHub issue #15/#16 は close 済み。
-- **P1-A/B NotebookLM source bundle**: API result に `sourceBundle.files`、`ContextPackageForm` に zip download 導線。delivery E2E 5/5 PASS。
-- **P1-F async full-coverage strategist**: batched strategist で truncation ゼロ。review 残タスクは [docs/p1-f-review-follow-up-tasks.md](docs/p1-f-review-follow-up-tasks.md)。
-- **P1-D Extraction & Masking Quality Gate**: schema v4、deterministic zero checks（CI blocker）、live Cloud DLP drift check。証跡は [docs/p1-d-evidence-2026-06-11.md](docs/p1-d-evidence-2026-06-11.md)。
-- **P1-E first slice（PR #37-#41）**: T1 large-file preflight + row-window / page-group・table-manifest、T2 official-PDF table fail-soft + scan visual table fallback、T3 scan label/value enrichment、scan OCR prompt guard + live drift workflow（`pnpm eval:scan-pdf:ocr-live-drift`）。方針・実装メモは [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md)。live drift 証跡は [docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md) / [docs/scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-pr41-2026-06-13.md)。
-- **P1-E official-doc-pdf Gemini table-assist compare eval**: full Gemini 置換は採用せず、`pdf-parse` primary + grounded `pdf-parse+gemini-tables` を最善候補として compare harness で評価拡張。public PDF 由来の `*.table-assist.expected.json` を 3 件追加。compare harness の Gemini arms は eval-only（`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1` 明示 opt-in）。実測は [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) / harness は [poc/document-conversion/official-doc-pdf/compare/README.md](poc/document-conversion/official-doc-pdf/compare/README.md)。
-- **P1-E Step 1 table-assist mainline wiring（D 戦略、2026-06-16）**: `pdfExtractionDispatcher` に `tableAssistMode` と grounded Gemini table-assist を配線。同期 upload は `tableAssistMode: 'disabled'` を明示し、flag ON でも同期経路では発火しない。`pdf-table-assist` flag（default off）**かつ** `tableAssistMode: 'async'` の実行コンテキストでのみ augment。Masker 前段 merge、fail-soft、WU-6a masking 回帰テスト、mainline harness 証跡は [docs/official-doc-table-assist-mainline-harness-2026-06-16.md](docs/official-doc-table-assist-mainline-harness-2026-06-16.md)。決定は [docs/decisions.md](docs/decisions.md) `D-P1-E-TA-1`。
-- **P1-E table-assist product reprocess / async ingest**: `POST /api/documents/:docId/table-assist` と `reprocessPdfWithTableAssist` で、upload 済み official-doc-pdf を opt-in 再処理。さらに official-doc-pdf upload 後、tenant flag `pdf-table-assist` が ON の場合だけ Cloud Tasks worker `POST /api/documents/:docId/table-assist/run` を best-effort enqueue する。`tableAssistMode: 'async'` + flag 二重ゲート、reprocess lease、chunks / masked object 更新。同期 upload 自体では Gemini table-assist を走らせない。production live smoke は [docs/table-assist-async-ingest-live-smoke-2026-06-18.md](docs/table-assist-async-ingest-live-smoke-2026-06-18.md)。
-- **Multi-file upload UI**: `/upload` の `UploadForm` がクライアント側キュー（最大 20 件、`UPLOAD_CONCURRENCY=1`）で複数ファイルを選択・逐次投入。サーバは従来どおり `POST /api/documents` を 1 ファイルずつ呼び、table-assist は同期 upload では走らない。10 files production live smoke は [docs/upload-multi-file-live-smoke-2026-06-18.md](docs/upload-multi-file-live-smoke-2026-06-18.md)。
-
-### コードの位置 (2026-06-18 時点)
-
-```
-src/
-  agents/
-    _shared/genkitClient.ts
-    curator/{schema,prompt,flow}.ts       # R5 確定 enum + 4段フォールバック
-    masker/{schema,prompt,flow}.ts        # A8 residualRisk + 3段フォールバック
-    masker/{maskingSchema,simpleMasker,cloudDlpMasker,provider,pipelineSchema,pipelineFlow,upgrade,maskKnowledgeChunk}.ts
-    strategist/{schema,prompt,flow}.ts    # chunk 選別 LLM（Vertex AI + Genkit）
-    strategist/safetyGate.ts             # 決定論的 PII フィルタ（LLM を呼ばない）
-  services/
-    candidateSelection/
-      selectCandidates.ts                # purpose → candidate docs facade（metadata-only）
-      ranking.ts / classify.ts           # deterministic score + include/exclude/needs_review
-      missingHints.ts / synonyms.ts
-    strategistOrchestrator/
-      orchestrator.ts                    # Firestore + safety gate + Strategist を繋ぐ service 層
-      toContextPackage.ts                # StrategistOrchestratorResult → ContextPackageExportInput + Markdown
-      types.ts                           # StrategistOrchestratorResult（API response の正本型）
-      index.ts
-  lib/
-    exportContextPackage.ts              # A9 Markdown export 純関数
-    storage.ts / firestore.ts / documents.ts
-    uploadOrchestrator/                  # GCS / Firestore / Curator / Masker の副作用順序（分割済み）
-    conversion/documentIrToKnowledgeChunk.ts  # DocumentIR → KnowledgeChunk 本線変換
-    importedSnapshotOrchestrator.ts      # Sheets / Docs import の副作用順序
-    inventory.ts / inventoryFirestoreAdapter.ts
-    contextPackageInput.ts / contextPackageFirestoreAdapter.ts
-    contextPackageJobs/
-      enqueuer.ts / runJob.ts            # async Context Package job enqueue / worker
-      firestoreAdapter.ts                # lease, cancel, stale recovery, terminal TTL
-      resultStorage.ts                   # large result GCS offload / cleanup
-    documentUploadResponseMapper.ts
-    knowledgeChunkSchema.ts / chunkFirestoreAdapter.ts / chunkRegenerator.ts
-    columnSensitivityRules.ts
-    googleSheetsSnapshotImporter.ts / googleDocsSnapshotImporter.ts / googleWorkspaceClient.ts
-    workspaceFreshness.ts / workspaceImport/types.ts
-    extractors/{csvExtractor,xlsxExtractor,plainTextExtractor,pdfDocumentExtractor,slidePdfDocumentExtractor,scanPdfDocumentExtractor,pdfExtractionDispatcher}.ts
-    extractors/officialDocPdfTableAssist/  # grounded Gemini table-assist（P1-E Step 1）
-    pdfTableAssistReprocessor.ts         # product reprocess path（POST .../table-assist）
-    featureFlags.ts                      # pdf-conversion-subtype-1/2/3 + pdf-table-assist gating
-    documentIrStorage.ts                 # GCS document-ir/v1.json（Phase 3-H-2）
-    firestoreSchema.ts / parseFirestoreDocumentData.ts
-    auth/
-      resolveTenantIdFromAuth.ts         # IAP email → tenantId/actor 解決（Phase 3-D）
-      verifyIapJwt.ts                    # x-goog-iap-jwt-assertion の JWT 検証（Phase 3-D）
-    audit/
-      auditEvent.ts                      # AuditEvent 型・recordAuditEvent() + document.convert（Phase 3-D/H-2/3）
-  eval/
-    conversion/                          # DocumentIR、ConversionEvalResult、health/heuristic/golden（Phase 3-H）
-      runConversionEvalHealthCheck.ts
-      runConversionEvalGoldenCheck.ts
-      heuristic/
-      golden/
-  middleware.ts                          # AUTH_MODE=iap で IAP JWT 検証 + auth header 注入
-  app/
-    api/
-      context-package/route.ts           # POST /api/context-package（同期 Purpose Query）
-      context-package/candidates/route.ts # POST /api/context-package/candidates（候補 API）
-      context-package/jobs/[jobId]/...   # async job status / result / run / cancel
-      context-package/jobs/sweep/route.ts # stale-running recovery sweeper
-      documents/route.ts                 # POST /api/documents（upload → auto-chunk、sync は tableAssistMode: disabled）
-      documents/[docId]/route.ts         # GET /api/documents/:docId
-      documents/[docId]/table-assist/route.ts  # POST opt-in table-assist reprocess（async context）
-      documents/[docId]/table-assist/run/route.ts  # Cloud Tasks worker（upload 後 async ingest）
-      import/google-sheets/route.ts      # POST /api/import/google-sheets（Sheets / Docs 振り分け）
-      import/google-sheets/service-account-email/route.ts
-      workspace/freshness/route.ts       # POST /api/workspace/freshness
-      curator/route.ts                   # eval/smoke 専用、UI 非使用
-    context-package/
-      ContextPackageForm.tsx             # Purpose → candidates → preview → Context Package
-      CandidateSelectionList.tsx / SafetyReviewPanel.tsx / PreGenerationPreviewPanel.tsx
-      candidateSelectionUi.ts / preGenerationPreview.ts
-      page.tsx
-    documents/[docId]/page.tsx
-    import/google-sheets/ImportForm.tsx / page.tsx
-    upload/UploadForm.tsx / uploadQueue.ts / CuratorResultCard.tsx / MaskerResultCard.tsx / page.tsx
-    page.tsx                             # Knowledge Inventory（Firestore 正本、失敗時 W1 fallback）
-    layout.tsx                           # ナビゲーション（アップロード / Sheets 取り込み / Context Package）
-  _components/ReimportButton.tsx
-scripts/
-  runCurator.ts / runCuratorAll.ts / runMaskerRisk.ts
-  runMaskerPipeline.ts / runDlpMaskerSmoke.ts / runContextPackageDemo.ts
-  runStrategist.ts                       # Strategist flow の手動 smoke
-  regenerateChunks.ts                    # documents/{docId}/chunks 全置換
-  backfillSourceKind.ts                  # schemaVersion 1 → 2 migration
-  generateInventorySnapshot.ts
-  scanMiniShaiHuludIocs.ts
-  runConversionEvalForCi.ts              # conversion-eval.yml 用
-  regenerateScanPdfGoldenSidecars.ts     # scan-pdf *.expected.json 再生成
-  verifyScanPdfUnmaskableFixture.ts      # unmaskable 合成 fixture 検証
-poc/document-conversion/                 # Phase 3-H PoC runners（本線とは flag で分離）
-.github/workflows/
-  deploy.yml                             # main push → Cloud Run
-  conversion-eval.yml                    # health (required) / heuristic / golden
-docs/
-  decisions.md                           # 意思決定ログ（D1〜D5 + Phase 別採用判断）
-  open-questions.md                      # 未決定事項・次フェーズ候補
-  phase-3-c-5-source-coverage.md         # Phase 3-C-5 source coverage 確認結果
-  phase-3-c-direction.md                 # Phase 3-C 認証・デプロイ方針
-  phase-3-d-direction.md                 # Phase 3-D CI/CD + IAP + AuditEvent 実装方針（完了）
-  phase-3-e-direction.md                 # Phase 3-E Processing Boundary（完了）
-  phase-3-h-direction.md                 # Phase 3-H Document Conversion PoC 方針
-  phase-3-h-2-direction.md               # Phase 3-H-2 official-doc-pdf 本線（完了）
-  phase-3-h-3-direction.md               # Phase 3-H-3 slide/scan-pdf 本線（完了 §8.3 M6）
-  phase-3-h-3-slide-pdf-live-smoke.md    # slide-pdf live smoke 証跡
-  phase-3-h-3-scan-pdf-live-smoke.md     # scan-pdf M6 live smoke 証跡
-  phase-3-h-3-scan-pdf-golden-baseline.md
-  phase-3-h-3-scan-pdf-poc-measurement.md
-  iap-evidence/                          # Phase 3-D 完了証跡（screenshot + verification.txt）
-    iap-settings-console.png / unauthenticated-login.png / authorized-api-200.png / authorized-ui.png
-    phase-3d-completion-verification.txt
-  architecture.md / tech-stack.md / concept.md / scope.md
-  firestore-schema.md / setup-gcp.md
-  demo-runbook.md / demo-scenario.md / hackathon.md
-  w1-artifacts/inventory.snapshot.json
-Dockerfile                               # multi-stage / pnpm / Node 22 / standalone（Phase 3-D）
-.dockerignore                            # Phase 3-D
-firestore.rules                          # auditEvents append-only 規則（Phase 3-D）
-sample-data/
-  accounting-office/                     # 原本 10 件
-  masked/                                # Masker A8 評価のマスク済み入力 2 件
-  document-conversion/                   # PDF conversion fixture（official / slide / scan）
+```text
+新人スタッフ向けに、月次の給与計算業務を安全に学べるAIを作りたい
 ```
 
-### pnpm scripts
+詳しい撮影順は [docs/demo-runbook.md](docs/demo-runbook.md) と [docs/demo-scenario.md](docs/demo-scenario.md) を参照してください。
+
+## 主要機能
+
+- **Multi-file upload**: PDF / CSV / XLSX / TXT / Markdown などをファイル単位で逐次処理
+- **Google Workspace import**: Google Sheets / Google Docs を Drive API 経由で取り込み
+- **Curator agent**: 文書種別、業務領域、鮮度、機密性、AI 利用可否を分類
+- **Masker agent**: 個人情報や再識別リスクを検出し、AI 参照版または除外へ振り分け
+- **Strategist agent**: 目的に対して必要な文書・不足情報・確認質問を整理
+- **Context Package export**: Markdown と NotebookLM 用 source bundle zip を生成
+- **Document conversion**: official PDF / slide PDF / scan PDF を DocumentIR に変換し、評価可能な chunk へ変換
+- **Quality gates**: extraction / masking / scan PDF drift を CI と eval で継続確認
+- **Cloud Run delivery**: GitHub Actions から Cloud Run にデプロイ
+
+## AI エージェント構成
+
+| Agent | 役割 |
+|---|---|
+| Curator | 文書を分類し、業務領域・鮮度・AI 利用可否を判断する |
+| Masker | 個人情報・顧客情報・再識別リスクを検出し、安全化または除外する |
+| Strategist | 目的に対して必要な情報、除外理由、不足情報、確認質問をまとめる |
+| Candidate selector | 目的から候補文書を metadata-only で事前選定し、生成前に人間が確認できる状態にする |
+
+## Google Cloud / DevOps 要件への対応
+
+| ハッカソン観点 | 本作品での対応 |
+|---|---|
+| つくる | Vertex AI / Gemini / Genkit を使い、Curator / Masker / Strategist が自律判断する |
+| まわす | GitHub Actions、Vitest、typecheck、conversion eval、P1-D quality gate で継続検証する |
+| とどける | Next.js app を Cloud Run にデプロイし、IAP / Firestore / GCS / Cloud Tasks と接続する |
+
+## アーキテクチャ
+
+```mermaid
+flowchart LR
+  U["User / SME operator"] --> UI["Next.js UI on Cloud Run"]
+  UI --> UP["Upload / Workspace Import"]
+  UP --> GCS["Cloud Storage raw / masked objects"]
+  UP --> FS["Firestore documents / chunks / jobs"]
+  UP --> C["Curator agent"]
+  C --> M["Masker agent"]
+  M --> CH["KnowledgeChunk generation"]
+  CH --> FS
+  UI --> CP["Context Package flow"]
+  CP --> S["Strategist agent"]
+  S --> OUT["Markdown / NotebookLM source bundle"]
+```
+
+詳細は [docs/architecture.md](docs/architecture.md) と [docs/tech-stack.md](docs/tech-stack.md) にあります。
+
+## セキュリティと安全性
+
+- 本番想定の標準 profile は `cloud-managed`
+- Cloud Run / Firestore / GCS の管理境界内で文書を処理
+- Cloud DLP または simple-rule provider で PII を検出
+- `requires_masking` の文書は raw text を Context Package に fallback しない
+- restricted / blocked / masking 未完了 chunk は Strategist に渡さない
+- public blank form / synthetic fixture のみを sample と eval に使用
+- 実顧客データ、credential、service account key、本番 export は repository に含めない
+
+## 技術スタック
+
+- Next.js / React / TypeScript
+- pnpm
+- Genkit
+- Vertex AI Gemini
+- Google Cloud Run
+- Cloud Firestore
+- Cloud Storage
+- Cloud Tasks
+- Cloud DLP
+- GitHub Actions
+- Vitest
+
+## ローカル起動
+
+Node.js 22 以上と pnpm が必要です。
+
+```bash
+pnpm install --frozen-lockfile
+cp .env.local.example .env.local
+pnpm dev
+```
+
+ブラウザで `http://localhost:3000/upload` を開きます。
+
+実 GCP / Vertex / Firestore / GCS を使う場合は `.env.local` に少なくとも次を設定します。
+
+```dotenv
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=global
+KNOWLEDGE_HUB_BUCKET=your-bucket-name
+KNOWLEDGE_HUB_DATA_RESIDENCY_LOCATION=asia-northeast1
+GEMINI_MODEL=gemini-3.5-flash
+SCAN_PDF_GEMINI_MODEL=gemini-3.1-flash-lite
+```
+
+詳しい GCP セットアップは [docs/setup-gcp.md](docs/setup-gcp.md) を参照してください。
+
+## よく使うコマンド
 
 | コマンド | 用途 |
 |---|---|
-| `pnpm dev` / `build` / `start` | Next.js |
-| `pnpm typecheck` | tsc --noEmit (src + scripts 全体) |
-| `pnpm test` / `test:watch` | Vitest unit |
-| `pnpm test:e2e:smoke` | GCP なしの安定 E2E（fake Firestore/GCS + stub LLM） |
-| `pnpm test:e2e:live` | 実 GCP/Vertex 用 E2E（デフォルト CI には含めない） |
-| `pnpm curator [path]` | Curator flow を 1 ファイルに対し実行 |
-| `pnpm curator:all [dir]` | sample-data 全件で smoke 実行 |
-| `pnpm masker:risk [path]` | A8 residualRisk 評価 |
-| `pnpm masker:pipeline [path]` | 原本 → SimpleMasker → A8 residualRisk → `ai_safe_ready` / `restricted_promoted` |
-| `pnpm masker:dlp:smoke [path]` | Cloud DLP provider 単体の疎通確認 |
-| `pnpm strategist` | Strategist flow の手動 smoke（`scripts/runStrategist.ts`） |
-| `pnpm backfill:source-kind --dry-run` | `schemaVersion=1` document の対象件数と先頭 5 件 docId を表示（Firestore 書き込みなし） |
-| `pnpm backfill:source-kind --confirm` | `schemaVersion=1` document を 500 件単位で schemaVersion 2 に更新 |
-| `pnpm chunks:regenerate <docId>` | CSV / `.xlsx` / `.txt` / `.md` の GCS raw object から `documents/{docId}/chunks` を全置換。`--dry-run` で件数のみ確認。`--provider=simple-rule\|cloud-dlp` で masking provider を固定可能 |
-| `pnpm inventory:snapshot` | 実 LLM 出力で `docs/w1-artifacts/inventory.snapshot.json` を再生成 |
-| `pnpm context:demo` | Context Package demo の統一エントリ。デフォルトは live、`--w1` で fixture |
-| `pnpm context:demo:live` | Firestore documents + chunks から Context Package Markdown を出力 |
-| `pnpm context:demo:w1` | W1 snapshot fixture から Context Package Markdown を出力（offline） |
-| `pnpm curator:ui` | Genkit dev UI で flow を観察 |
-| `pnpm security:audit` | 依存パッケージの脆弱性監査 |
-| `pnpm poc:conversion:official-doc-pdf [path]` | official-doc-pdf PoC runner |
-| `pnpm poc:conversion:official-doc-pdf:compare [path]` | official-doc-pdf converter compare harness（`pdf-parse` / MarkItDown / Gemini / grounded `pdf-parse+gemini-tables`、eval-only）。Gemini arms は既定 skip、`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1` で fixture 配下のみ明示 opt-in |
-| `pnpm poc:conversion:slide-pdf [path]` | slide-pdf PoC runner（本線とは別） |
-| `pnpm poc:conversion:scan-pdf [path]` | scan-pdf PoC runner（本線とは別） |
-| `pnpm fixtures:scan-pdf:unmaskable:verify` | `synthetic-unmaskable-pii-scan.pdf` の本線 verifier 確認 |
-| `pnpm fixtures:scan-pdf:ocr-fail-closed` | ≤5 MiB OCR fail-closed 専用 fixture 生成 |
-| `pnpm fixtures:scan-pdf:invoice` | 合成請求書 scan fixture 生成 |
-| `pnpm eval:p1d:quality` | P1-D stable quality gate（`--ci` で deterministic zero checks） |
-| `pnpm eval:p1d:masker-drift` | P1-D live Cloud DLP masker drift check |
-| `pnpm eval:p1d:mixed-pdf` | large mixed PDF の local-only table/text 症状チェック |
-| `pnpm eval:scan-pdf:ocr-live-drift` | scan-pdf OCR prompt/model の live drift + PII direction check |
+| `pnpm dev` | 開発サーバー起動 |
+| `pnpm build` | production build |
+| `pnpm test` | unit test |
+| `pnpm typecheck` | TypeScript typecheck |
+| `pnpm eval:p1d:quality --ci` | extraction / masking stable quality gate |
+| `pnpm eval:scan-pdf:ocr-live-drift --ci` | scan PDF OCR live drift check |
+| `pnpm context:demo:live` | Firestore / GCS の実データから Context Package を生成 |
+| `pnpm chunks:regenerate <docId>` | raw object から chunks を再生成 |
+| `pnpm tsx scripts/oneoff/backfillSourceKind.ts --dry-run` | schemaVersion 1 document の backfill dry-run |
 
-### schemaVersion 1 → 2 backfill 実行手順
+## 検証状況
 
-1. dry-run（書き込みなし）
+PR #55 merge 時点で以下を確認済みです。
 
-   ```
-   pnpm backfill:source-kind --dry-run
-   ```
+- GitHub Actions: Test / Typecheck / Build green
+- Conversion eval required checks green
+- `pnpm eval:p1d:quality --ci` pass
+- scan-pdf refresh safety guard + deterministic adapter fallback を追加
+- MHLW / NTA / synthetic invoice の stable report-only metrics は all 1.0
+- production live smoke:
+  - table-assist async ingest
+  - multi-file upload queue
 
-2. dry-run の `targetCount` / `previewDocIds` を確認
-3. confirm 実行（500 件単位で更新）
+## 主要ディレクトリ
 
-   ```
-   pnpm backfill:source-kind --confirm
-   ```
-
-4. 完了ログの `failedDocIds` を確認（失敗があっても処理は継続）
-
-### HTTP API
-
-| エンドポイント | 用途 |
+| パス | 内容 |
 |---|---|
-| `POST /api/documents` | 1 ファイルずつアップロード（UI の multi-file queue も 1 リクエスト = 1 ファイル）。multipart 検証 → `uploadOrchestrator`（GCS / Firestore / Curator / Masker）→ chunk 自動生成。同期経路は `tableAssistMode: 'disabled'`。 |
-| `GET /api/documents/:docId` | Inventory document の詳細取得。 |
-| `POST /api/documents/:docId/table-assist` | official-doc-pdf の opt-in table-assist 再処理。`pdf-table-assist` flag ON **かつ** `tableAssistMode: 'async'` で dispatcher augment → Masker 前段 merge → chunks 更新。同期 upload では使わない。 |
-| `POST /api/documents/:docId/table-assist/run` | Cloud Tasks worker。official-doc-pdf upload 後に best-effort enqueue され、既存 reprocess service を worker context で実行する。tenant / actor は task body、認証は OIDC + `PDF_TABLE_ASSIST_WORKER_TOKEN`（未設定時は Context Package token fallback）。 |
-| `POST /api/context-package` | Purpose Query API。`{ purpose, limit? }` を受け、Strategist が chunk を選別し Context Package + Markdown を同期で返す。 |
-| `POST /api/import/google-sheets` | Google Sheets / Google Docs の URL または fileId を受け、Drive export → Phase 2 パイプラインへ。Docs URL（`docs.google.com/document/d/`）は Docs importer に自動振り分け。 |
-| `GET /api/import/google-sheets/service-account-email` | Sheets / Docs の共有先として必要な service account email を返す。 |
-| `POST /api/workspace/freshness` | Workspace document の再取り込みトリガー。 |
-| `POST /api/curator` | **UI 非使用。** Curator 単体の curl / eval / smoke 専用。 |
+| `src/app/` | Next.js pages / API routes |
+| `src/agents/` | Curator / Masker / Strategist flows |
+| `src/lib/` | upload, extractors, storage, Firestore, masking, chunk generation |
+| `src/services/` | Context Package orchestration and candidate selection |
+| `src/eval/` | conversion eval / quality gates |
+| `sample-data/` | synthetic / public / masked fixtures |
+| `docs/` | design docs, runbooks, evidence |
+| `poc/document-conversion/` | document conversion PoC runners |
 
-### セキュリティ境界の現状 (2026-06-16 時点)
-
-- **Cloud IAP**: Cloud Run を直接 IAP で保護。`allow-unauthenticated` 不使用。匿名アクセスは IAP が 302/401 で遮断。
-- **IAP JWT 検証**: `src/lib/auth/verifyIapJwt.ts` が `x-goog-iap-jwt-assertion` を Google public keys で検証。検証通過後のみ `x-goog-authenticated-user-email` を信頼する。
-- **tenantId / actor 解決**: `src/lib/auth/resolveTenantIdFromAuth.ts` が IAP email の domain から tenantId を生成。`KNOWLEDGE_HUB_TENANT_ID` override 可。
-- **AuditEvent**: `document.import` / `document.reimport` / `document.export` / `document.convert` を `auditEvents/{eventId}` に append-only で記録。PDF 変換（subtype 2/3）では Vertex 成功時に `inferenceDestination` 必須。scan-pdf では `unmaskablePiiFindings.count` を記録。Firestore Security Rules で update/delete を拒否。
-- **PDF conversion feature flags**: `pdf-conversion-subtype-1/2/3` は Firestore `feature_flags` の allow-list + `expiresAt` で gating。同一 tenant で複数 subtype flag の同時 ON は 403。subtype 3 は **`m-grow-ai.com` のみ**（公開拡大は M6 後の別 decision）。
-- **scan-pdf fail-closed**: Gemini OCR timeout / quota / schema 失敗は pre-flight で HTTP 400。`document` / `chunk` / `document.convert` AuditEvent は作らない。本線 upload 上限は **5 MiB**（PoC runner の 30 MiB とは別）。
-- **official-doc-pdf Gemini table-assist の二重ゲート**: 同期 upload（`POST /api/documents`）は `tableAssistMode: 'disabled'` を明示し、tenant flag が ON でも table-assist を発火しない。gated 実行は `pdf-table-assist` flag（default off）**かつ** `tableAssistMode: 'async'` のコンテキストのみ（`POST /api/documents/:docId/table-assist` reprocess、Cloud Tasks worker `.../run`、mainline harness）。augment は Masker 前段で fail-soft。stable P1-D gate は live Gemini に依存させない。compare harness の Gemini arms は **eval-only**（既定 skip、`OFFICIAL_DOC_PDF_GEMINI_ENABLE=1` 明示 opt-in、fixture 配下のみ）。grounding 済み table rows のみ merge する。
-- **Safety gate**: Strategist へ渡す前に決定論的ルールで chunk を除外（Restricted / blocked / masking 未完了 / クロス顧客機密）。LLM に依存しない。
-- **Masking defense-in-depth**: `requires_masking` chunk に `maskedText` がない場合、`toContextPackage` は raw text を fallback で出さず throw する。
-- **Cloud DLP**: Masker provider として導入済み。現在の固定値は `minLikelihood=POSSIBLE`、replacement token は `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-06-12-v1`。P1-D で synthetic masked name / My Number-like value 用の custom infoTypes を追加済み。未指定は `simple-rule` fallback、`MASKER_PROVIDER=cloud-dlp` で明示。
-- **Malformed document**: `listInventoryDocumentsFromFirestore` は parse エラーの document を skip-and-warn し、全体を落とさない。
-- **Sheets / Docs 共有**: Google Workspace import の対象は、UI に表示される service account email への reader 共有が必要。
-- **データ保管**: GCS `asia-northeast1`、raw object は `raw/{docId}/`、masked object は `masked/{docId}/`。chunk 本文（`maskedText` 含む）は Firestore subcollection に inline 保存。
-
-### Phase 3-E の説明ポイント
-
-- **標準 profile は `cloud-managed`**: 通常デモでは、文書を管理された Cloud Run / GCS / Firestore 境界に受け入れて処理する。SMEがすぐ使える標準運用として説明する。
-- **Cloud DLP + Masker で安全化**: 個人名・住所・電話番号などは Cloud DLP で検出し、さらに Masker が「マスク後も特定できそうか」を確認する。安全に変換できるものは AI 参照版へ、危ないものは Context Package 本文から外す。
-- **Context Package に目的が残る**: export は単なる文書束ではなく、「新人スタッフ向け給与計算AIを作る」などの purpose に対して、採用・除外・確認質問をまとめる。後から「この目的なら、この情報をAIに渡してよい」と説明できる。
-- **NotebookLM / Gemini / RAG の前段**: 生成AI本体を作るのではなく、投入前の情報整理と安全確認を担当する。下流AIには、マスク済み本文・除外理由・不足情報が揃った Context Package を渡す。
-- **purpose 起点の候補選択**: Phase 4-UX では docId 手入力を主導線から外し、目的から候補・除外・要確認・足りない情報を先に見せる。候補段階は metadata-only で、実際に本文を AI に渡すかは既存生成経路の safety gate が最終判定する。
-- **`cloud-sanitized-ingress` は将来 profile**: 生データを当社クラウド境界に入れたくない高セキュリティ顧客向けに、顧客側でサニタイズ済み payload だけを送る構成を予約している。Phase 3-E では短く触れるだけで、デモの主役にはしない。
-
-### Phase 3-E 完了確認 (2026-05-18)
-
-- docs / 型 / AuditEvent / Cloud DLP provider の用語と preset 値が一致: `cloud-managed = tenant-cloud / post-ingress / shared-cloud`、`cloud-sanitized-ingress = tenant-edge / pre-ingress / shared-cloud`。
-- Cloud DLP 固定値が一致: Phase 3-E 初期値は `ruleSetVersion=dlp-ruleset-2026-05-15-v1`。P1-D 成熟化後の現在値は `minLikelihood=POSSIBLE`、replacement token `[REDACTED:<INFO_TYPE>]`、`ruleSetVersion=dlp-ruleset-2026-06-12-v1`。
-- `local-only` / ブラウザ WASM DLP / strict local only は MVP 不採用またはスコープ外としてのみ記述。
-- Cloud DLP live smoke 済み: `顧問契約書_実案件サンプル.txt` で 25 spans（`PERSON_NAME` / `STREET_ADDRESS` / `LOCATION` / `PHONE_NUMBER` / `JAPAN_BANK_ACCOUNT`）を検出。
-- `pnpm test` / `pnpm typecheck` / `pnpm build` 通過。
-
-### 次にやること
-
-直近の作業順は [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) を正とする。背景となる未決論点・Ingest 起票の詳細は [docs/open-questions.md](docs/open-questions.md)（次フェーズ表 + §Ingest 拡張）。
-
-- **P1-E+ scan-pdf quality floor 解消**: accepted live drift floor（`majorDriftCount=3`）を下げる。PII direction は green。sidecar 意図的 regeneration、public blank-form recall 改善、full live `--ci` gate 再評価。正本は [docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md](docs/scan-pdf-ocr-live-drift-evidence-2026-06-13.md)。
-- **table-assist hardening（後続）**: PR #53 で async ingest worker は完了（`D-P1-E-TA-2`）。残りは [#51](https://github.com/matz-d/ai-ready-knowledge-hub/issues/51) enqueue audit、[#52](https://github.com/matz-d/ai-ready-knowledge-hub/issues/52) cost guard、Document detail UI ボタン。
-- **P2 提出補強**: Phase 3-F デモ polish（source bundle 前提・Dashboard refresh 後 UI・multi-file upload 導線）は完了。enqueue 二重 submit / 簡易 SLO も完了（`operate-deliver-readiness.md` §E）。
-- **P3 cleanup / Ingest 判断**: 不要 CSS 削除、Drive folder bulk / local directory batch / standalone images の product 判断。
-
----
-
-## ドキュメント
+## 提出用ドキュメント
 
 | ファイル | 内容 |
 |---|---|
-| [docs/concept.md](docs/concept.md) | プロダクトコンセプト、提供価値、物語の核 |
-| [docs/scope.md](docs/scope.md) | MVPでやること・やらないこと |
-| [docs/decisions.md](docs/decisions.md) | 意思決定ログ（D1〜D5 + 各 Phase の採用判断・CodeRabbit 対応記録） |
-| [docs/open-questions.md](docs/open-questions.md) | 未決定事項と次フェーズ候補 |
-| [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) | Phase 4-UX / delivery E2E 後の直近優先順位と作業順 |
-| [docs/architecture.md](docs/architecture.md) | システム構成、4エージェント、データフロー |
-| [docs/firestore-schema.md](docs/firestore-schema.md) | Firestore document shape の正本 |
-| [docs/phase-3-c-direction.md](docs/phase-3-c-direction.md) | Phase 3-C 認証・デプロイ方針（Cloud IAP / GitHub Actions / BYOC 戦略） |
-| [docs/phase-3-d-direction.md](docs/phase-3-d-direction.md) | Phase 3-D CI/CD + IAP + AuditEvent 実装方針（**完了**） |
-| [docs/phase-3-e-direction.md](docs/phase-3-e-direction.md) | Phase 3-E Processing Boundary + Cloud DLP Trust Modes 実装方針（**完了**） |
-| [docs/phase-3-h-direction.md](docs/phase-3-h-direction.md) | Phase 3-H Document Conversion PoC 方針 |
-| [docs/phase-3-h-2-direction.md](docs/phase-3-h-2-direction.md) | Phase 3-H-2 official-doc-pdf 本線統合（**完了**） |
-| [docs/phase-3-h-3-direction.md](docs/phase-3-h-3-direction.md) | Phase 3-H-3 slide-pdf / scan-pdf 本線統合（**完了** §8.3 M6） |
-| [docs/phase-3-h-3-scan-pdf-live-smoke.md](docs/phase-3-h-3-scan-pdf-live-smoke.md) | scan-pdf M6 dev tenant live smoke 証跡 |
-| [docs/p1-e-large-file-pre-splitting.md](docs/p1-e-large-file-pre-splitting.md) | P1-E large-file / table fallback / locator enrichment、table-assist D 戦略・二重ゲート |
-| [docs/official-doc-table-assist-mainline-harness-2026-06-16.md](docs/official-doc-table-assist-mainline-harness-2026-06-16.md) | table-assist mainline harness 証跡（merge / fail-soft） |
-| [docs/table-assist-async-ingest-live-smoke-2026-06-18.md](docs/table-assist-async-ingest-live-smoke-2026-06-18.md) | table-assist async ingest production live smoke |
-| [docs/upload-multi-file-live-smoke-2026-06-18.md](docs/upload-multi-file-live-smoke-2026-06-18.md) | `/upload` multi-file queue production live smoke |
-| [poc/document-conversion/README.md](poc/document-conversion/README.md) | Document Conversion PoC runner 一覧 |
-| [poc/document-conversion/official-doc-pdf/compare/README.md](poc/document-conversion/official-doc-pdf/compare/README.md) | official-doc-pdf converter compare harness と table-assist golden check |
-| [sample-data/document-conversion/README.md](sample-data/document-conversion/README.md) | conversion fixture inventory 正本 |
-| [docs/offering-model.md](docs/offering-model.md) | Managed SaaS / Dedicated / Customer-managed / Sanitized ingress の提供形態 |
-| [docs/iap-evidence/](docs/iap-evidence/) | Phase 3-D 完了証跡（screenshot + verification.txt） |
-| [docs/phase-3-c-5-source-coverage.md](docs/phase-3-c-5-source-coverage.md) | Phase 3-C-5 source coverage 確認結果（全 source 確認済み） |
-| [docs/phase-3-b-workspace-resync.md](docs/phase-3-b-workspace-resync.md) | Phase 3-B 正本（Workspace resync・schemaVersion 2・鮮度バッジ） |
-| [docs/phase-2-design.md](docs/phase-2-design.md) | KnowledgeChunk / CSV・xlsx extractor / chunk-aware Context Package の設計正本 |
-| [docs/phase-2-live-smoke.md](docs/phase-2-live-smoke.md) | Phase 2 live smoke の実行証跡 |
-| [docs/tech-stack.md](docs/tech-stack.md) | 技術選定と理由・トレードオフ |
-| [docs/demo-runbook.md](docs/demo-runbook.md) | Upload → Firestore/GCS → Inventory → Context Package の live demo 実行手順 |
-| [docs/demo-scenario.md](docs/demo-scenario.md) | 3分デモのストーリーボード |
-| [docs/hackathon.md](docs/hackathon.md) | ハッカソン要件、スケジュール、審査基準 |
-| [docs/setup-gcp.md](docs/setup-gcp.md) | GCPセットアップ固定値と認証/検証手順 |
-
----
-
-## 次に再開するとき、最初に読むべきもの
-
-1. このREADMEの「現在のステータス」
-2. [docs/next-actions-2026-06-10.md](docs/next-actions-2026-06-10.md) — 直近の実装・検証順
-3. [docs/open-questions.md](docs/open-questions.md) — 背景となる次フェーズ候補（Ingest 拡張など）
-4. [docs/phase-3-h-3-direction.md](docs/phase-3-h-3-direction.md) §8.3 — scan-pdf M6 DoD（完了済み）
-5. [docs/decisions.md](docs/decisions.md) — `D-P3-H-6` / `D-P3-H-7`（H-3 採用判断）
-6. Cloud Run URL: `https://ai-ready-knowledge-hub-mrvutsz24a-an.a.run.app`（IAP 保護済み、許可ユーザのみアクセス可）
-
----
-
-## ライセンス
-
-Apache License 2.0 (予定)
+| [docs/concept.md](docs/concept.md) | コンセプトと提供価値 |
+| [docs/scope.md](docs/scope.md) | MVP のスコープ |
+| [docs/architecture.md](docs/architecture.md) | システム構成 |
+| [docs/tech-stack.md](docs/tech-stack.md) | 技術選定 |
+| [docs/demo-runbook.md](docs/demo-runbook.md) | デモ実行手順 |
+| [docs/demo-scenario.md](docs/demo-scenario.md) | 3分動画のストーリーボード |
+| [docs/operate-deliver-readiness.md](docs/operate-deliver-readiness.md) | 運用・提出 readiness |
+| [docs/production-readiness.md](docs/production-readiness.md) | 本番 readiness |
+| [docs/decisions.md](docs/decisions.md) | 採用判断ログ |

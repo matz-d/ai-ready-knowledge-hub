@@ -661,7 +661,7 @@ sample-data/
 
 ## Phase 3-A: Google Sheets Snapshot Import（D-P3-A-1〜D-P3-A-10）
 
-**要約**: Drive `files.export` で `.xlsx` スナップショットを取り Phase 2 パイプラインへ載せる方式、`sourceKind` / `externalSource` と defaulting、SA 共有前提、`gid` 無視の全シート import、重複許容、orchestrator 分割、`src/` 本線、Drive export fixture、原本名 / document 名 / 保存パス / AI 処理名の責務分離など、Phase 3-A の採用判断 **D-P3-A-1** から **D-P3-A-10** までの本文・代替案・撤退条件は [docs/phase-3-google-sheets-import.md](phase-3-google-sheets-import.md) の **「2. 採用判断ログ（Phase 3-A の合意）」** に正本として記録している。
+**要約**: Drive `files.export` で `.xlsx` スナップショットを取り Phase 2 パイプラインへ載せる方式、`sourceKind` / `externalSource` と defaulting、SA 共有前提、`gid` 無視の全シート import、重複許容、orchestrator 分割、`src/` 本線、Drive export fixture、原本名 / document 名 / 保存パス / AI 処理名の責務分離など、Phase 3-A の採用判断 **D-P3-A-1** から **D-P3-A-10** までの本文・代替案・撤退条件は [docs/phase-3-google-sheets-import.md](archive/phase-3-google-sheets-import.md) の **「2. 採用判断ログ（Phase 3-A の合意）」** に正本として記録している。
 
 ---
 
@@ -669,7 +669,7 @@ sample-data/
 
 ## Phase 3-C 事前方針: 認証・デプロイ・配布形態（2026-05-13）
 
-**決定**: Phase 3-C の設計方針として以下を確定した。詳細は [docs/phase-3-c-direction.md](phase-3-c-direction.md) に正本として記録。
+**決定**: Phase 3-C の設計方針として以下を確定した。詳細は [docs/phase-3-c-direction.md](archive/phase-3-c-direction.md) に正本として記録。
 
 **アプリ認証**: Cloud IAP + Google Workspace SSO を第一選択。`x-goog-authenticated-user-email` を監査ログのキーとして一気通貫させる。
 
@@ -739,7 +739,7 @@ sample-data/
 
 ## D-P3-D: Phase 3-D CI/CD + IAP 完了（2026-05-14）
 
-**決定・完了**: Phase 3-D は「commit push → test/typecheck/build → Artifact Registry push → Cloud Run deploy → Cloud IAP で社内ユーザだけが利用」のパイプラインを構築し、**DoD 全 15 項目を達成した**。実装正本は [docs/phase-3-d-direction.md](phase-3-d-direction.md)。証跡は [docs/iap-evidence/](iap-evidence/)。
+**決定・完了**: Phase 3-D は「commit push → test/typecheck/build → Artifact Registry push → Cloud Run deploy → Cloud IAP で社内ユーザだけが利用」のパイプラインを構築し、**DoD 全 15 項目を達成した**。実装正本は [docs/phase-3-d-direction.md](archive/phase-3-d-direction.md)。証跡は [docs/iap-evidence/](archive/iap-evidence/)。
 
 **完了事実（commit a57713e / 2026-05-14）:**
 - GitHub Actions run `25845188187` green（ci + deploy）
@@ -830,7 +830,7 @@ sample-data/
 
 ## D-P3-E: Phase 3-E Processing Boundary + Cloud DLP Trust Modes 方針（2026-05-15）
 
-**決定**: Phase 3-E は `cloud-managed` を MVP の標準 ProcessingProfile として磨く。`cloud-sanitized-ingress` は高セキュリティ顧客向けの将来 profile として契約・スキーマ・監査仕様だけ先に定義し、Edge Sanitizer の実装は後続へ送る。正本は [docs/phase-3-e-direction.md](phase-3-e-direction.md)。
+**決定**: Phase 3-E は `cloud-managed` を MVP の標準 ProcessingProfile として磨く。`cloud-sanitized-ingress` は高セキュリティ顧客向けの将来 profile として契約・スキーマ・監査仕様だけ先に定義し、Edge Sanitizer の実装は後続へ送る。正本は [docs/phase-3-e-direction.md](archive/phase-3-e-direction.md)。
 
 ### Q1: 標準 ProcessingProfile
 
@@ -945,7 +945,7 @@ sample-data/
 
 ## D-P3-H: Phase 3-H 前倒しと提供形態の整理（2026-05-18）
 
-**決定**: Phase 3-E 完了後、Phase 3-F のデモ polish よりも Phase 3-H Document Conversion PoC を先に進める。正本は [docs/phase-3-h-direction.md](phase-3-h-direction.md)。また、将来の提供形態を [docs/offering-model.md](offering-model.md) に文書化する。
+**決定**: Phase 3-E 完了後、Phase 3-F のデモ polish よりも Phase 3-H Document Conversion PoC を先に進める。正本は [docs/phase-3-h-direction.md](archive/phase-3-h-direction.md)。また、将来の提供形態を [docs/offering-model.md](offering-model.md) に文書化する。
 
 ### Q1: 次フェーズの優先順位
 
@@ -978,7 +978,7 @@ sample-data/
 
 ## D-P3-H-2: Phase 3-H 組織軸を subtype 起点へ組み直し（2026-05-18）
 
-**決定**: Phase 3-H の PoC 組織軸を「変換器の並列比較」から「source subtype 起点」に組み直す。正本は [docs/phase-3-h-direction.md](phase-3-h-direction.md) v2（§2.5・§3・§4）。
+**決定**: Phase 3-H の PoC 組織軸を「変換器の並列比較」から「source subtype 起点」に組み直す。正本は [docs/phase-3-h-direction.md](archive/phase-3-h-direction.md) v2（§2.5・§3・§4）。
 
 **前提**: D-P3-H で Phase 3-H 着手は確定済み。本決定はその **内部構造** の方針確定。
 
@@ -1136,7 +1136,7 @@ subtype 1 の比較で `pdf-parse` の表抽出品質が `ConversionEvalResult.c
 
 ## D-P3-H-4: Phase 3-H-2 M1 初期判断（2026-05-19）
 
-**決定**: `D-P3-H-3` で「subtype 1 を feature flag 付きで薄く本線統合する」高レベル方針が確定したのを受け、Phase 3-H-2 M1（実装着手段階）で必要な具体判断を本エントリで固定する。正本実装方針は [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md)。
+**決定**: `D-P3-H-3` で「subtype 1 を feature flag 付きで薄く本線統合する」高レベル方針が確定したのを受け、Phase 3-H-2 M1（実装着手段階）で必要な具体判断を本エントリで固定する。正本実装方針は [docs/phase-3-h-2-direction.md](archive/phase-3-h-2-direction.md)。
 
 **位置づけ:**
 - `D-P3-H-3` の「未決事項（継続）」のうち、**feature flag 粒度 / `uploadOrchestrator` 接続手順 / `requires_masking` PDF の扱い** を埋める。
@@ -1235,7 +1235,7 @@ type FeatureFlag = {
 
 **理由:**
 - Masker 本線統合（Phase 3-H-2 後半 or Phase 3-H-3）まで PII 入り fixture は本線で chunk 化できない。
-- `safety_readiness` の本格評価は Masker 統合後に始まる。M3 の heuristic eval パスで DLP を呼ぶ設計（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §6）はその橋渡し。
+- `safety_readiness` の本格評価は Masker 統合後に始まる。M3 の heuristic eval パスで DLP を呼ぶ設計（[docs/phase-3-h-2-direction.md](archive/phase-3-h-2-direction.md) §6）はその橋渡し。
 - PoC compare runner は引き続き PII 入り fixture を観測し続ける。
 
 ### 影響範囲
@@ -1290,7 +1290,7 @@ type FeatureFlag = {
 
 **Phase 3-H-2 完了時の最終確認（2026-05-20）:**
 - IAP 実機（revision `ai-ready-knowledge-hub-00018-xws`）で `mhlw-labor-conditions-notice-general.pdf` → `direct` + chunk 化、`synthetic-employment-context-with-pii.pdf` → `requires_masking` + `maskingPending: true`（chunk なし）を確認。
-- Heuristic CI は `rollupOverallStatus` の axis status と整合（M3-Fix）。golden 初回 recall は低いが blocker ではない（§7.4、[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) Completion Snapshot）。
+- Heuristic CI は `rollupOverallStatus` の axis status と整合（M3-Fix）。golden 初回 recall は低いが blocker ではない（§7.4、[docs/phase-3-h-2-direction.md](archive/phase-3-h-2-direction.md) Completion Snapshot）。
 
 ---
 
@@ -1312,7 +1312,7 @@ type FeatureFlag = {
 
 **理由:**
 - ジョブを workflow に追加するだけでは「必須 gate」にならない。ruleset / branch protection で check 名を明示しないと、H-3 着手時に regress を止められない。
-- heuristic は観測・警告用途、golden は人間レビュー用途のため、M5 必須条件から外す（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §8.2 と整合）。
+- heuristic は観測・警告用途、golden は人間レビュー用途のため、M5 必須条件から外す（[docs/phase-3-h-2-direction.md](archive/phase-3-h-2-direction.md) §8.2 と整合）。
 
 **やらない判断:**
 - `deploy.yml` の deploy ジョブを conversion-eval health の必須依存にしない（eval とデプロイの失敗モードを分離）。
@@ -1322,7 +1322,7 @@ type FeatureFlag = {
 
 ## D-P3-H-6: Phase 3-H-3 着手方針（2026-05-20、確定）
 
-**ステータス**: 確定（2026-05-20）。Q2 / Q5 の未決が解消し、着手ゲート 3 を含む全項目が確定。[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) を実装着手時の入口とする。番号 `D-P3-H-3` は Phase 3-H-2 着手時の subtype 1 高レベル方針であり、本エントリが **フェーズ名 Phase 3-H-3（subtype 2/3）** の判断用である。
+**ステータス**: 確定（2026-05-20）。Q2 / Q5 の未決が解消し、着手ゲート 3 を含む全項目が確定。[docs/phase-3-h-3-direction.md](archive/phase-3-h-3-direction.md) を実装着手時の入口とする。番号 `D-P3-H-3` は Phase 3-H-2 着手時の subtype 1 高レベル方針であり、本エントリが **フェーズ名 Phase 3-H-3（subtype 2/3）** の判断用である。
 
 **決定**: `slide-pdf`（subtype 2）と `scan-pdf`（subtype 3）を、subtype 1 と同型の薄い本線統合（feature flag + Curator まで + `direct` のみ chunk 化）で順次載せる。Vertex AI Gemini 呼出時のみ AuditEvent `document.convert` に `inferenceDestination` を記録する。slide-pdf 本線は **pdf-parse fallback を持たず fail-closed**（Q2）、Masker 本線統合は **H-3 外**（Q5）。
 
@@ -1331,7 +1331,7 @@ type FeatureFlag = {
 **決定**: **subtype 2 → subtype 3** の順で統合する。scan-pdf（subtype 3）は subtype 2 と同時に実装しない。subtype 2 の M1〜M5（extractor 本線昇格、観測、heuristic、golden、CI health gate）と live smoke 証跡が揃ったあと、別フェーズとして昇格する。
 
 **理由:**
-- [docs/phase-3-h-direction.md](phase-3-h-direction.md) の Priority 2 / 3 と一致する。
+- [docs/phase-3-h-direction.md](archive/phase-3-h-direction.md) の Priority 2 / 3 と一致する。
 - slide-pdf は OCR ではなく PDF media 直読みで、scan-pdf より PII / `unmaskablePiiFindings` の safety 評価を分離しやすい。
 - scan-pdf は OCR 専用・`unmaskablePiiFindings` の意味が強く、subtype 2 の観測データと eval 基盤が揃ってから入る方が安全。
 - scan-pdf は PII が OCR で抽出できない/誤読される場合の安全評価が中心になるため、subtype 2 の `direct` deck 観測と同じ PR に混ぜると失敗原因が切り分けにくい。
@@ -1364,7 +1364,7 @@ type FeatureFlag = {
 
 ### Q2b: scan-pdf 昇格差分（subtype 2 M1〜M5 完了後）
 
-**決定**: scan-pdf の Gemini OCR extractor 昇格は、subtype 2 の M1〜M5 完了後に別フェーズで実施する。実装差分は [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §7 を正とする。
+**決定**: scan-pdf の Gemini OCR extractor 昇格は、subtype 2 の M1〜M5 完了後に別フェーズで実施する。実装差分は [docs/phase-3-h-3-direction.md](archive/phase-3-h-3-direction.md) §7 を正とする。
 
 **必要差分:**
 - 新規 extractor: `src/lib/extractors/scanPdfDocumentExtractor.ts`
@@ -1390,7 +1390,7 @@ type FeatureFlag = {
 
 ### Q4: AuditEvent `inferenceDestination`
 
-**決定（ドラフト）**: [docs/phase-3-e-direction.md](phase-3-e-direction.md) §6.1 `ProcessingRecord.inferenceDestination` と同形の `AuditInferenceDestination` を、`document.convert` で **Vertex Gemini を実際に呼んだ成功パス**にだけ付与する。`pdf-parse` / `pdf-parse-fallback` のみの変換では付与しない。
+**決定（ドラフト）**: [docs/phase-3-e-direction.md](archive/phase-3-e-direction.md) §6.1 `ProcessingRecord.inferenceDestination` と同形の `AuditInferenceDestination` を、`document.convert` で **Vertex Gemini を実際に呼んだ成功パス**にだけ付与する。`pdf-parse` / `pdf-parse-fallback` のみの変換では付与しない。
 
 **接続点:**
 - 型の正本: [src/lib/audit/auditEvent.ts](../src/lib/audit/auditEvent.ts)
@@ -1415,7 +1415,7 @@ type FeatureFlag = {
 
 Phase 3-H-3 の **実装**に入る前に次を満たす:
 
-1. ~~Phase 3-H-2 DoD（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §12）完了~~ — **達成（2026-05-20）**
+1. ~~Phase 3-H-2 DoD（[docs/phase-3-h-2-direction.md](archive/phase-3-h-2-direction.md) §12）完了~~ — **達成（2026-05-20）**
 2. ~~subtype 1 の health CI gate + 観測ループ（`conversion_eval` / `document.convert`）が本線で稼働~~ — **達成（2026-05-20、`D-P3-H-5b`）**
 3. ~~`D-P3-H-6` の Q2（slide fallback 方針）と Q5（Masker タイミング）のいずれかが確定~~ — **両方確定（2026-05-20）**: Q2 は本線 fallback なし（fail-closed）、Q5 は H-3 スコープ外（別フェーズ）
 
@@ -1423,13 +1423,13 @@ Phase 3-H-3 の **実装**に入る前に次を満たす:
 
 - 新規: `src/lib/extractors/slidePdf*.ts`、`scanPdf*.ts`（名称は実装時確定）
 - 修正: `uploadOrchestrator.ts`、`featureFlags.ts` flagId union、`auditEvent.ts` 書き込み、`firestore.rules`（新 flag 読取）
-- docs: [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md)、open-questions
+- docs: [docs/phase-3-h-3-direction.md](archive/phase-3-h-3-direction.md)、open-questions
 
 ---
 
 ## D-P3-H-7: Phase 3-H-3 subtype 3（scan-pdf）M6 実装方針（2026-05-21、確定）
 
-**ステータス**: 確定（2026-05-21）。`D-P3-H-6 Q2b` で別フェーズ送りとした scan-pdf 昇格（M6）について、実装着手前に必要な 4 項目（fixture 調達、`unmaskablePiiFindings` 閾値、quota / timeout / コスト上限、公開範囲拡大条件）を本エントリで正本化する。実装入口は [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §6（M6）+ §7（昇格差分）+ §8（実装 DoD）+ §9（fixture policy）。
+**ステータス**: 確定（2026-05-21）。`D-P3-H-6 Q2b` で別フェーズ送りとした scan-pdf 昇格（M6）について、実装着手前に必要な 4 項目（fixture 調達、`unmaskablePiiFindings` 閾値、quota / timeout / コスト上限、公開範囲拡大条件）を本エントリで正本化する。実装入口は [docs/phase-3-h-3-direction.md](archive/phase-3-h-3-direction.md) §6（M6）+ §7（昇格差分）+ §8（実装 DoD）+ §9（fixture policy）。
 
 **決定**: scan-pdf 本線統合は、(a) 公開公的様式 + 合成 PII fixture 3〜5 本を repo に commit、(b) `unmaskablePiiFindings` は **warn + count 必須記録**、(c) quota / timeout / コスト上限は **PoC 実測値で M6-1 着手前に確定**、(d) 公開範囲拡大は **subtype 1 M5 踏襲 + Masker 本線統合完了を追加要件** とする。`D-P3-H-6 Q2` 系（fail-closed・fallback 不採用）と Q5（Masker は H-3 外）は本決定でも維持する。
 
@@ -1498,7 +1498,7 @@ Phase 3-H-3 の **実装**に入る前に次を満たす:
 
 **確定境界（M6-1 着手時、2026-05-21 確定）:**
 
-全 fixture × 3 試行（15 試行）の実測結果: [docs/phase-3-h-3-scan-pdf-poc-measurement.md](phase-3-h-3-scan-pdf-poc-measurement.md)
+全 fixture × 3 試行（15 試行）の実測結果: [docs/phase-3-h-3-scan-pdf-poc-measurement.md](archive/phase-3-h-3-scan-pdf-poc-measurement.md)
 
 | 項目 | 確定値 | 根拠 |
 |---|---|---|
@@ -1524,14 +1524,14 @@ Phase 3-H-3 の **実装**に入る前に次を満たす:
 **必須要件（5 つすべて）:**
 
 1. M6-4 heuristic 閾値が PR warning として CI で稼働している（subtype 1 / 2 同型）
-2. M6-5 golden recall fixture の expected が 30 日以上 stable（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §7.4 と同型）
+2. M6-5 golden recall fixture の expected が 30 日以上 stable（[docs/phase-3-h-2-direction.md](archive/phase-3-h-2-direction.md) §7.4 と同型）
 3. Q3 で確定したコスト上限が dev tenant 観測で 90 日 reach されていない（または上限見直しが完了している）
-4. **Masker 本線統合（PDF 経路）が完了し、`requires_masking` scan-pdf が `maskingPending: true` ではなく PDF Masker 本線へ進む** — **Masker 本線は `D-P3-M-PDF-1` で完了（2026-05-29）**。dev tenant live smoke で `restricted_promoted` / `ai_safe_ready` の両終端を確認済み（[docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）。scan-pdf `imageText` page evidence も health eval で `pageCoverage=1` / `hasPageLocators=true` を確認済み（2026-05-29 後続）。
+4. **Masker 本線統合（PDF 経路）が完了し、`requires_masking` scan-pdf が `maskingPending: true` ではなく PDF Masker 本線へ進む** — **Masker 本線は `D-P3-M-PDF-1` で完了（2026-05-29）**。dev tenant live smoke で `restricted_promoted` / `ai_safe_ready` の両終端を確認済み（[docs/phase-3-m-pdf-masker-live-smoke.md](archive/phase-3-m-pdf-masker-live-smoke.md)）。scan-pdf `imageText` page evidence も health eval で `pageCoverage=1` / `hasPageLocators=true` を確認済み（2026-05-29 後続）。
 5. `unmaskablePiiFindings` の閾値が Masker 統合後の実観測を踏まえて再評価され、`fail-closed` への切替判断が別 decision として確定している
 
 **理由:**
 - scan-pdf は本質的に PII を含む文書を扱う想定（士業ドメインの申請書・契約書・請求書 scan）。Masker 未統合のまま全 tenant 公開すると、`unmaskablePiiFindings` を warn にしている本決定 Q2 と組み合わさり、PII が残った chunk が Context Package に到達するリスクが高い。
-- subtype 1 M5 の判断（[docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §3）は PII フリー公的様式中心の subtype を前提にしており、PII を本質的に扱う subtype 3 にそのまま適用するのは不十分。
+- subtype 1 M5 の判断（[docs/phase-3-h-2-direction.md](archive/phase-3-h-2-direction.md) §3）は PII フリー公的様式中心の subtype を前提にしており、PII を本質的に扱う subtype 3 にそのまま適用するのは不十分。
 - `D-P3-H-6 Q5`（Masker 本線統合は H-3 外）と整合する。H-3 内で公開拡大に踏み切らないこと自体は H-3 のスコープと矛盾しない。
 - ハッカソン採点軸「とどける」は **dev tenant 限定 + 採点用 demo tenant + 証跡 docs** で十分説明できる。公開拡大は採点後の本番要件で良い。
 
@@ -1545,7 +1545,7 @@ scan-pdf M6 の実装に入る前に次を満たす:
 
 1. ~~Phase 3-H-3 subtype 2（slide-pdf）M1〜M5 + live smoke 完了~~ — **達成（2026-05-20）**、PR #3 merged（`38d15ff`）
 2. ~~`D-P3-H-7` の 4 項目（Q1〜Q4）確定~~ — **本決定で達成（2026-05-21）**
-3. ~~**Q3 実測手順（fixture 全件 × 3 回）の完了と数値追記**~~ — **達成（2026-05-21）**。[docs/phase-3-h-3-scan-pdf-poc-measurement.md](phase-3-h-3-scan-pdf-poc-measurement.md)
+3. ~~**Q3 実測手順（fixture 全件 × 3 回）の完了と数値追記**~~ — **達成（2026-05-21）**。[docs/phase-3-h-3-scan-pdf-poc-measurement.md](archive/phase-3-h-3-scan-pdf-poc-measurement.md)
 4. ~~**Q1 fixture #2〜#5 の取得と inventory 追記**~~ — **達成（2026-05-21）**。[sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) L36
 
 ### 2026-05-21 追補（M6 実装着手前・docs 同期）
@@ -1570,7 +1570,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 - 新規 extractor: `src/lib/extractors/scanPdfDocumentExtractor.ts`（M6-1）
 - 新規 flag: `pdf-conversion-subtype-3`（dev tenant allow-list + `expiresAt`、M6-2）
 - 修正: `uploadOrchestrator.ts`（同時 ON 拒否ルールに subtype 3 を追加）、`auditEvent.ts`（`unmaskablePiiFindings.count` 必須化、M6-3）、`featureFlags.ts` flagId union
-- docs: 本ファイル（Q3 数値追補）、[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8 / §9 追記、[docs/open-questions.md](open-questions.md) 残未決解消
+- docs: 本ファイル（Q3 数値追補）、[docs/phase-3-h-3-direction.md](archive/phase-3-h-3-direction.md) §8 / §9 追記、[docs/open-questions.md](open-questions.md) 残未決解消
 
 ---
 
@@ -1598,9 +1598,9 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 **影響:** `src/lib/uploadOrchestrator.ts`（`orchestratePdfPath` / `runPdfCuratorPhase`）、`uploadOrchestrator` 単体テスト（`ai_safe` / `restricted` / Masker 失敗 / per-chunk 失敗 / chunk 保存失敗 / post-`ai_safe` の chunk 合成失敗）。scan-pdf 公開拡大（`D-P3-H-7 Q4`）の前提の一部を満たす。
 
-**後続 live smoke（2026-05-29）:** dev tenant `m-grow-ai.com` / Cloud Run revision `ai-ready-knowledge-hub-00028-tgf` で、scan-pdf の `requires_masking` PDF が `maskingPending` park せず PDF Masker 本線へ進むことを確認。`restricted_promoted`（`synthetic-employment-form-scan.pdf` → `7c3cbcdf-9a18-48cf-8ab0-cf2158ceedfb`）と `ai_safe_ready`（`synthetic-invoice-with-pii-scan.pdf` → `a74b9520-5442-4579-adb8-2781dae8999b`）の両終端を確認済み。証跡は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
+**後続 live smoke（2026-05-29）:** dev tenant `m-grow-ai.com` / Cloud Run revision `ai-ready-knowledge-hub-00028-tgf` で、scan-pdf の `requires_masking` PDF が `maskingPending` park せず PDF Masker 本線へ進むことを確認。`restricted_promoted`（`synthetic-employment-form-scan.pdf` → `7c3cbcdf-9a18-48cf-8ab0-cf2158ceedfb`）と `ai_safe_ready`（`synthetic-invoice-with-pii-scan.pdf` → `a74b9520-5442-4579-adb8-2781dae8999b`）の両終端を確認済み。証跡は [docs/phase-3-m-pdf-masker-live-smoke.md](archive/phase-3-m-pdf-masker-live-smoke.md)。
 
-**後続 Context Package smoke（2026-05-29）:** `ai_safe_ready` PDF（`a74b9520-5442-4579-adb8-2781dae8999b`）で masked chunks が Context Package に採用されることを確認。markdown は `Confidential (AI-safe via masking)` を含み、raw `SYN-INV-2026-0501` は含まず、masked `SYN-INV-2[REDACTED:POSTAL_CODE]` を含む。一方、`limit: 20` では Strategist 入力が 224,204 tokens となり Vertex 上限 131,072 を超過。`limit: 2` は Cloud Run 内では HTTP 200 / `document.export` audit success だが、browser/IAP fetch は約 33 秒後に Google 502 を受けた。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
+**後続 Context Package smoke（2026-05-29）:** `ai_safe_ready` PDF（`a74b9520-5442-4579-adb8-2781dae8999b`）で masked chunks が Context Package に採用されることを確認。markdown は `Confidential (AI-safe via masking)` を含み、raw `SYN-INV-2026-0501` は含まず、masked `SYN-INV-2[REDACTED:POSTAL_CODE]` を含む。一方、`limit: 20` では Strategist 入力が 224,204 tokens となり Vertex 上限 131,072 を超過。`limit: 2` は Cloud Run 内では HTTP 200 / `document.export` audit success だが、browser/IAP fetch は約 33 秒後に Google 502 を受けた。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](archive/phase-3-m-pdf-masker-live-smoke.md)。
 
 **後続実装（2026-05-29、Context Package / eval 同期）:**
 
@@ -1608,11 +1608,11 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 2. **strict `docIds` resolution（実装済み）** — `resolveInventoryDocumentsByIds` が unknown / non-terminal を 400 で返す。UI は `docIds` 入力とエラー詳細表示に対応。
 3. **scan-pdf `imageText` page evidence（実装済み）** — `src/eval/conversion/heuristic/pageEvidence.ts` が `imageText` locator と warning 内 page ヒントを page evidence として集計。health eval の scan-pdf fixture は `pageCoverage=1` / `hasPageLocators=true`。
 
-**Cloud Run + IAP re-smoke（2026-06-02）:** PR #12 merge 後の revision `ai-ready-knowledge-hub-00029-9b9`（image `:c902c09`）で、`ai_safe_ready` invoice 1 件を `docIds` 指定して再 smoke。`POST /api/context-package` は HTTP 200 / `33.716634292s`、`document.export` audit `0mpwh5v5k-68aa4bc141a6fbc1`（actor `makoto@m-grow-ai.com`）を記録した。markdown は `Confidential (AI-safe via masking)`、`SYN-INV-2[REDACTED:POSTAL_CODE]`、`[REDACTED:BANK_ACCOUNT]`、`[REDACTED:JP_MYNUMBER]` を含み、raw `SYN-INV-2026-0501` は含まない。unknown docId は deployed UI で HTTP 400 + 詳細表示。Firestore audit composite index 2 本は `READY`。ローカル全 Inventory smoke は既定 `maxTotalPromptChars: 45_000` で `474 → 80` chunks、`394` drops を metadata に記録した。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
+**Cloud Run + IAP re-smoke（2026-06-02）:** PR #12 merge 後の revision `ai-ready-knowledge-hub-00029-9b9`（image `:c902c09`）で、`ai_safe_ready` invoice 1 件を `docIds` 指定して再 smoke。`POST /api/context-package` は HTTP 200 / `33.716634292s`、`document.export` audit `0mpwh5v5k-68aa4bc141a6fbc1`（actor `makoto@m-grow-ai.com`）を記録した。markdown は `Confidential (AI-safe via masking)`、`SYN-INV-2[REDACTED:POSTAL_CODE]`、`[REDACTED:BANK_ACCOUNT]`、`[REDACTED:JP_MYNUMBER]` を含み、raw `SYN-INV-2026-0501` は含まない。unknown docId は deployed UI で HTTP 400 + 詳細表示。Firestore audit composite index 2 本は `READY`。ローカル全 Inventory smoke は既定 `maxTotalPromptChars: 45_000` で `474 → 80` chunks、`394` drops を metadata に記録した。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](archive/phase-3-m-pdf-masker-live-smoke.md)。
 
-**Context Package 非同期 job 本番配線 / live smoke（2026-06-02）:** 同期生成 `33.716634292s` の実測を受け、`202 Accepted` + Firestore job + Cloud Tasks worker を本番配線した。revision `ai-ready-knowledge-hub-00033-vrw` で、IAP audience 付き Worker SA token による job `8ce6a64b-54a5-4368-b7b6-866406c3d308` が HTTP `202` in `1.295306353s` → polling `queued/running/succeeded` → result HTTP `200` を完走。Cloud Tasks worker `/run` は HTTP `200` in `19.652927793s`、result fetch まで約 `22.5s`。初回応答は同期 smoke 比で `32.421s`、約 `96%` 短縮した。生成時間自体ではなく、UI 待機ブロック解消、retry、lease、冪等性を主目的とする。Cloud Tasks queue、Worker SA、IAP accessor、IAP programmatic OAuth client allowlist、Secret Manager、GitHub Variables、UI build-arg flag を配線済み。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md) と [docs/open-questions.md R10](open-questions.md)。
+**Context Package 非同期 job 本番配線 / live smoke（2026-06-02）:** 同期生成 `33.716634292s` の実測を受け、`202 Accepted` + Firestore job + Cloud Tasks worker を本番配線した。revision `ai-ready-knowledge-hub-00033-vrw` で、IAP audience 付き Worker SA token による job `8ce6a64b-54a5-4368-b7b6-866406c3d308` が HTTP `202` in `1.295306353s` → polling `queued/running/succeeded` → result HTTP `200` を完走。Cloud Tasks worker `/run` は HTTP `200` in `19.652927793s`、result fetch まで約 `22.5s`。初回応答は同期 smoke 比で `32.421s`、約 `96%` 短縮した。生成時間自体ではなく、UI 待機ブロック解消、retry、lease、冪等性を主目的とする。Cloud Tasks queue、Worker SA、IAP accessor、IAP programmatic OAuth client allowlist、Secret Manager、GitHub Variables、UI build-arg flag を配線済み。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](archive/phase-3-m-pdf-masker-live-smoke.md) と [docs/open-questions.md R10](open-questions.md)。
 
-**Production Hardening close-out（2026-06-08）:** `#15` job GC / stuck-running recovery と `#16` large result GCS offload は production smoke 完了。revision `ai-ready-knowledge-hub-00041-2kr` で async job `5d51117a-6a46-40bd-b981-9bc250a448ba` が HTTP `202` → `succeeded` → result HTTP `200` を完走し、terminal job `expiresAt.timestampValue`、queue empty、Token Creator cleanup を確認。GCS-backed result route と tenant isolation も synthetic smoke で確認済み。GitHub issue #15/#16 は close 済み。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
+**Production Hardening close-out（2026-06-08）:** `#15` job GC / stuck-running recovery と `#16` large result GCS offload は production smoke 完了。revision `ai-ready-knowledge-hub-00041-2kr` で async job `5d51117a-6a46-40bd-b981-9bc250a448ba` が HTTP `202` → `succeeded` → result HTTP `200` を完走し、terminal job `expiresAt.timestampValue`、queue empty、Token Creator cleanup を確認。GCS-backed result route と tenant isolation も synthetic smoke で確認済み。GitHub issue #15/#16 は close 済み。詳細は [docs/phase-3-m-pdf-masker-live-smoke.md](archive/phase-3-m-pdf-masker-live-smoke.md)。
 
 **残る見直し候補:** UI の docIds 導線（Inventory からの選択 UX）、`unmaskablePiiFindings` 閾値再評価（Masker 本線接続後、`D-P3-H-7 Q2` 後続）。
 
@@ -1621,7 +1621,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 ## D-P4UX-0: Phase 4-UX 命名・スコープ・分類規則・セキュリティ境界
 
 **日付**: 2026-06-03
-**状態**: 採用（Phase 4-UX MVP 実装済み、Production Hardening close-out 完了）。作業分配と実装者向け指示文の正本は [docs/phase-4-ux-direction.md](phase-4-ux-direction.md)。
+**状態**: 採用（Phase 4-UX MVP 実装済み、Production Hardening close-out 完了）。作業分配と実装者向け指示文の正本は [docs/phase-4-ux-direction.md](archive/phase-4-ux-direction.md)。
 
 **背景:** Context Package は「docId を指定すれば安全に生成できる」状態まで到達した（`D-P3-M-PDF-1` 後続）。次は「purpose を入れるだけで候補文書・除外文書・足りない情報・確認質問が整理される」UX へ引き上げる。実務担当者に docId を手入力させすぎない状態を目指す。
 
@@ -1657,7 +1657,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 **日付**: 2026-06-03
 **状態**: 実装済み（S2 / 2026-06-03）
 
-**背景:** 候補 API は S2 で実装するが、UI（S5/S6/S7）が並行着手できるよう API 契約を先に decisions として固定する。UI 実装者向けの詳細契約（request/response 例・UI 既定動作）は [docs/phase-4-ux-direction.md §候補 API 契約](phase-4-ux-direction.md) を正本とする。
+**背景:** 候補 API は S2 で実装するが、UI（S5/S6/S7）が並行着手できるよう API 契約を先に decisions として固定する。UI 実装者向けの詳細契約（request/response 例・UI 既定動作）は [docs/phase-4-ux-direction.md §候補 API 契約](archive/phase-4-ux-direction.md) を正本とする。
 
 **決定:**
 
@@ -1997,18 +1997,18 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 - [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) — P1-E direction（table-assist D 戦略・不変条件の正本）
 - [docs/production-readiness.md](production-readiness.md) — ゲート一覧・現在地・DoD の正本（`D-PROD-*` の状態追跡）
-- [docs/phase-4-ux-direction.md](phase-4-ux-direction.md) — Phase 4-UX 作業分配・実装者向け指示文の正本（`D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2`）
-- [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
-- [docs/phase-3-d-direction.md](phase-3-d-direction.md) — Phase 3-D CI/CD + IAP 実装方針（正本）
-- [docs/phase-3-e-direction.md](phase-3-e-direction.md) — Phase 3-E Processing Boundary + Cloud DLP Trust Modes 実装方針（正本）
-- [docs/phase-3-h-direction.md](phase-3-h-direction.md) — Phase 3-H Document Conversion PoC 方針
-- [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) — Phase 3-H-2 subtype 1 薄い本線統合
-- [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) — Phase 3-H-3 subtype 2/3 足場
+- [docs/phase-4-ux-direction.md](archive/phase-4-ux-direction.md) — Phase 4-UX 作業分配・実装者向け指示文の正本（`D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2`）
+- [docs/phase-3-c-direction.md](archive/phase-3-c-direction.md) — Phase 3-C 認証・デプロイ方針（正本）
+- [docs/phase-3-d-direction.md](archive/phase-3-d-direction.md) — Phase 3-D CI/CD + IAP 実装方針（正本）
+- [docs/phase-3-e-direction.md](archive/phase-3-e-direction.md) — Phase 3-E Processing Boundary + Cloud DLP Trust Modes 実装方針（正本）
+- [docs/phase-3-h-direction.md](archive/phase-3-h-direction.md) — Phase 3-H Document Conversion PoC 方針
+- [docs/phase-3-h-2-direction.md](archive/phase-3-h-2-direction.md) — Phase 3-H-2 subtype 1 薄い本線統合
+- [docs/phase-3-h-3-direction.md](archive/phase-3-h-3-direction.md) — Phase 3-H-3 subtype 2/3 足場
 - [docs/offering-model.md](offering-model.md) — 提供形態
-- [docs/phase-3-c-5-source-coverage.md](phase-3-c-5-source-coverage.md) — Phase 3-C-5 source coverage 確認結果
-- [docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) — Phase 3-B（Drive 再取り込み・schemaVersion 2・鮮度バッジ・完了条件の正本）
+- [docs/phase-3-c-5-source-coverage.md](archive/phase-3-c-5-source-coverage.md) — Phase 3-C-5 source coverage 確認結果
+- [docs/phase-3-b-workspace-resync.md](archive/phase-3-b-workspace-resync.md) — Phase 3-B（Drive 再取り込み・schemaVersion 2・鮮度バッジ・完了条件の正本）
 - [docs/concept.md](concept.md) — プロダクトコンセプト
 - [docs/architecture.md](architecture.md) — 技術構成
 - [docs/firestore-schema.md](firestore-schema.md) — Firestore document shape の正本
 - [docs/open-questions.md](open-questions.md) — 未決定事項
-- [docs/week1-retrospective.md](week1-retrospective.md) — W1 振り返り
+- [docs/week1-retrospective.md](archive/week1-retrospective.md) — W1 振り返り

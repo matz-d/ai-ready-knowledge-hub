@@ -52,7 +52,7 @@ export type InventoryDocument = {
   maskingPending?: boolean;
 };
 
-/** One row from `docs/w1-artifacts/inventory.snapshot.json` (historical artifact; do not mutate file). */
+/** One row from `docs/archive/w1-artifacts/inventory.snapshot.json` (historical artifact; do not mutate file). */
 export type W1InventorySnapshotEntry = {
   documentType: DocumentType;
   businessDomain: BusinessDomain;

@@ -6,13 +6,13 @@ Phase 3-B は **Phase 3-A の Google Sheets snapshot import を「運用上回�
 関連:
 - [docs/phase-3-google-sheets-import.md](phase-3-google-sheets-import.md) — Phase 3-A 設計 (Sheets snapshot import)
 - [docs/phase-2-design.md](phase-2-design.md) — Phase 2 構造化 Ingestion / KnowledgeChunk
-- [docs/architecture.md](architecture.md)
-- [docs/firestore-schema.md](firestore-schema.md)
-- [docs/decisions.md](decisions.md)
-- [src/lib/firestoreSchema.ts](../src/lib/firestoreSchema.ts)
-- [src/lib/uploadOrchestrator.ts](../src/lib/uploadOrchestrator.ts)
-- [src/lib/importedSnapshotOrchestrator.ts](../src/lib/importedSnapshotOrchestrator.ts)
-- [src/lib/googleSheetsSnapshotImporter.ts](../src/lib/googleSheetsSnapshotImporter.ts)
+- [docs/architecture.md](../architecture.md)
+- [docs/firestore-schema.md](../firestore-schema.md)
+- [docs/decisions.md](../decisions.md)
+- [src/lib/firestoreSchema.ts](../../src/lib/firestoreSchema.ts)
+- [src/lib/uploadOrchestrator.ts](../../src/lib/uploadOrchestrator/)
+- [src/lib/importedSnapshotOrchestrator.ts](../../src/lib/importedSnapshotOrchestrator.ts)
+- [src/lib/googleSheetsSnapshotImporter.ts](../../src/lib/googleSheetsSnapshotImporter.ts)
 
 ---
 
@@ -484,7 +484,7 @@ D-P3-B-7 で「旧 raw を保護」と言ったが、Firestore overwrite と raw
 
 ## 8. Phase 3-C 以降への送り
 
-Phase 3-B の範囲外だが、Phase 3-C 以降で扱う候補。**次フェーズ表と Ingest 起票の正本は [docs/open-questions.md](open-questions.md)**（2026-05-21 集約）。Drive 同期・フォルダ一括・画像単体・ローカル一括は同ファイル §Ingest 拡張を参照。
+Phase 3-B の範囲外だが、Phase 3-C 以降で扱う候補。**次フェーズ表と Ingest 起票の正本は [docs/open-questions.md](../open-questions.md)**（2026-05-21 集約）。Drive 同期・フォルダ一括・画像単体・ローカル一括は同ファイル §Ingest 拡張を参照。
 
 - **HTTP API 認証 / 認可 / レート制限**（IAP / token / Cloud Armor 等）
 - **自動同期**（cron / Cloud Scheduler / Drive Push notification）→ open-questions **Workspace: Drive sync**

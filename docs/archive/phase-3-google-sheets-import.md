@@ -4,13 +4,13 @@ Phase 3-A は **Google Sheets を Workspace 上の構造化情報として URL /
 
 関連:
 - [docs/phase-2-design.md](phase-2-design.md)
-- [docs/architecture.md](architecture.md)
-- [docs/firestore-schema.md](firestore-schema.md)
-- [docs/decisions.md](decisions.md)
-- [src/lib/firestoreSchema.ts](../src/lib/firestoreSchema.ts)
-- [src/lib/uploadOrchestrator.ts](../src/lib/uploadOrchestrator.ts)
-- [src/lib/extractors/xlsxExtractor.ts](../src/lib/extractors/xlsxExtractor.ts)
-- [src/lib/parseFirestoreDocumentData.ts](../src/lib/parseFirestoreDocumentData.ts)
+- [docs/architecture.md](../architecture.md)
+- [docs/firestore-schema.md](../firestore-schema.md)
+- [docs/decisions.md](../decisions.md)
+- [src/lib/firestoreSchema.ts](../../src/lib/firestoreSchema.ts)
+- [src/lib/uploadOrchestrator.ts](../../src/lib/uploadOrchestrator/)
+- [src/lib/extractors/xlsxExtractor.ts](../../src/lib/extractors/xlsxExtractor.ts)
+- [src/lib/parseFirestoreDocumentData.ts](../../src/lib/parseFirestoreDocumentData.ts)
 
 ---
 
@@ -19,11 +19,11 @@ Phase 3-A は **Google Sheets を Workspace 上の構造化情報として URL /
 Phase 2 (構造化 Ingestion / KnowledgeChunk) は完了。Phase 3-A は **Phase 2 の `.xlsx` パイプラインに `.xlsx` snapshot を流し込む新しい入口を追加する** だけで成立する設計とする。
 
 ### 利用する Phase 2 資産
-- `xlsxToNormalizedMarkdown` / `xlsxToMarkdownSheets` / `extractXlsx` ([src/lib/extractors/xlsxExtractor.ts](../src/lib/extractors/xlsxExtractor.ts))
-- `orchestrateUploadProcessing` の `[C] Firestore set` 以降の lifecycle ([src/lib/uploadOrchestrator.ts](../src/lib/uploadOrchestrator.ts))
-- `validateFirestoreDocumentInvariants` の 9 ルール ([src/lib/firestoreSchema.ts](../src/lib/firestoreSchema.ts))
-- `chunks:regenerate` の拡張子判定パス ([scripts/regenerateChunks.ts](../scripts/regenerateChunks.ts))
-- Context Package の `.xlsx` markdown 化経路 ([src/lib/contextPackageFirestoreAdapter.ts](../src/lib/contextPackageFirestoreAdapter.ts))
+- `xlsxToNormalizedMarkdown` / `xlsxToMarkdownSheets` / `extractXlsx` ([src/lib/extractors/xlsxExtractor.ts](../../src/lib/extractors/xlsxExtractor.ts))
+- `orchestrateUploadProcessing` の `[C] Firestore set` 以降の lifecycle ([src/lib/uploadOrchestrator.ts](../../src/lib/uploadOrchestrator/))
+- `validateFirestoreDocumentInvariants` の 9 ルール ([src/lib/firestoreSchema.ts](../../src/lib/firestoreSchema.ts))
+- `chunks:regenerate` の拡張子判定パス ([scripts/regenerateChunks.ts](../../scripts/regenerateChunks.ts))
+- Context Package の `.xlsx` markdown 化経路 ([src/lib/contextPackageFirestoreAdapter.ts](../../src/lib/contextPackageFirestoreAdapter.ts))
 
 ### Phase 3-A で触らないこと
 - Phase 2 の `validateFirestoreDocumentInvariants` 9 ルール
@@ -85,9 +85,9 @@ Phase 2 (構造化 Ingestion / KnowledgeChunk) は完了。Phase 3-A は **Phase
 - (b) **`contentSha256` 一本** ← 採用
 
 **選定理由:**
-- `validateFirestoreDocumentInvariants` は `masker.sourceContentHash === contentSha256` を要求している ([src/lib/firestoreSchema.ts](../src/lib/firestoreSchema.ts))。Snapshot の export bytes hash がそのまま `contentSha256` になるので、別 field を持つと「常に同値」の冗長フィールドになり混乱の元。
+- `validateFirestoreDocumentInvariants` は `masker.sourceContentHash === contentSha256` を要求している ([src/lib/firestoreSchema.ts](../../src/lib/firestoreSchema.ts))。Snapshot の export bytes hash がそのまま `contentSha256` になるので、別 field を持つと「常に同値」の冗長フィールドになり混乱の元。
 - `contentSha256` の意味を「**upload raw bytes または imported snapshot bytes の hash**」とコメントで明記すれば足りる。
-- **Masker との整合:** Curator/Masker の入力は `.xlsx` から正規化した **markdown 文字列**だが、`masker.sourceContentHash` および masked オブジェクトの `sourceContentHash` はいずれも **`contentSha256`（snapshot `.xlsx` バイト列の SHA256）をそのまま渡す**（[src/lib/uploadOrchestrator.ts](../src/lib/uploadOrchestrator.ts) の `runMaskerPhase` / `buildMaskerWriteBlockDraft`）。markdown バイト列の hash とは一致させない。invariant は「マスク対象の出所が raw snapshot と同一であること」の証跡として snapshot hash を使う。
+- **Masker との整合:** Curator/Masker の入力は `.xlsx` から正規化した **markdown 文字列**だが、`masker.sourceContentHash` および masked オブジェクトの `sourceContentHash` はいずれも **`contentSha256`（snapshot `.xlsx` バイト列の SHA256）をそのまま渡す**（[src/lib/uploadOrchestrator.ts](../../src/lib/uploadOrchestrator/) の `runMaskerPhase` / `buildMaskerWriteBlockDraft`）。markdown バイト列の hash とは一致させない。invariant は「マスク対象の出所が raw snapshot と同一であること」の証跡として snapshot hash を使う。
 
 **撤退条件:** Phase 3-B 以降で「Drive 上で modified されたが re-export 後に同一 bytes だった」のような差分検知が必要になり、export 行為自体の証跡を残したくなった場合は `externalSource.exportSha256` を追加する。ただしその時点でも `contentSha256` 自体は snapshot bytes の hash としての意味を維持する。
 
@@ -106,7 +106,7 @@ Phase 2 (構造化 Ingestion / KnowledgeChunk) は完了。Phase 3-A は **Phase
 **運用上の必須対応:**
 - UI に **service account email をコピーできる表示**を置く。
 - 403 エラー時にも「Sheet を `{SA_EMAIL}` と共有してください」を明示する。
-- demo runbook ([docs/demo-runbook.md](demo-runbook.md)) に SA 共有手順を追記する。
+- demo runbook ([docs/demo-runbook.md](../demo-runbook.md)) に SA 共有手順を追記する。
 
 **撤退条件:** demo 後の運用で「ユーザーが SA 共有手順を踏まない」ことが致命傷になった場合、Phase 3-B 以降で OAuth user delegation を入れる。
 
@@ -227,7 +227,7 @@ externalSource: null | {
 - `contentSha256`: 意味を「**upload raw bytes または imported snapshot bytes の SHA256**」とコメントで明記する。
 - `contentType`: Sheets 取り込み時は OOXML を固定で書く（`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`）。
 - `fileName`: `${driveMeta.nameWithoutXlsx}.xlsx` で書く（Drive の元ファイル名に `.xlsx` suffix を付けるが、元名がすでに `.xlsx` で終わる場合は二重付与しない）。Firestore に保存したこの値を API 成功レスポンスでも返す。
-- `storagePath`: `raw/{docId}/{safeName}.xlsx`。`safeName` は Drive の `name` を [`sanitizeOriginalFileName`](../src/lib/documents.ts) でパス安全化したうえで `.xlsx` を付与する（実装: `importedSnapshotOrchestrator` の `buildSafeXlsxName`）。GCS キーに `/` 等が混入しない。
+- `storagePath`: `raw/{docId}/{safeName}.xlsx`。`safeName` は Drive の `name` を [`sanitizeOriginalFileName`](../../src/lib/documents.ts) でパス安全化したうえで `.xlsx` を付与する（実装: `importedSnapshotOrchestrator` の `buildSafeXlsxName`）。GCS キーに `/` 等が混入しない。
 - `externalSource.name`: Drive 上の元ファイル名をそのまま保持する。`fileName` / `storagePath` / API body の `displayName` とは責務が異なる。
 - API body の `displayName`: optional。Curator / Masker に渡す処理用名として使えるが、Firestore `fileName` や成功レスポンスの `fileName` は上書きしない。
 
@@ -235,9 +235,9 @@ externalSource: null | {
 
 `sourceKind` / `externalSource` を欠く既存 document への defaulting は、以下のすべてに適用する。
 
-- [src/lib/parseFirestoreDocumentData.ts](../src/lib/parseFirestoreDocumentData.ts): read 時の defaulting
+- [src/lib/parseFirestoreDocumentData.ts](../../src/lib/parseFirestoreDocumentData.ts): read 時の defaulting
 - `FirestoreDocument` type: optional または `| undefined` 表現
-- `FirestoreInitialDocumentDraft` ([src/lib/uploadOrchestrator.ts](../src/lib/uploadOrchestrator.ts)): **upload 側の初期 body にも `sourceKind: 'upload'`, `externalSource: null` を明示的に書く**
+- `FirestoreInitialDocumentDraft` ([src/lib/uploadOrchestrator.ts](../../src/lib/uploadOrchestrator/)): **upload 側の初期 body にも `sourceKind: 'upload'`, `externalSource: null` を明示的に書く**
 - 既存テスト fixtures: 新しい shape を含むように更新
 
 ---
@@ -301,9 +301,9 @@ Phase 3-A の **`POST /api/import/google-sheets`** は、現時点のアプリ�
 - **ローカル**: `npm run dev` と `localhost` のみ。到達可能な主体は開発者のマシンに限定。
 - **限定ネットワーク上のデプロイ**: VPC 内、社内 VPN の先、**ingress を internal のみ**にした Cloud Run など、**意図したクライアントだけが到達**する構成。
 - **IAP 等で人を制限した Cloud Run**: 匿名インターネットからは叩けず、許可された Google アカウント等のみ。
-- 一時的にパブリック URL を出す場合でも、**上記に近い shield** と **監査・クォータ・事後クリーンアップ**（[docs/demo-runbook.md](demo-runbook.md) の手動 reset 節など）を runbook に書き、**PoC 終了後の無効化**を含める。
+- 一時的にパブリック URL を出す場合でも、**上記に近い shield** と **監査・クォータ・事後クリーンアップ**（[docs/demo-runbook.md](../demo-runbook.md) の手動 reset 節など）を runbook に書き、**PoC 終了後の無効化**を含める。
 
-運用手順の補足は [docs/demo-runbook.md](demo-runbook.md) の Google Sheets 節（HTTP 到達制御の短い注意）を参照。
+運用手順の補足は [docs/demo-runbook.md](../demo-runbook.md) の Google Sheets 節（HTTP 到達制御の短い注意）を参照。
 
 ---
 
@@ -367,8 +367,8 @@ Phase 3-A の **`POST /api/import/google-sheets`** は、現時点のアプリ�
    - `parseFirestoreDocumentData` defaulting テスト
 
 8. **Demo runbook / docs**
-   - SA 共有手順を [docs/demo-runbook.md](demo-runbook.md) に追加。
-   - 本書を [docs/decisions.md](decisions.md) から参照。
+   - SA 共有手順を [docs/demo-runbook.md](../demo-runbook.md) に追加。
+   - 本書を [docs/decisions.md](../decisions.md) から参照。
 
 ---
 

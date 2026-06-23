@@ -17,7 +17,7 @@
 
 | Priority | テーマ | 目的 | いまの状態 | Done |
 |---|---|---|---|---|
-| P0 | Phase 4-UX ブラウザ手動通し | README の「手動通し待ち」を潰し、提出前 evidence を作る | 完了。local synchronous UX は copy/download まで確認済み。async polling は Cloud Tasks / production smoke scope | [docs/phase-4-ux-manual-pass-2026-06-10.md](phase-4-ux-manual-pass-2026-06-10.md) と `docs/phase-4-ux-evidence/2026-06-10/` に保存 |
+| P0 | Phase 4-UX ブラウザ手動通し | README の「手動通し待ち」を潰し、提出前 evidence を作る | 完了。local synchronous UX は copy/download まで確認済み。async polling は Cloud Tasks / production smoke scope | [docs/phase-4-ux-manual-pass-2026-06-10.md](archive/phase-4-ux-manual-pass-2026-06-10.md) と `docs/phase-4-ux-evidence/2026-06-10/` に保存 |
 | P1-A | NotebookLM source bundle API payload | 実証済みの勝ち筋を app の result payload に載せる | 完了。API result に `sourceBundle.files` を含め、excluded / human-review 本文が混入しないテストを固定済み | Context Package result に `sourceBundle.files` が含まれ、excluded / human-review 本文が混入しないテストが通る |
 | P1-B | NotebookLM source bundle zip UI | P1-A の payload をユーザーが zip として落とせるようにする | 完了。`ContextPackageForm` に「NotebookLM 用 bundle をダウンロード」を追加。delivery E2E でも検証済み | `ContextPackageForm` に secondary export「NotebookLM用 bundle」を追加し、guide + included sources を zip download できる |
 | P1-F | Async full-coverage strategist | async job が広い選択を実際に全件レビューできるようにする（**実行順は P1-C より先**） | 完了。Stage 2 本体実装済み。review 残タスクは [docs/p1-f-review-follow-up-tasks.md](p1-f-review-follow-up-tasks.md) に分離 | [docs/p1-f-full-coverage-strategist.md](p1-f-full-coverage-strategist.md) の Stage 2 Done 条件（batched strategist + missing/questions reduce、給与シナリオ再実行で truncation ゼロ） |

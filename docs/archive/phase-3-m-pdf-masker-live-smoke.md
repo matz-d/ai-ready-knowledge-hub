@@ -168,8 +168,8 @@ Observed behavior:
   `auditEvents/0mpqmmgow-452b55aa7ef489aa`.
 
 **運用確認クエリ（Firestore composite index 反映後）** — 正本は
-[`firestore.indexes.json`](../firestore.indexes.json)（`action` + `occurredAt`、
-`target.docId` + `occurredAt`）。手順は [demo-runbook.md §2 項目 7](demo-runbook.md)。
+[`firestore.indexes.json`](../../firestore.indexes.json)（`action` + `occurredAt`、
+`target.docId` + `occurredAt`）。手順は [demo-runbook.md §2 項目 7](../demo-runbook.md)。
 
 ```bash
 # 最新 document.export（index error なしで 1 件以上）
@@ -296,7 +296,7 @@ build-arg で client bundle に焼き込み、`mode:"auto"` と polling UI が�
 browser の手動操作は追加していない。
 
 実配線時に Secret Manager token の末尾改行で worker が 401 になる事象を確認した。
-token を改行なしで version `2` へ rotate し、[setup-gcp.md](setup-gcp.md) の生成例も
+token を改行なしで version `2` へ rotate し、[setup-gcp.md](../setup-gcp.md) の生成例も
 `tr -d '\n'` 付きへ修正した。smoke 用に一時付与した Token Creator 権限は検証後に
 削除済み。
 

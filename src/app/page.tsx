@@ -52,7 +52,7 @@ function readW1InventoryFallback(
   try {
     const snapshotPath = join(
       process.cwd(),
-      'docs/w1-artifacts/inventory.snapshot.json'
+      'docs/archive/w1-artifacts/inventory.snapshot.json'
     );
     const raw = JSON.parse(readFileSync(snapshotPath, 'utf-8'));
     const documents = adaptW1SnapshotEntries(raw);
@@ -60,7 +60,7 @@ function readW1InventoryFallback(
       source: 'w1-fallback',
       documents,
       purpose:
-        'Fallback demo: W1 snapshot adapted from docs/w1-artifacts because Firestore inventory was unavailable',
+        'Fallback demo: W1 snapshot adapted from docs/archive/w1-artifacts because Firestore inventory was unavailable',
       kicker: 'デモ表示',
       note:
         '実データに接続できなかったため、デモ用スナップショットを表示しています。実際の文書とは同期していません。',

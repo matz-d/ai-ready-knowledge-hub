@@ -202,6 +202,6 @@ Phase 3-C での準備として：
 
 ## 関連ドキュメント
 
-- [docs/decisions.md](decisions.md) — 全意思決定ログ
+- [docs/decisions.md](../decisions.md) — 全意思決定ログ
 - [docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) — Phase 3-B 正本（完了）
-- [docs/tech-stack.md](tech-stack.md) — 技術スタック確定情報
+- [docs/tech-stack.md](../tech-stack.md) — 技術スタック確定情報

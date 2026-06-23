@@ -3,12 +3,12 @@
 Phase 2 は **Document 正本を維持しながら、AI 投入・安全判定・目的別選別に使える構造化 chunk を派生生成する** フェーズ。本書は Phase 2 の正本（決定事項）と、Phase 1 (DLP) からの引き継ぎ情報を固定する。
 
 関連:
-- [docs/architecture.md](architecture.md)
-- [docs/firestore-schema.md](firestore-schema.md)
-- [docs/decisions.md](decisions.md)
-- [src/lib/firestoreSchema.ts](../src/lib/firestoreSchema.ts)
-- [src/lib/uploadOrchestrator.ts](../src/lib/uploadOrchestrator.ts)
-- [src/lib/contextPackageInput.ts](../src/lib/contextPackageInput.ts)
+- [docs/architecture.md](../architecture.md)
+- [docs/firestore-schema.md](../firestore-schema.md)
+- [docs/decisions.md](../decisions.md)
+- [src/lib/firestoreSchema.ts](../../src/lib/firestoreSchema.ts)
+- [src/lib/uploadOrchestrator.ts](../../src/lib/uploadOrchestrator/)
+- [src/lib/contextPackageInput.ts](../../src/lib/contextPackageInput.ts)
 
 ---
 
