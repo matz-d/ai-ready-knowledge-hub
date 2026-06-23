@@ -131,13 +131,13 @@ describe('nta-withholding-form-blank-scan fixture', () => {
     expect(ir.source.sourceSubtype).toBe('scan-pdf');
   });
 
-  it('coverage: full pageCoverage with a table candidate', () => {
+  it('coverage: full pageCoverage with table candidates', () => {
     const { coverage } = evalCoverage(
       { documentIr: ir, chunks: [] },
       { sourceSubtype: 'scan-pdf' }
     );
     expect(coverage.pageCoverage).toBe(1);
-    expect(coverage.tableCandidates).toBe(1);
+    expect(coverage.tableCandidates).toBe(8);
     expect(coverage.textDensityWarnings).toHaveLength(0);
   });
 
@@ -174,17 +174,17 @@ describe('synthetic-invoice-with-pii-scan fixture', () => {
     expect(ir.source.sourceSubtype).toBe('scan-pdf');
   });
 
-  it('coverage: full pageCoverage (1 page), no table blocks in mainline sidecar', () => {
+  it('coverage: full pageCoverage with a table candidate', () => {
     const { coverage } = evalCoverage(
       { documentIr: ir, chunks: [] },
       { sourceSubtype: 'scan-pdf' }
     );
     expect(coverage.pageCoverage).toBe(1);
-    expect(coverage.tableCandidates).toBe(0);
+    expect(coverage.tableCandidates).toBe(1);
     expect(coverage.textDensityWarnings).toHaveLength(0);
   });
 
-  it('locatorQuality: page locators present, table locators absent (image_text blocks)', () => {
+  it('locatorQuality: page locators present, table locators absent in raw scan OCR', () => {
     const { locatorQuality } = evalLocatorQuality({ documentIr: ir, chunks: [] });
     expect(locatorQuality.hasPageLocators).toBe(true);
     expect(locatorQuality.hasTableLocators).toBe(false);

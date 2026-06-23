@@ -185,7 +185,7 @@ jobs:
             "KNOWLEDGE_HUB_BUCKET=${KNOWLEDGE_HUB_BUCKET}"
             "IAP_JWT_AUDIENCE=${IAP_JWT_AUDIENCE}"
             "MASKER_PROVIDER=simple-rule"
-            "FIRESTORE_PREFER_REST=true"
+            "FIRESTORE_PREFER_REST=false"
           )
 
           if [[ -n "${KNOWLEDGE_HUB_TENANT_ID}" ]]; then
@@ -241,6 +241,7 @@ jobs:
             --project="${GCP_PROJECT_ID}" \
             --region="${GCP_REGION}" \
             --service-account="${RUNTIME_SERVICE_ACCOUNT}" \
+            --timeout=600 \
             --no-allow-unauthenticated \
             "${DEPLOY_ARGS[@]}" \
             --quiet

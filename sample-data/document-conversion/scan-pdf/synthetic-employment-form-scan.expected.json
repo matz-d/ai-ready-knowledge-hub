@@ -9,7 +9,13 @@
     "EMP-XXXX-042",
     "Mizuho Bank 0001 / 1234567",
     "1234-5678-9012",
-    "2026-04-01"
+    "2026-04-01",
+    "For document-conversion OCR fixture only. All personal data is synthetic.",
+    "Employee name\nXXXX Taro",
+    "Address\n1-2-3 XXXX-cho, Shibuya-ku, Tokyo",
+    "Phone\n090-1234-5678",
+    "Email\ntaro.xxxx@example.test",
+    "Employee ID\nEMP-XXXX-042"
   ],
   "expectedFieldTiers": {
     "Synthetic Employment Information Form": "core",
@@ -59,5 +65,5 @@
     }
   ],
   "expectedTableCells": "not_applicable",
-  "notes": "2026-05-21: mainline extractScanPdfFromBuffer で再生成した sidecar と整合。氏名・住所・電話・メール・従業員ID・口座・マイナンバー風値・開始日を recall baseline として選定。P1-D valuePrecision intentionally checks label/value pairing; current OCR emits labels and values as separate blocks, so misses are a real structure signal."
+  "notes": "2026-05-21: mainline extractScanPdfFromBuffer で再生成した sidecar と整合。氏名・住所・電話・メール・従業員ID・口座・マイナンバー風値・開始日を recall baseline として選定。P1-D valuePrecision intentionally checks label/value pairing; current OCR emits labels and values as separate blocks, so misses are a real structure signal. Regenerated 2026-06-18 from mainline extractScanPdfFromBuffer (model=gemini-3.1-flash-lite, recall=1.00); curated expected tiers/values/table cells preserved."
 }

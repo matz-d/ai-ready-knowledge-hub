@@ -15,6 +15,9 @@
 | [p1-d-extraction-masking-quality-gate.md](p1-d-extraction-masking-quality-gate.md) | P1-D 品質ゲート設計 |
 | [p1-d-evidence-2026-06-11.md](p1-d-evidence-2026-06-11.md) | P1-D 証跡 |
 | [p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) | P1-E large file / table fallback / locator enrichment 方針 |
+| [p1-e-plus-scan-pdf-quality-floor-2026-06-18.md](p1-e-plus-scan-pdf-quality-floor-2026-06-18.md) | P1-E+ scan-pdf quality floor 証跡（refresh safety guard / drift 3→0 / targeted product-quality follow-up） |
+| [table-assist-async-ingest-live-smoke-2026-06-18.md](table-assist-async-ingest-live-smoke-2026-06-18.md) | table-assist async ingest production live smoke |
+| [upload-multi-file-live-smoke-2026-06-18.md](upload-multi-file-live-smoke-2026-06-18.md) | `/upload` multi-file queue production live smoke |
 | [p1-f-full-coverage-strategist.md](p1-f-full-coverage-strategist.md) | P1-F async full-coverage strategist |
 | [p1-f-review-follow-up-tasks.md](p1-f-review-follow-up-tasks.md) | P1-F レビュー残タスク |
 | [decisions.md](decisions.md) | 意思決定ログ（D1〜 + Phase 別採用判断） |

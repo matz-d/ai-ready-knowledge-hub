@@ -416,6 +416,140 @@ describe('documentIrToKnowledgeChunks', () => {
     expect(chunks.filter((chunk) => chunk.structureType === 'table')).toHaveLength(2);
   });
 
+  it('synthesizes scan-pdf inline blank unit form rows into table chunks', () => {
+    const ir = buildIr(
+      [
+        {
+          blockId: 'p1-ocr41',
+          kind: 'paragraph',
+          text: '2 休憩時間（ ）分',
+          locator: { pageNumber: 1, bbox: [240, 809, 400, 821] },
+        },
+      ],
+      'scan-pdf'
+    );
+
+    const chunks = documentIrToKnowledgeChunks({
+      ...defaultOptions(),
+      documentIr: ir,
+    });
+
+    const tableChunks = chunks.filter(
+      (chunk) => chunk.structureType === 'table'
+    );
+    expect(tableChunks).toHaveLength(1);
+    expect(tableChunks[0].text).toBe('休憩時間\t分\n2 休憩時間（ ）分');
+    expect(tableChunks[0].locator).toEqual({
+      kind: 'pdf',
+      page: 1,
+      paragraphId: 'table-0-row-1',
+    });
+    expect(tableChunks[0].extractionWarnings ?? []).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('scanInlineFormUnitFallback=inline blank unit'),
+      ])
+    );
+  });
+
+  it('supplements known public blank-form static labels without adding values', () => {
+    const ir = buildIr(
+      [
+        {
+          blockId: 'p1-ocr1',
+          kind: 'heading',
+          text: '令和 年分 給与所得の源泉徴収票',
+          locator: { pageNumber: 1, bbox: [280, 15, 720, 45] },
+        },
+        {
+          blockId: 'p1-ocr2',
+          kind: 'table',
+          text: '受給者番号 住所又は居所 氏名 個人番号 役職名',
+          locator: { pageNumber: 1, bbox: [30, 45, 970, 150] },
+        },
+        {
+          blockId: 'p1-ocr3',
+          kind: 'table',
+          text: '種別 支払金額 給与所得控除後の金額 所得控除の額の合計額 源泉徴収税額',
+          locator: { pageNumber: 1, bbox: [30, 150, 970, 220] },
+        },
+        {
+          blockId: 'p1-ocr7',
+          kind: 'table',
+          text: '生命保険料の控除の内訳 住宅借入金等特別控除の控除の内訳',
+          locator: { pageNumber: 1, bbox: [30, 420, 970, 550] },
+        },
+        {
+          blockId: 'p1-ocr10',
+          kind: 'table',
+          text: '支払者 住所(居所)又は所在地 氏名又は名称 個人番号又は法人番号',
+          locator: { pageNumber: 1, bbox: [30, 930, 970, 990] },
+        },
+      ],
+      'scan-pdf'
+    );
+
+    const chunks = documentIrToKnowledgeChunks({
+      ...defaultOptions(),
+      documentIr: ir,
+    });
+
+    const supplementalChunks = chunks.filter((chunk) =>
+      chunk.id.includes('nta-withholding-template')
+    );
+    expect(supplementalChunks.map((chunk) => chunk.text)).toEqual([
+      '支払を受ける者\t氏名\n支払を受ける者\t住所又は居所',
+      '支払金額\t円\n給与所得控除後の金額\t円\n源泉徴収税額\t円',
+      '生命保険料の金額の内訳\n住宅借入金等特別控除の額の内訳',
+    ]);
+    expect(
+      supplementalChunks.every((chunk) => chunk.structureType === 'table')
+    ).toBe(true);
+    expect(supplementalChunks[1].extractionWarnings ?? []).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('scanKnownPublicFormTemplateFallback=known public form'),
+      ])
+    );
+  });
+
+  it('does not synthesize inline form-unit table chunks for filled or unitless rows', () => {
+    const ir = buildIr(
+      [
+        // Filled value inside the parentheses: this is real data, not a blank
+        // entry field, so it must not become a synthesized table row.
+        {
+          blockId: 'p1-ocr50',
+          kind: 'paragraph',
+          text: '支払金額（ 33,000 ）円',
+          locator: { pageNumber: 1, bbox: [240, 809, 400, 821] },
+        },
+        // Unit present but no parentheses: filled-in form, must not fire.
+        {
+          blockId: 'p1-ocr51',
+          kind: 'paragraph',
+          text: '休憩時間 60分',
+          locator: { pageNumber: 1, bbox: [240, 829, 400, 841] },
+        },
+      ],
+      'scan-pdf'
+    );
+
+    const chunks = documentIrToKnowledgeChunks({
+      ...defaultOptions(),
+      documentIr: ir,
+    });
+
+    expect(
+      chunks.filter((chunk) => chunk.structureType === 'table')
+    ).toHaveLength(0);
+    expect(
+      chunks.some((chunk) =>
+        (chunk.extractionWarnings ?? []).some((warning) =>
+          warning.includes('scanInlineFormUnitFallback')
+        )
+      )
+    ).toBe(false);
+  });
+
   it('drops note blocks', () => {
     const ir = buildIr([
       paragraphBlock('p1-b1', 'kept'),

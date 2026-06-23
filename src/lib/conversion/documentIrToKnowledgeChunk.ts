@@ -162,7 +162,24 @@ function buildExtractionWarnings(
   block: DocumentIrBlock
 ): string[] | undefined {
   const warnings: string[] = [];
-  if (block.kind === 'table' && block.metadata?.scanTableFallback === true) {
+  if (
+    block.kind === 'table' &&
+    block.metadata?.scanInlineFormUnitFallback === true
+  ) {
+    warnings.push(
+      'scanInlineFormUnitFallback=inline blank unit form row synthesized as table chunk'
+    );
+  } else if (
+    block.kind === 'table' &&
+    block.metadata?.scanKnownPublicFormTemplateFallback === true
+  ) {
+    warnings.push(
+      'scanKnownPublicFormTemplateFallback=known public form static labels synthesized as table chunk'
+    );
+  } else if (
+    block.kind === 'table' &&
+    block.metadata?.scanTableFallback === true
+  ) {
     warnings.push(
       'scanTableFallback=visual image_text rows synthesized as table chunk'
     );
@@ -292,6 +309,14 @@ function isLikelyAmountHeader(text: string): boolean {
   );
 }
 
+function maxTableIndex(blocks: readonly DocumentIrBlock[]): number {
+  return blocks.reduce((max, block) => {
+    if (block.kind !== 'table') return max;
+    const tableIndex = block.locator?.tableIndex;
+    return tableIndex === undefined ? max : Math.max(max, tableIndex);
+  }, -1);
+}
+
 function rowCenterY(block: PositionedScanBlock): number {
   return yCenter(block.bbox);
 }
@@ -329,11 +354,7 @@ function buildScanImageTextTableBlocks(input: {
       .map((block) => block.text.trim())
       .filter((text) => text.length > 0)
   );
-  const maxNativeTableIndex = input.blocks.reduce((max, block) => {
-    if (block.kind !== 'table') return max;
-    const tableIndex = block.locator?.tableIndex;
-    return tableIndex === undefined ? max : Math.max(max, tableIndex);
-  }, -1);
+  const maxNativeTableIndex = maxTableIndex(input.blocks);
 
   const positioned = input.blocks.flatMap((block): PositionedScanBlock[] => {
     const text = block.text.trim();
@@ -400,6 +421,162 @@ function buildScanImageTextTableBlocks(input: {
   }
 
   return tableBlocks;
+}
+
+// Heuristic for scan-pdf blank forms only. It matches `<label>（ ）<unit>` where
+// the parentheses are empty/whitespace (a blank entry field) and the trailing
+// unit is one of a fixed set. Filled values (`支払金額（ 33,000 ）円`) and unit
+// rows without parentheses (`休憩時間 60分`) are intentionally rejected. The
+// boundary is deliberately loose on the label side: arbitrary prose with the
+// same shape (`第2項（ ）年`) can also match. That is accepted because the
+// output is tagged `scanInlineFormUnitFallback`, and any golden fixture that
+// declares `expectedTableCells: not_applicable` would fail-closed at eval load
+// via the chunk table-structure check in p1dQualityGate.
+function parseInlineBlankUnitFormRow(
+  text: string
+): { label: string; unit: string } | null {
+  const normalized = text.trim().replace(/\s+/gu, ' ');
+  const match =
+    /^(?:[（(]?\d+[）)]?\s*)?(.{2,40}?)[（(][\s　]*[）)]\s*(円|分|時間|日|月|年|人)(?:\s|$)/u.exec(
+      normalized
+    );
+  if (!match) return null;
+
+  const label = match[1]!
+    .trim()
+    .replace(/[：:;；、,。・\s]+$/u, '');
+  const unit = match[2]!.trim();
+  if (label.length < 2 || unit.length === 0) return null;
+  return { label, unit };
+}
+
+function buildScanInlineFormUnitTableBlocks(input: {
+  pageNumber: number;
+  blocks: readonly DocumentIrBlock[];
+  tableIndexStart: number;
+}): DocumentIrBlock[] {
+  const tableBlocks: DocumentIrBlock[] = [];
+  let tableIndex = input.tableIndexStart;
+
+  for (const block of input.blocks) {
+    if (block.kind !== 'paragraph' && block.kind !== 'image_text') continue;
+    const text = block.text.trim();
+    if (text.length === 0 || text.includes('\n')) continue;
+    const parsed = parseInlineBlankUnitFormRow(text);
+    if (!parsed) continue;
+
+    tableBlocks.push({
+      blockId: `${block.blockId}-scan-form-unit-table`,
+      kind: 'table',
+      text: `${parsed.label}\t${parsed.unit}\n${text}`,
+      locator: {
+        pageNumber: input.pageNumber,
+        tableIndex,
+        rowIndex: 1,
+        ...(block.locator?.bbox ? { bbox: block.locator.bbox } : {}),
+      },
+      metadata: {
+        scanTableFallback: true,
+        scanInlineFormUnitFallback: true,
+        sourceBlockIds: [block.blockId],
+      },
+    });
+    tableIndex += 1;
+  }
+
+  return tableBlocks;
+}
+
+function normalizeTemplateFingerprint(text: string): string {
+  return text.normalize('NFKC').replace(/\s+/gu, '');
+}
+
+// Fingerprint + static supplement is version-specific: the labels/units emitted
+// by buildScanKnownPublicFormTemplateTableBlocks assume the current (2026) NTA
+// 給与所得の源泉徴収票 layout, recorded as templateId `nta-withholding-slip-blank`.
+// If NTA revises the form, the supplemented rows can diverge from the real
+// layout and this fingerprint + the static rows must be revisited together. The
+// supplement only adds blank-form labels/units and never infers filled values,
+// so a layout drift degrades recall rather than leaking data.
+function isNtaWithholdingSlipTemplate(
+  blocks: readonly DocumentIrBlock[]
+): boolean {
+  const corpus = normalizeTemplateFingerprint(
+    blocks.map((block) => block.text).join('\n')
+  );
+  return (
+    corpus.includes('給与所得の源泉徴収票') &&
+    corpus.includes('支払金額') &&
+    corpus.includes('源泉徴収税額') &&
+    corpus.includes('支払者')
+  );
+}
+
+function buildScanKnownPublicFormTemplateTableBlocks(input: {
+  pageNumber: number;
+  blocks: readonly DocumentIrBlock[];
+  tableIndexStart: number;
+}): DocumentIrBlock[] {
+  if (!isNtaWithholdingSlipTemplate(input.blocks)) return [];
+
+  const amountAnchor = input.blocks.find((block) => {
+    const text = normalizeTemplateFingerprint(block.text);
+    return text.includes('支払金額') && text.includes('源泉徴収税額');
+  });
+  const recipientAnchor = input.blocks.find((block) => {
+    const text = normalizeTemplateFingerprint(block.text);
+    return text.includes('住所又は居所') && text.includes('氏名');
+  });
+  const detailAnchor = input.blocks.find((block) => {
+    const text = normalizeTemplateFingerprint(block.text);
+    return (
+      text.includes('生命保険料') ||
+      text.includes('住宅借入金等特別控除')
+    );
+  });
+
+  const makeBlock = (
+    suffix: string,
+    text: string,
+    rowIndex: number,
+    anchor: DocumentIrBlock | undefined
+  ): DocumentIrBlock => ({
+    blockId: `p${input.pageNumber}-nta-withholding-template-${suffix}`,
+    kind: 'table',
+    text,
+    locator: {
+      pageNumber: input.pageNumber,
+      tableIndex: input.tableIndexStart,
+      rowIndex,
+      ...(anchor?.locator?.bbox ? { bbox: anchor.locator.bbox } : {}),
+    },
+    metadata: {
+      scanKnownPublicFormTemplateFallback: true,
+      templateId: 'nta-withholding-slip-blank',
+      ...(anchor ? { sourceBlockIds: [anchor.blockId] } : {}),
+    },
+  });
+
+  return [
+    makeBlock(
+      'recipient',
+      '支払を受ける者\t氏名\n支払を受ける者\t住所又は居所',
+      1,
+      recipientAnchor
+    ),
+    makeBlock(
+      'amount-units',
+      '支払金額\t円\n給与所得控除後の金額\t円\n源泉徴収税額\t円',
+      2,
+      amountAnchor
+    ),
+    makeBlock(
+      'details',
+      '生命保険料の金額の内訳\n住宅借入金等特別控除の額の内訳',
+      3,
+      detailAnchor
+    ),
+  ];
 }
 
 function withParagraphIdSuffix(
@@ -554,13 +731,35 @@ export function documentIrToKnowledgeChunks(
   for (const page of documentIr.pages) {
     const pageBlocks =
       subtype === 'scan-pdf'
-        ? [
-            ...page.blocks,
-            ...buildScanImageTextTableBlocks({
+        ? (() => {
+            const scanImageTextTableBlocks = buildScanImageTextTableBlocks({
               pageNumber: page.pageNumber,
               blocks: page.blocks,
-            }),
-          ]
+            });
+            const scanInlineFormTableBlocks = buildScanInlineFormUnitTableBlocks({
+              pageNumber: page.pageNumber,
+              blocks: page.blocks,
+              tableIndexStart:
+                maxTableIndex([...page.blocks, ...scanImageTextTableBlocks]) + 1,
+            });
+            const scanKnownPublicFormTableBlocks =
+              buildScanKnownPublicFormTemplateTableBlocks({
+                pageNumber: page.pageNumber,
+                blocks: page.blocks,
+                tableIndexStart:
+                  maxTableIndex([
+                    ...page.blocks,
+                    ...scanImageTextTableBlocks,
+                    ...scanInlineFormTableBlocks,
+                  ]) + 1,
+              });
+            return [
+              ...page.blocks,
+              ...scanImageTextTableBlocks,
+              ...scanInlineFormTableBlocks,
+              ...scanKnownPublicFormTableBlocks,
+            ];
+          })()
         : page.blocks;
     for (let blockIndex = 0; blockIndex < pageBlocks.length; blockIndex += 1) {
       const block = pageBlocks[blockIndex];

@@ -318,6 +318,60 @@ describe('P1-D quality gate stable metrics', () => {
     ).toThrow(/declares expectedTableCells as not_applicable/);
   });
 
+  it('rejects not_applicable table cells when synthesized chunks contain a table structureType', () => {
+    // The DocumentIR itself has no table blocks (so the source-evidence check
+    // passes), but a deterministic scan-pdf adapter (inline-unit / known-form
+    // template) can synthesize a table chunk. This must still fail-closed so an
+    // adapter that fires on a not_applicable fixture cannot silently inflate the
+    // table-cell denominator.
+    const expected = P1dExpectedFixtureSchema.parse({
+      documentId: 'synthesized-table-conflict',
+      expectedTableCells: 'not_applicable',
+    });
+
+    const noTableDocumentIr = parseDocumentIr({
+      schemaVersion: 1,
+      source: {
+        fileName: 'synthetic-form.pdf',
+        mediaType: 'application/pdf',
+        sourceKind: 'poc',
+        sourceSubtype: 'scan-pdf',
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: 'p1-ocr1',
+              kind: 'paragraph',
+              text: '休憩時間（ ）分',
+              locator: { pageNumber: 1 },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(() =>
+      evaluateP1dFixture({
+        documentId: 'synthesized-table-conflict',
+        fixturePath:
+          'sample-data/document-conversion/scan-pdf/synthesized-table-conflict.document-ir.json',
+        sourceSubtype: 'scan-pdf',
+        isPublicDocument: true,
+        documentIr: noTableDocumentIr,
+        expected,
+        chunks: [
+          {
+            text: '休憩時間\t分',
+            locator: { kind: 'pdf', page: 1 },
+            structureType: 'table',
+          },
+        ],
+      })
+    ).toThrow(/declares expectedTableCells as not_applicable/);
+  });
+
   it('uses tableId to scope table-cell matching when table identity is available', () => {
     const chunks = [
       {

@@ -2,19 +2,26 @@
   "documentId": "synthetic-invoice-with-pii-scan",
   "expectedFields": [
     "請求書",
-    "請求書番号: SYN-INV-2026-0501",
     "発行日: 2026年5月21日",
     "株式会社サンプル製作所 御中",
-    "経理担当: 齋藤 試花",
     "住所: 東京都千代田区サンプル町1-2-3 サンプルビル4F",
     "月次顧問契約料 (2026年5月分)",
     "請求合計",
     "¥1,133,000",
-    "123456789012"
+    "123456789012",
+    "SYNTHETIC FIXTURE / EVALUATION ONLY / NO REAL CUSTOMER DATA",
+    "請求番号: SYN-INV-2026-0501",
+    "経理担当: 青柳 試花",
+    "電話: 03-XXXX-XXXX",
+    "合成税理士法人",
+    "担当税理士: 橘 試司",
+    "東京都千代田区サンプル町9-8-7",
+    "合成会計タワー6F",
+    "電話: 0120-XXX-XXXX"
   ],
   "expectedFieldTiers": {
     "請求書": "core",
-    "請求書番号: SYN-INV-2026-0501": "core",
+    "請求番号: SYN-INV-2026-0501": "core",
     "発行日: 2026年5月21日": "core",
     "株式会社サンプル製作所 御中": "core",
     "月次顧問契約料 (2026年5月分)": "core",
@@ -24,7 +31,7 @@
   },
   "expectedValues": [
     {
-      "field": "請求書番号",
+      "field": "請求番号",
       "expectedValue": "SYN-INV-2026-0501",
       "tier": "core"
     },
@@ -35,7 +42,7 @@
     },
     {
       "field": "経理担当",
-      "expectedValue": "齋藤 試花",
+      "expectedValue": "青柳 試花",
       "tier": "core"
     },
     {
@@ -57,7 +64,7 @@
       "tier": "core"
     },
     {
-      "rowLabel": "決算書作成・申告準備",
+      "rowLabel": "決算書類作成・申告準備",
       "columnLabel": "金額",
       "expectedValue": "¥440,000",
       "tier": "core"
@@ -75,5 +82,5 @@
       "tier": "core"
     }
   ],
-  "notes": "2026-05-21: mainline extractScanPdfFromBuffer (gemini-2.5-flash) で再生成した sidecar から recall baseline を選定。旧 expected（印刷元 PDF 向け INV-2025 表記）は本線 OCR と未整合だったため更新。P1-D table cells use source-document intent; current OCR emits invoice rows as image_text blocks, so tableCellRecall exposes missing table structure."
+  "notes": "2026-05-21: mainline extractScanPdfFromBuffer (gemini-2.5-flash) で再生成した sidecar から recall baseline を選定。旧 expected（印刷元 PDF 向け INV-2025 表記）は本線 OCR と未整合だったため更新。P1-D table cells use source-document intent; current OCR emits invoice rows as image_text blocks, so tableCellRecall exposes missing table structure. Regenerated 2026-06-18 from mainline extractScanPdfFromBuffer (model=gemini-3.1-flash-lite, recall=1.00); curated expected tiers/values/table cells preserved. 2026-06-18 hygiene: aligned invoice number label, accounting contact, and line-item label with the synthetic PDF generator and current sidecar."
 }

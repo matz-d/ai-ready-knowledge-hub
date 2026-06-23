@@ -26,33 +26,39 @@
   "expectedValues": [
     {
       "field": "令和 年分",
-      "expectedValue": "給与所得の源泉徴収票"
+      "expectedValue": "給与所得の源泉徴収票",
+      "tier": "extended"
     },
     {
       "field": "支払を受ける者",
-      "expectedValue": "氏名"
+      "expectedValue": "氏名",
+      "tier": "extended"
     },
     {
       "field": "支払者",
-      "expectedValue": "氏名又は名称"
+      "expectedValue": "氏名又は名称",
+      "tier": "extended"
     }
   ],
   "expectedTableCells": [
     {
       "tableId": "p1-ocr3",
       "columnLabel": "支払金額",
-      "expectedValue": "円"
+      "expectedValue": "円",
+      "tier": "extended"
     },
     {
       "tableId": "p1-ocr3",
       "columnLabel": "給与所得控除後の金額",
-      "expectedValue": "円"
+      "expectedValue": "円",
+      "tier": "extended"
     },
     {
       "tableId": "p1-ocr3",
       "columnLabel": "源泉徴収税額",
-      "expectedValue": "円"
+      "expectedValue": "円",
+      "tier": "extended"
     }
   ],
-  "notes": "Source and license follow sample-data/document-conversion/README.md: NTA public blank withholding slip scan, no filled-in PII. Structured expectations target stable OCR labels and blank-form currency-unit cells only."
+  "notes": "Source and license follow sample-data/document-conversion/README.md: NTA public blank withholding slip scan, no filled-in PII. Structured expectations target stable OCR labels and blank-form currency-unit cells only. Regenerated 2026-06-18 from mainline extractScanPdfFromBuffer (model=gemini-3.1-flash-lite, recall=0.79); curated expected tiers/values/table cells preserved."
 }
