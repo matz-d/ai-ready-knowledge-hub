@@ -68,6 +68,14 @@ describe('SafetyReviewPanel', () => {
     expect(within(panel).getByText('給与計算に関連')).toBeTruthy();
     expect(within(panel).getByText('Restricted 情報')).toBeTruthy();
     expect(within(panel).getByText('古い／上書き候補')).toBeTruthy();
+    expect(within(panel).getAllByText('Decision Trace')).toHaveLength(3);
+    expect(within(panel).getByText('AI に渡せる候補として選択可能')).toBeTruthy();
+    expect(
+      within(panel).getByText('AI には渡さず Context Package から除外'),
+    ).toBeTruthy();
+    expect(
+      within(panel).getByText('人間が確認してから利用可否を判断'),
+    ).toBeTruthy();
     expect(within(panel).getByText('生成対象に選択中')).toBeTruthy();
 
     const missing = screen.getByTestId('cp-safety-missing');
