@@ -1,171 +1,171 @@
 # 3分デモシナリオ
 
 > この文書は動画デモのストーリーボードです。実行手順は [docs/demo-runbook.md](demo-runbook.md) を参照してください。
+> 撮影の狙いは「このプロダクトは LLM を呼んだだけでなく、**エージェントが自律的に判断している**」ことを、画面で証明することです。
 
-## 主役
+## このデモで取りに行く審査軸
 
-**Purpose Query** (Strategist Agent の知性)
+| 審査軸 | デモで当てるシーン |
+|---|---|
+| #1 AIエージェントである必然性（最重要） | **Decision Trace**。各文書・各候補に「どのエージェントがどう判断したか」の履歴が残る |
+| #2 課題アプローチ・新規性 | 機密文書を持つ SME の「AI 活用の前段」。士業事務所題材 |
+| #4 実用性・突き抜けた体験 | マスキングで「渡せない情報を渡せる化」、さらに「渡せない理由まで残す」 |
+| #3 ユーザビリティ | 自然言語の Purpose 入力 → 生成前 Safety Review |
+| #5 実装力・まわす | eval / CI による判断品質の継続検証を 1 カット挿入 |
 
-- Auto Mapping (Curator) は導入演出
-- Human Completion (Interviewer) は結果として出す位置づけ
-- Phase 3-E では「この目的でAIに渡してよい理由を説明できる」ことを主役にする
+## 主役: Decision Trace（エージェント判断の可視化）
+
+このデモの背骨は **Decision Trace**。直列に LLM を3回呼ぶパイプラインではなく、
+**Curator が分類し → Masker が再評価して機密度を覆し → Safety Gate が決定論的に除外する**、
+という複数エージェントの自律判断と権限委譲を、画面の判断履歴として見せる。
+
+- **文書詳細ページ**: 文書を開くと最上部に Decision Trace（`Curator 分類 → AI 利用方針 → 分類理由 → Masker 判定 → 格上げ理由 → Safety Gate → 最終状態`）。同じ事実を繰り返す分類 dl や個別セクションは整理済みで、画面が判断の物語を1本で語る。
+- **Context Package 生成前の Safety Review**: 候補ごとに `Decision Trace` を開くと、`include / exclude / needs_review` の最終判断と根拠（目的との照合・関連スコア・除外/確認理由・決定ルール）が、生成前に人間の目で確認できる。
+
+> 設計上の正直さ（ナレーションには出さないが破らない約束）: 候補選択は metadata-only の助言レイヤで本文を読まない。`include` は「渡せる**候補**」という予測、`exclude` は断言。本文を AI に渡す最終ゲートは生成経路の Safety Gate。Decision Trace の文言もこの区別を守っている。
 
 ---
 
-## デモ動画構成 (3分編集前提)
+## 想定企業
 
-| 秒数 | シーン | 見せたいもの |
-|---|---|---|
-| 0:00-0:15 | 課題提起 | 機密文書を扱うSMEの散らばった文書の山 (デモ題材は士業事務所) |
-| 0:15-0:40 | Dump → Curator / Masker | 複数ファイルをまとめて投入し、ファイルごとに分類・安全化が進む (Pre-processed可) |
-| 0:40-1:05 | Dashboard / Inventory | Pipeline Funnel、KPI、文書一覧で「AIに渡せる・保護中・マスキング済み」が一目で分かる |
-| 1:05-1:20 | cloud-managed + Cloud DLP + Masker | 標準 profile では管理されたクラウド境界で受け取り、個人情報を安全化してからAI参照版を作る |
-| 1:20-1:35 | **Masker→Curator 逆feedback (A8)** | **顧問契約書を Masker が「マスク後も特定され得る」と判定 → Restricted に格上げ → AIに渡さない理由が残る瞬間** |
-| 1:35-2:15 | Purpose Query → Safety Review | 「新人スタッフ向けに給与計算業務を学べるAIを作りたい」と入力し、候補・除外・要確認を生成前に確認 |
-| 2:15-2:40 | Strategist の出力 | 使える情報 / 除外すべき情報 / 足りない情報 / 質問リスト。各判断を目的に結びつけて見せる |
-| 2:40-3:00 | **クロージング + Export (A9)** | **Context Package を export → NotebookLM には source bundle、Gemini/RAG には単一 Markdown → purpose binding が残る → 下流 AI に渡す前段が完成** |
+従業員12名の会計・社労士合同事務所。機密文書と暗黙知を多く持つ SME の代表例として扱う。
+税務・労務の専門判断を AI が代替するのではなく、**AI に渡す前**の分類・マスキング・Context Package 化・不足情報の質問化を見せる。
+
+標準 profile は `cloud-managed`。SME が文書をアップロードすると、管理されたクラウド境界で分類・構造化し、Cloud DLP / Masker で安全化してから、目的に合う情報だけを Context Package にまとめる。高セキュリティ profile `cloud-sanitized-ingress` は「顧客側でサニタイズして送る選択肢も設計済み」程度に短く触れ、中心には置かない。
+
+### 想定の悩み
+- 顧問契約、給与計算、年末調整、就業規則、助成金相談、顧客対応メモ等が PDF / CSV / Excel / テンプレ / 個人メモに散らばっている
+- Gemini や NotebookLM を使いたいが、どの情報を入れてよいか、機密をそのまま渡してよいか分からない
+- 古い料金表や過去の顧客メモも混在し、担当者ごとの暗黙知も多い
+
+---
+
+## デモ動画構成（3分編集前提）
+
+| 秒数 | シーン | 映す画面 | 語り（agent性に結ぶ） |
+|---|---|---|---|
+| 0:00-0:15 | 課題提起 | 散らばった文書の山（士業事務所） | 「どれを AI に渡してよいか、人手では判断しきれない」 |
+| 0:15-0:40 | Dump → Curator / Masker | `/upload` の複数ファイルキュー | 「投入すると、エージェントがファイルごとに分類・安全化を始めます」 |
+| 0:40-1:00 | Inventory / Funnel | トップの Pipeline Funnel・KPI・文書一覧 | 「ただ保存ではなく、AI 可・マスク済・保護中へ自動で振り分く」 |
+| 1:00-1:25 | **マスクで参照可能化（伏線）** | 顧客情報を含む文書の詳細 → Decision Trace | 「個人情報を落として AI 参照版に。Curator→Masker→最終が履歴で見えます」 |
+| 1:25-1:55 | **クライマックス: 渡さない判断が見える** | 顧問契約書の詳細 Decision Trace | 「Masker が『マスク後も再識別可能』と判定 → Restricted へ格上げ → Safety Gate が除外。**渡さない理由まで残る**」 |
+| 1:55-2:30 | Purpose → Safety Review | Purpose 入力 → 候補ごとの Decision Trace | 「目的を入れると、候補ごとに include / exclude / needs_review の判断が生成前に見えます」 |
+| 2:30-2:45 | Strategist 出力 | 使える / 除外 / 足りない / 質問 | 「目的単位で、使える・渡せない・まだ足りない・人間に聞く、を整理」 |
+| 2:45-2:55 | **まわす（1カット挿入）** | CI green / eval gate の画面 | 「この判断品質は eval と CI で継続検証しています」 |
+| 2:55-3:00 | クロージング / Export | Markdown + NotebookLM bundle | 「使う理由と除外する理由を付けて、下流 AI に渡せる前段が完成」 |
 
 ---
 
 ## デモシナリオ詳細
 
-### 初期デモの想定企業
-従業員12名の会計・社労士合同事務所
-
-この題材は、機密文書と暗黙知を多く持つSMEの代表例として使う。税務・労務などの専門判断をAIが代替するのではなく、AIに渡す前の文書分類、マスキング、Context Package化、不足情報の質問化を見せる。
-
-Phase 3-E の説明では、標準 profile は `cloud-managed` として扱う。つまり、SMEが文書をアップロードすると、管理されたクラウド境界で分類・構造化し、Cloud DLP + Masker で安全化してから、目的に合う情報だけを Context Package にまとめる。将来の高セキュリティ profile である `cloud-sanitized-ingress` は「顧客側でサニタイズしてから送る選択肢も設計済み」程度に短く触れ、今回のデモの中心には置かない。
-
-### 想定の悩み
-- 顧問契約、給与計算、年末調整、就業規則、助成金相談、顧客対応メモ等がPDF/CSV/Excel/テンプレート/個人メモに散らばっている
-- GeminiやNotebookLMを使いたいが、どの情報を入れてよいか分からない
-- 古い料金表や過去の顧客メモも混在
-- 担当者ごとの暗黙知も多い
-
-### デモの流れ (詳細)
-
-**1. 雑多な資料を Upload へまとめて投入**
-契約書、料金表、給与計算チェックリスト、就業規則テンプレ、年末調整案内、顧客対応メモ、古い資料などを `/upload` で複数選択する。UI はファイルごとのキューを表示し、成功・失敗・再試行を個別に扱う。サーバ側は従来どおり `POST /api/documents` を1ファイルずつ通すため、デモでは「一括で集める体験」と「安全な単票処理」の両方を見せる。
+### 1. 雑多な資料を Upload へまとめて投入
+契約書、料金表、給与計算チェックリスト、就業規則テンプレ、年末調整案内、顧客対応メモ、古い資料などを `/upload` で複数選択する。UI はファイルごとのキューを表示し、成功・失敗・再試行を個別に扱う。サーバ側は `POST /api/documents` を1ファイルずつ通すため、「一括で集める体験」と「安全な単票処理」の両方を見せる。
 
 おすすめの撮影用セット:
 - `給与計算チェックリスト.md`
 - `料金表_2026.csv`
 - `就業規則テンプレート.md`
 - `年末調整_案内文.txt`
-- `顧問契約書_実案件サンプル.txt`
+- `顧問契約書_実案件サンプル.txt`（マスク後も再識別可能 → 格上げの主役）
 - `顧客対応メモ_匿名化.txt`
-- `古い料金表_2023.csv`
+- `古い料金表_2023.csv`（旧版候補 → 除外の例）
 
-**2. Curator Agent が自動分類**
-- 文書種別 (契約書、テンプレ、案内文、メモ、表 etc)
-- 業務領域 (給与計算、年末調整、就業規則、契約 etc)
-- 機密度 (Public / Internal / Confidential / Restricted)
-- 鮮度 (現行 / 旧版候補)
-- 正本候補 (重複候補のフラグ)
-- AI利用方針 (direct / requires_masking / blocked)
+### 2. Curator / Masker が自動処理
+Curator が文書種別 / 業務領域 / 機密度 / 鮮度 / 正本候補 / AI 利用方針を分類し、`requires_masking` の文書は Masker が個人情報・再識別リスクを落として AI 参照版を作る。
 
-**3. Masker Agent が機密文書をマスキング**
-顧客名簿の個人名・マイナンバー・住所が Cloud DLP + Masker でマスクされ、AI参照版として保存される。
+> ナレーション例:「標準の cloud-managed profile では、文書を管理されたクラウド境界で受け取り、AI に渡す前に個人情報と再識別リスクを落とします。」
 
-> ナレーション例: 「標準の cloud-managed profile では、文書を管理されたクラウド境界で受け取り、AIに渡す前に個人情報と再識別リスクを落とします。」
+### 3. Inventory / Funnel で全体像
+トップで Pipeline Funnel（登録 → 分類 → マスキング → AI 利用可 / 保護中）、KPI（AI 利用可 / マスキング実施 / 保護中）、文書一覧を短く見せ、個別文書へ目線を誘導する。
 
-**3.5. Masker が Curator の判定を覆す (逆feedback / A8)**
-顧問契約書については、Masker がマスキング後の文章を Vertex AI で再評価し、「特定顧客との契約条件が再識別可能」という残存リスクを検出する。
-Masker は `recommendedSensitivity: "Restricted"` を返し、Curator が管理する文書 metadata の機密度を `Confidential` から `Restricted` に格上げする。
-UI では当該文書カードに赤いバッジが付き、`ai_safe_version` は生成されず、以降の Strategist 処理から自動除外される。
+> ナレーション例:「集めた文書は、AI に渡せるもの・マスクして使うもの・人間確認に止めるものへ分かれます。」
 
-> ナレーション例: 「マスクで渡せる情報もあれば、マスクしても渡せない情報もあります。この文書は、AIに渡さない理由まで残します。」
+### 4. マスクで「渡せる化」を見せる（伏線）
+顧客情報を含む文書を開く。文書詳細の最上部に **Decision Trace** が出る:
+`Curator 分類 → AI 利用方針（要マスキング）→ Masker 判定（残存リスクなし）→ 最終状態（AI 利用可）`。
+個人情報がマスクされ AI 参照版になったことを、判断履歴として見せる。
 
-このシーンは作品の Agent性を一番明確に見せる山場。直列パイプラインではなく、エージェント間の協調と権限委譲が起きていることを伝える。
+> ナレーション例:「機密で渡せなかった情報が、マスクで渡せる状態になりました。」
 
-**4. Dashboard / Inventory を表示**
-トップページで Pipeline Funnel、KPI、文書一覧を見せる。ここでは「何件がAI利用可か」「何件がマスキング済みか」「何件が保護中か」を短く見せ、個別文書の status / sensitivity / AI利用方針へ目線を誘導する。
+### 5. クライマックス: 「渡さない判断」を Decision Trace で見せる
+顧問契約書を開く。ここが作品の Agent 性を一番明確に見せる山場。Decision Trace が:
+- `Curator 分類`: 契約書 / 顧問契約管理 / 機密
+- `Masker 判定`: 残存リスクあり / 推奨機密度 厳重管理
+- `格上げ理由`: マスク後も特定顧客との契約条件が再識別可能
+- `Safety Gate`: 決定論的な安全ゲートにより AI 利用から除外
+- `最終状態`: 保護中 / 厳重管理
 
-> ナレーション例: 「集めた文書は、ただ保存されるのではなく、AIに渡せるもの・マスクして使うもの・人間確認に止めるものへ分かれます。」
+と並ぶ。直列パイプラインなら起きない、**Masker が Curator の判定を覆し、Safety Gate が最終的に止める**という協調と権限委譲が、1枚の履歴として読める。
 
-**5. ユーザが目的を入力**
-> 「新人スタッフ向けに、給与計算業務を学べるAIを作りたい」
+> ナレーション例:「マスクで渡せる情報もあれば、マスクしても渡せない情報もある。このエージェントは、AI に渡さない理由まで残します。」
 
-Purpose を入れたら、すぐ生成せず、まず候補選択 UI を見せる。include / exclude / needs review の違い、Safety Review、Pre-generation Preview を順に映す。ここで「本文をAIに渡す前に、人間が安全性を確認できる」ことを伝える。
+### 6. Purpose Query → 生成前 Safety Review
+> 「新人スタッフ向けに、月次の給与計算業務を安全に学べる AI を作りたい」
 
-**6. Strategist Agent が AI-ready Context Package を生成**
-- **使える情報** : 給与計算チェックリスト (現行版)、就業規則テンプレ、年末調整案内文
-- **除外すべき情報** : 古い料金表、顧客固有のメモ、マスク後も危険な契約書
-- **足りない情報** : 例外処理ケース、過去のトラブル事例
-- **確認質問** (Interviewer Agent から):
+Purpose を入れたら、すぐ生成せず、まず候補選択 / Safety Review を見せる。候補ごとに `Decision Trace` を開き、`include / exclude / needs_review` の最終判断と根拠（目的との照合・関連スコア・除外/確認理由・決定ルール）を映す。山場（5）の格上げ結果が、ここでも顧問契約書が exclude 側に並ぶ形で引き継がれていることを示す。
+
+> ナレーション例:「本文を AI に渡す前に、候補ごとの判断を人間が確認できます。」
+
+### 7. Strategist が Context Package を生成
+- **使える情報**: 給与計算チェックリスト（現行版）、就業規則テンプレ、年末調整案内文
+- **除外すべき情報**: 古い料金表（旧版候補）、顧客固有のメモ、マスク後も危険な顧問契約書（Restricted）
+- **足りない情報**: 例外処理ケース、過去のトラブル事例
+- **人間に確認すべき質問**（Strategist が生成）:
   - 「給与計算で必ず先輩確認が必要な条件は何ですか?」
   - 「顧客ごとに例外処理が発生するパターンは何ですか?」
   - 「法改正時にどの資料を正本として更新しますか?」
 
-ここでは「この目的なら使える」「この目的でも渡せない」「この目的にはまだ足りない」という目的単位の説明に寄せる。技術的な内部名より、担当者が上司や顧客に説明できる判断結果として見せる。
+「この目的なら使える / この目的でも渡せない / この目的にはまだ足りない」という目的単位の説明に寄せる。内部名より、担当者が上司や顧客に説明できる判断結果として見せる。async 本番デモでは `queued / running / succeeded` の polling を短く挟む（ローカル同期デモでは省略可）。
 
-async Context Package が有効な本番デモでは、`queued` / `running` / `succeeded` の polling 表示を短く挟む。ローカル同期デモでは、このカットは省略してよい。
+### 8. まわす（短い挿入カット）
+Strategist 出力の直後に、GitHub Actions の green と eval gate（`pnpm eval:p1d:quality --ci` / conversion eval）の画面を 5〜10 秒だけ挿入する。
 
-**7. Export Context Package**
+> ナレーション例:「これらの判断は思いつきではなく、eval と CI で継続検証しています。」
 
-2つの export 導線を見せる（UI の result panel に両方ある）。
-
-- **単一 Markdown（primary）**: Purpose Query に対して選ばれた文書セットを1つの `.md` にまとめる。Package Manifest、下流 AI 向け Instructions、Included / Excluded のメタ情報、および `Full AI-Ready Sources` に採用文書の AI 参照版本文を含める。Restricted 文書や旧版候補の本文は含めず、除外理由だけを残す。Gemini への貼り付け、RAG 取り込み、監査用の記録として使う。
-- **NotebookLM 用 source bundle（secondary）**: `00-CONTEXT-PACKAGE-GUIDE.md`（メタガイド）と included 文書の本文ファイルだけを zip にまとめる。excluded / restricted / human-review 文書はソースファイルとして含めない（bundle に不在＝意図的な除外）。E2E 検証で、単一 `.md` を NotebookLM の1ソースにすると manifest を「構成案」と誤読し本文を grounding できないことが実証済み（[delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md)）。
+### 9. Export Context Package
+result panel の2つの export を見せる。
+- **単一 Markdown（primary）**: Package Manifest、下流 AI 向け Instructions、Included / Excluded のメタ情報、`Full AI-Ready Sources`（採用文書の AI 参照版本文）を含む。Restricted 文書や旧版候補の本文は含めず、除外理由だけを残す。Gemini への貼り付け、RAG 取り込み、監査記録に使う。
+- **NotebookLM 用 source bundle（secondary）**: `00-CONTEXT-PACKAGE-GUIDE.md`（メタガイド）と included 文書の本文ファイルだけを zip にまとめる。excluded / restricted / human-review 文書はソースとして含めない（bundle に不在＝意図的な除外）。単一 `.md` を NotebookLM の1ソースにすると manifest を「構成案」と誤読し本文を grounding できないことを E2E 検証済み（[delivery-e2e ログ](delivery-e2e/2026-06-09-verification-log.md)）。
 
 どちらにも purpose binding が残るため、「どの目的でこの情報セットを AI に渡したのか」を後から説明できる。
+
+> ナレーション例:「使う理由と除外する理由を付けて、NotebookLM にはメタと本文を分けた bundle を渡します。」
 
 ---
 
 ## 重要な演出ポイント
 
-### Pre-processed mode の活用
-- 複数ファイル upload は見せる。ただし 50 ファイルを実時間で処理するとデモ尺で苦しいため、撮影では 5〜7 件程度に絞る
-- 事前にCurator結果を流し込んだデモ用データ状態を用意する場合でも、通常 UI は固定 fixture を読まない
-- W1 の実 LLM 出力は `docs/w1-artifacts/inventory.snapshot.json` に回顧用 artifact として残す
-- デモ動画は実 Firestore / API 経路に投入済みの状態から開始できるようにする
-- ただし「Live mode」も用意 (Proto Pediaで判定者が触る場合)
-
-### Dashboard / Inventory の見せ方
-- 旧ヒートマップではなく、現在の UI は Pipeline Funnel、KPI、文書一覧を主役にする
-- Funnel では「登録 → 分類 → マスキング → AI利用可 / 保護中」の流れを見せる
-- KPI では `AI利用可`、`マスキング実施`、`保護中（AI除外）` の3点を読む
-- 文書一覧では、`Restricted` や `blocked` の行を深掘りし、「本文を渡さない理由が残る」ことを説明する
+### Decision Trace の見せ方（最重要）
+- 文書詳細は整理済みで、開くと **Decision Trace が最初のセクション**に出る。カメラはまずここに当てる。重複していた分類 dl・Curator 判定理由セクション・格上げバナーは「補足属性（鮮度・正本候補）」へ集約済みなので、画面と語りが1対1で一致する。
+- 山場（顧問契約書）は、`Masker 判定 → 格上げ理由 → Safety Gate → 最終状態` の4ステップを上から順に指でなぞるように見せると、「覆して・止める」協調が伝わる。
+- Safety Review では、`exclude` 列の候補で `Decision Trace` を開き、決定ルール（例: `restricted_sensitivity`）まで見せると「除外は断言」が伝わる。
 
 ### マスキングの見せ方
-- 「機密で渡せない」→「マスクで渡せる」の変化を視覚的に
-- 顧客名簿の人名が `[REDACTED:PERSON_NAME]` などに置換される瞬間を見せる
-- 「この目的ならAIに渡せる状態になりました」のメッセージを添える
-- Cloud DLP や Masker の名前は短く出し、説明は「個人情報を落とす」「マスク後も危ないものは止める」に寄せる
-
-### 逆feedback の見せ方 (A8)
-- マスク済みプレビュー画面に Masker のコメントを吹き出しで表示する: 「マスク後も特定顧客との契約条件が再識別可能です」
-- Curator の機密度バッジが `Confidential` (黄) から `Restricted` (赤) に **アニメーションで切り替わる** カットを入れる
-- バッジの隣に `Promoted by Masker` の小さなラベルを置き、Curator 単体ではなく Masker からの提案で格上げされたことを明示する
-- 「変換する。でも危険なら止める」というキャプションを添えると物語が締まる
+- 「機密で渡せない」→「マスクで渡せる」の変化を視覚的に。人名が `[REDACTED:PERSON_NAME]` などに置換される瞬間を見せる。
+- Cloud DLP / Masker の名前は短く出し、説明は「個人情報を落とす」「マスク後も危ないものは止める」に寄せる。
 
 ### Purpose Query の知性を強調
-- 「使える情報」だけでなく「足りない情報」を出すのが肝
-- 「確認質問」が出ることで、人間との協業感を演出
-- Strategist の判断理由を短く可視化 (「これを使う理由」を表示。内部推論そのものは出さない)
-- Excluded セクションに Restricted 文書を `Status: Restricted / human review only` として並べる。これにより A8 の逆feedback の結果が Strategist の出力にも引き継がれていることが視覚的に伝わる
-- purpose binding を「このAIの用途に対する利用根拠」として見せる。監査用語として深掘りしすぎず、「あとから説明できる」ことを強調する
-- 生成前の候補選択では、候補 API が metadata-only の助言レイヤであり、最終的に本文を渡すかは既存生成経路の safety gate が判定する、と短く説明できる
+- 「使える情報」だけでなく「足りない情報」と「人間への質問」を出すのが肝。RAG / NotebookLM がやらない差別化点。
+- Strategist の判断理由は短く可視化（「これを使う理由」を表示。内部推論そのものは出さない）。
+- Excluded セクションに Restricted 文書を `human review only` として並べ、山場の格上げ結果が出力にも引き継がれることを見せる。
 
-### Export の見せ方 (A9)
-- Context Package 結果画面で2つの export を見せる: **Markdown をダウンロード**（primary）と **NotebookLM 用 bundle をダウンロード**（secondary）
-- **単一 Markdown**: ボタンをクリック → `.md` をダウンロード → エディタで `Package Manifest` → purpose → `Instructions for Downstream AI` → `Included Documents` → `Excluded Documents` → `Full AI-Ready Sources` の構造を見せる。Gemini や RAG への投入、コピー用の primary artifact として説明する
-- **NotebookLM 用 bundle**: zip をダウンロード → 解凍 → `00-CONTEXT-PACKAGE-GUIDE.md` と included 生ソースを**すべて** NotebookLM の `Add source` に追加するカット（実 NotebookLM 画面でも、モック UI でも可）。単一 `.md` を NotebookLM に1ソースとして渡す見せ方はしない
-- キャプション: 「AI に渡す前に、使う理由と除外する理由が揃いました。NotebookLM にはメタと本文を分けた bundle を渡します」
-- このシーンを最後に置くことで、「前段プラットフォーム」の主張が物理的に成立した状態でデモを閉じる
+### 撮影モードの注意
+- 複数ファイル upload は見せるが、撮影では 5〜7 件に絞る（50 件を実時間で処理すると尺で苦しい）。
+- 実 Firestore / API に投入済みの状態から開始してよい。Proto Pedia で審査員が触る場合に備え「Live mode」も用意する。
+- Decision Trace の `Curator 分類` ステップは Curator の元判定を表示する。元判定の記録が無い旧データは録画に使わず、新規アップロード文書を使う。
 
 ---
 
-## NG演出 (避けるべき)
-
-- NotebookLMやGeminiの代替に見せる演出 (本作品は前段)
-- RAGチャットの実演 (今回スコープ外)
-- 税務・労務などの専門判断をAIが代替するように見せる演出
-- 複雑な技術用語の連発 (機密文書を扱うSMEの経営者目線で説明する)
+## NG 演出（避ける）
+- NotebookLM / Gemini の代替に見せる（本作品は前段）
+- RAG チャットの実演（スコープ外）
+- 税務・労務などの専門判断を AI が代替するように見せる
+- 実装にないエージェント名を語る（実装は Curator / Masker / Strategist と、metadata-only の Candidate selector。質問は Strategist が生成する）
+- 複雑な技術用語の連発（機密文書を扱う SME の経営者目線で説明する）
 
 ---
 
 ## 関連ドキュメント
-
+- [docs/demo-runbook.md](demo-runbook.md) — 実行手順
 - [docs/concept.md](concept.md) — プロダクトコンセプト
-- [docs/scope.md](scope.md) — MVPスコープ
+- [docs/scope.md](scope.md) — MVP スコープ

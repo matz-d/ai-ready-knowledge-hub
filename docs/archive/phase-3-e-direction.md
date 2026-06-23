@@ -525,7 +525,7 @@ Phase 3-E 完了後の候補は次の通り。
 ## 関連ドキュメント
 
 - [docs/phase-3-d-direction.md](phase-3-d-direction.md) — CI/CD + IAP + AuditEvent
-- [docs/open-questions.md](open-questions.md) — 次フェーズ候補と未決定事項
-- [docs/decisions.md](decisions.md) — 採用判断ログ
-- [docs/demo-scenario.md](demo-scenario.md) — デモシナリオ
+- [docs/open-questions.md](../open-questions.md) — 次フェーズ候補と未決定事項
+- [docs/decisions.md](../decisions.md) — 採用判断ログ
+- [docs/demo-scenario.md](../demo-scenario.md) — デモシナリオ
 - [docs/phase-2-design.md](phase-2-design.md) — KnowledgeChunk / Context Package 設計

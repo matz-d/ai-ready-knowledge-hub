@@ -12,7 +12,7 @@
 - `POST /api/context-package` は同期応答を継続しつつ、pre-LLM budget 適用後の推定時間が 20 秒目標を超える場合は **422 `sync_budget_exceeded`** を返す。
 - 422 では「対象を絞ってください」を明示し、`docIds` フィルタ（+ `limit` 調整）で再試行するガイダンスを返す。
 - これにより browser/IAP fetch での無言 502 に寄る前に、説明可能な API 応答へ fail-fast させる。
-- **2026-06-02 re-smoke:** 既定 budget は `maxTotalPromptChars: 45_000` に調整済み。全 Inventory のローカル smoke は `474` candidates を `80` chunks に制限し、`394` drops を metadata に記録した。Cloud Run + IAP の docId 指定 smoke は HTTP `200` / `33.716s`、unknown docId は HTTP `400` で UI に詳細表示した。証跡は [phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
+- **2026-06-02 re-smoke:** 既定 budget は `maxTotalPromptChars: 45_000` に調整済み。全 Inventory のローカル smoke は `474` candidates を `80` chunks に制限し、`394` drops を metadata に記録した。Cloud Run + IAP の docId 指定 smoke は HTTP `200` / `33.716s`、unknown docId は HTTP `400` で UI に詳細表示した。証跡は [phase-3-m-pdf-masker-live-smoke.md](archive/phase-3-m-pdf-masker-live-smoke.md)。
 
 **非同期 job 化（実装済み 2026-06-02、Cloud Tasks → worker）**
 
@@ -48,7 +48,7 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
 - IAP audience 付き Worker SA token で `POST /api/context-package` を呼び、job `8ce6a64b-54a5-4368-b7b6-866406c3d308` が **HTTP 202 `queued` → polling `running` → `succeeded` → result HTTP 200** を完走した。Cloud Tasks から worker `/run` への request も HTTP 200。
 - 初回応答は同期 smoke の `33.716634292s` から `1.295306353s` へ短縮（`32.421s`、約 `96%` 削減）。worker 実行は `19.652927793s`、polling で result 取得まで約 `22.5s`。生成時間自体はモデル応答で変動するため、主効果は UI の待機ブロック解消、retry、lease、冪等性。
 - `NEXT_PUBLIC_CONTEXT_PACKAGE_ASYNC_ENABLED=true` を Docker build-arg で本番 client bundle に焼き込み、`mode:"auto"` と polling UI が含まれることを確認した。今回の最終 smoke は service-to-service IAP 境界の検証であり、human browser の手動操作は追加していない。
-- **PR #14 merge 後 re-smoke（2026-06-03 JST）:** revision `ai-ready-knowledge-hub-00035-jwv` で job `8b84a2a1-48d2-4810-97e1-3501db79ac97` が HTTP `202` in `3.647s` → polling `running/succeeded` → result HTTP `200` を完走。worker `/run` は HTTP `200` in `19.677s`、queue pending task なし。service-to-service IAP token 発行用の一時 Token Creator binding は検証後に削除済み。詳細は [phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)。
+- **PR #14 merge 後 re-smoke（2026-06-03 JST）:** revision `ai-ready-knowledge-hub-00035-jwv` で job `8b84a2a1-48d2-4810-97e1-3501db79ac97` が HTTP `202` in `3.647s` → polling `running/succeeded` → result HTTP `200` を完走。worker `/run` は HTTP `200` in `19.677s`、queue pending task なし。service-to-service IAP token 発行用の一時 Token Creator binding は検証後に削除済み。詳細は [phase-3-m-pdf-masker-live-smoke.md](archive/phase-3-m-pdf-masker-live-smoke.md)。
 
 **残タスク（R10 後続）**
 - **UI の docIds 導線**: Inventory から docId を選ぶ UX（手入力以外）。
@@ -110,7 +110,7 @@ IAP 越し同期生成に `33.716s` を要した実測（上記 re-smoke）を�
 
 **位置付け: 「実装完成」ではなく「技術リスク検証」**
 
-5/8 中に W1-1〜W1-4 + 統合作業まで完了。詳細振り返りは [docs/week1-retrospective.md](week1-retrospective.md)。
+5/8 中に W1-1〜W1-4 + 統合作業まで完了。詳細振り返りは [docs/week1-retrospective.md](archive/week1-retrospective.md)。
 
 **到達点:**
 
@@ -206,7 +206,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 - **目的**: 共有済み Drive **フォルダ** を指定し、配下の Sheets / Docs / PDF 等を **バッチで** snapshot import する（運用担当の手作業 URL 貼り付けを減らす）。
 - **スコープ案**: `POST /api/import/google-drive/batch`（仮）または admin script。列挙 → 既存 `importedSnapshotOrchestrator` / upload 経路へ fan-out。進捗・失敗 docId のレポート。
 - **着手前に決める**: 列挙深度、MIME フィルタ、1 run の件数上限、レート制限、非同期化（Cloud Tasks）要否。**OAuth user delegation は使わない**（SA + 共有モデル維持か要 decision）。
-- **依存**: IAP 認可・レート制限（[phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) §8 候補）、chunks async 化（大量時）。
+- **依存**: IAP 認可・レート制限（[phase-3-b-workspace-resync.md](archive/phase-3-b-workspace-resync.md) §8 候補）、chunks async 化（大量時）。
 - **スコープ外（継続）**: Drive **全体クロール**、顧客ドライブ全自動スキャン（[docs/scope.md](scope.md)）。
 
 **候補 3 — Ingest: local directory batch**
@@ -222,24 +222,24 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 - **スコープ案**: Cloud Scheduler + `modifiedTime` ポーリング、または Drive Push → Pub/Sub → re-import job。3-B の `contentSha256` スキップと de-dup を再利用。
 - **着手前に決める**: 同期対象（登録済み `fileId` のみ vs フォルダ watch）、頻度、失敗時リトライ、tenant ごとのコスト上限、ユーザー向け「同期 ON/OFF」UI。
 - **依存**: 候補 2（フォルダ bulk）と非同期 orchestration。HTTP API 認可（3-D IAP は UI 向け、バッチ用 SA は別検討）。
-- **関連**: [phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) §8「自動同期」— 本節へ集約。
+- **関連**: [phase-3-b-workspace-resync.md](archive/phase-3-b-workspace-resync.md) §8「自動同期」— 本節へ集約。
 
 **推奨着手順（仮・product 未確定）**
 
-1. ~~Masker PDF 本線~~ → **完了**（`D-P3-M-PDF-1`）。dev tenant live smoke 証跡も完了（[phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）
+1. ~~Masker PDF 本線~~ → **完了**（`D-P3-M-PDF-1`）。dev tenant live smoke 証跡も完了（[phase-3-m-pdf-masker-live-smoke.md](archive/phase-3-m-pdf-masker-live-smoke.md)）
 2. Ingest: local directory batch **または** Drive folder bulk（デモ・実務で効く一括のどちらか先）
 3. Ingest: standalone images
 4. Workspace: Drive sync（2/3 が安定してから）
 5. Phase 3-F / 3-G は並行またはポスト提出
 
-**M6 証跡**: [docs/phase-3-h-3-scan-pdf-live-smoke.md](phase-3-h-3-scan-pdf-live-smoke.md)。DoD: [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8.3。
+**M6 証跡**: [docs/phase-3-h-3-scan-pdf-live-smoke.md](archive/phase-3-h-3-scan-pdf-live-smoke.md)。DoD: [docs/phase-3-h-3-direction.md](archive/phase-3-h-3-direction.md) §8.3。
 
 ---
 
 ## 細かい未決定事項
 
 ### Genkit 設定の詳細
-- **決定済み**: Cloud Run へのデプロイ方式は Next.js standalone + multi-stage Dockerfile。正本は [docs/phase-3-d-direction.md](phase-3-d-direction.md)。
+- **決定済み**: Cloud Run へのデプロイ方式は Next.js standalone + multi-stage Dockerfile。正本は [docs/phase-3-d-direction.md](archive/phase-3-d-direction.md)。
 - Genkit Flow の Server Action からの呼び出し方
 - 環境変数 (Vertex AIプロジェクトID、リージョン等) の管理
 
@@ -258,7 +258,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 
 ### Phase 3-H-2 で解消した未決（2026-05-20）
 
-以下は [docs/decisions.md](decisions.md) と [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) に正本化済み。H-3 では再議論しない（変更時は新しい決定エントリを足す）。
+以下は [docs/decisions.md](decisions.md) と [docs/phase-3-h-2-direction.md](archive/phase-3-h-2-direction.md) に正本化済み。H-3 では再議論しない（変更時は新しい決定エントリを足す）。
 
 | 論点 | 解消内容 | 出典 |
 |---|---|---|
@@ -273,15 +273,15 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 | 評価器 CI 接続タイミング | health = PR 必須 + ruleset、heuristic = warning、golden = 月次 | `D-P3-H-5b` |
 | 最初の縦串 subtype | `official-doc-pdf` | `D-P3-H-2` |
 
-**H-2 完了後の初回運用タスク（未決ではないが優先作業）:** golden `expected.json` チューニング（初回 recall ベースライン §7.4、[docs/phase-3-h-2-monthly-review.md](phase-3-h-2-monthly-review.md)）。
+**H-2 完了後の初回運用タスク（未決ではないが優先作業）:** golden `expected.json` チューニング（初回 recall ベースライン §7.4、[docs/phase-3-h-2-monthly-review.md](archive/phase-3-h-2-monthly-review.md)）。
 
 ---
 
 ### Phase 3-H-3（slide-pdf / scan-pdf 本線統合）
 
-**subtype 2（slide-pdf）完了（2026-05-20）:** PR #3（`38d15ff`）で M1〜M5 + live smoke 完了。証跡は [docs/phase-3-h-3-slide-pdf-live-smoke.md](phase-3-h-3-slide-pdf-live-smoke.md)。
+**subtype 2（slide-pdf）完了（2026-05-20）:** PR #3（`38d15ff`）で M1〜M5 + live smoke 完了。証跡は [docs/phase-3-h-3-slide-pdf-live-smoke.md](archive/phase-3-h-3-slide-pdf-live-smoke.md)。
 
-**subtype 3（scan-pdf）完了（2026-05-21）:** [docs/decisions.md](decisions.md) `D-P3-H-7` の M6 方針に沿って本線統合、OCR fail-closed、eval/CI、dev tenant live smoke を完了。証跡は [docs/phase-3-h-3-scan-pdf-live-smoke.md](phase-3-h-3-scan-pdf-live-smoke.md)、DoD は [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8.3。
+**subtype 3（scan-pdf）完了（2026-05-21）:** [docs/decisions.md](decisions.md) `D-P3-H-7` の M6 方針に沿って本線統合、OCR fail-closed、eval/CI、dev tenant live smoke を完了。証跡は [docs/phase-3-h-3-scan-pdf-live-smoke.md](archive/phase-3-h-3-scan-pdf-live-smoke.md)、DoD は [docs/phase-3-h-3-direction.md](archive/phase-3-h-3-direction.md) §8.3。
 
 **確定済み（H-3 では再議論しない）:**
 - **slide-pdf 本線の `pdf-parse` fallback は持たない（fail-closed）** — Gemini 呼出失敗時は subtype 1 同様に chunk 化を中断する。PoC runner の fallback / `SLIDE_PDF_SKIP_GEMINI` は PoC 専用として温存（`D-P3-H-6 Q2` 確定、2026-05-20）。
@@ -295,7 +295,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 - PoC の `ocrUsage` / `ocrCost` を `ConversionEvalResult` 本線 schema に昇格するか
 - `unmaskablePiiFindings` 閾値の fail-closed への切替判断（Masker 統合後、別 decision で起票）
 - ~~scan-pdf の `coverage.pageCoverage` / `locatorQuality.hasPageLocators` eval-shape~~ — **解消済み（2026-05-29）:** `pageEvidence.ts` が `imageText` locator / warning を page evidence として集計。health eval の scan-pdf fixture は `pageCoverage=1` / `hasPageLocators=true`。
-- ~~`ai_safe` PDF を含む Context Package export smoke（masked GCS body / masked chunks の採用確認）~~ — masked chunks 採用は確認済み（[phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）。
+- ~~`ai_safe` PDF を含む Context Package export smoke（masked GCS body / masked chunks の採用確認）~~ — masked chunks 採用は確認済み（[phase-3-m-pdf-masker-live-smoke.md](archive/phase-3-m-pdf-masker-live-smoke.md)）。
 - ~~Context Package endpoint の pre-LLM token/chunk budget~~ — **実装済み（2026-05-29）、live re-smoke 完了（2026-06-02）:** `budget.ts` + 422 `sync_budget_exceeded`。既定 `maxTotalPromptChars: 45_000`、全 Inventory `474 → 80` chunks / `394` drops、Cloud Run + IAP HTTP `200` / `33.716s` を確認。~~非同期 job 化（R10）~~ も **本番配線 / live smoke 完了**。残: UI docIds 選択 UX。
 
 **M1 / M6 共通運用（確定・再議論しない）:**
@@ -312,8 +312,8 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 - **`coverage.pageCoverage` の再確認** — official-doc-pdf 観測が 10 件程度溜まったら `>= 1.0` pass の妥当性を見直す。
 - **案 C（成熟度別 blocker 軸）への移行条件** — 案 B 試走後の再評価（現状維持）。
 - **feature flag 公開範囲拡大条件** — subtype 1 は dev tenant 限定のまま。subtype 2/3 は別 flag で再判断。
-- **`inferenceDestination`** — subtype 2/3 の Vertex 呼出時に `document.convert` へ必須（[docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §4.2）。
-- ~~**Masker 本線統合（PDF 経路）**~~ — **完了**（`D-P3-M-PDF-1`、live smoke 証跡: [phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md)）。~~scan-pdf locator / coverage eval 見直し~~ — **解消済み**（`pageEvidence.ts`、health eval `pageCoverage=1` / `hasPageLocators=true`）。~~Context Package pre-LLM budget~~ — **実装済み・live re-smoke 完了**（`budget.ts`、strict docIds、422 `sync_budget_exceeded`、既定 `maxTotalPromptChars: 45_000`）。~~非同期 job 化（R10）~~ — **本番配線 / live smoke 完了**。残: `safety_readiness` 本格評価、`unmaskablePiiFindings` 閾値再評価、UI docIds 選択 UX。
+- **`inferenceDestination`** — subtype 2/3 の Vertex 呼出時に `document.convert` へ必須（[docs/phase-3-h-3-direction.md](archive/phase-3-h-3-direction.md) §4.2）。
+- ~~**Masker 本線統合（PDF 経路）**~~ — **完了**（`D-P3-M-PDF-1`、live smoke 証跡: [phase-3-m-pdf-masker-live-smoke.md](archive/phase-3-m-pdf-masker-live-smoke.md)）。~~scan-pdf locator / coverage eval 見直し~~ — **解消済み**（`pageEvidence.ts`、health eval `pageCoverage=1` / `hasPageLocators=true`）。~~Context Package pre-LLM budget~~ — **実装済み・live re-smoke 完了**（`budget.ts`、strict docIds、422 `sync_budget_exceeded`、既定 `maxTotalPromptChars: 45_000`）。~~非同期 job 化（R10）~~ — **本番配線 / live smoke 完了**。残: `safety_readiness` 本格評価、`unmaskablePiiFindings` 閾値再評価、UI docIds 選択 UX。
 
 ### 提供形態
 
@@ -335,7 +335,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 
 ### CI/CD認証
 
-**Phase 3-D 完了（2026-05-14）。正本は [docs/decisions.md](decisions.md) の `D-P3-D` と [docs/phase-3-d-direction.md](phase-3-d-direction.md)。**
+**Phase 3-D 完了（2026-05-14）。正本は [docs/decisions.md](decisions.md) の `D-P3-D` と [docs/phase-3-d-direction.md](archive/phase-3-d-direction.md)。**
 
 | 論点 | 決定 |
 |---|---|
@@ -368,7 +368,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 
 ### Phase 3-G 引き継ぎ（`cloud-sanitized-ingress`）
 
-**Phase 3-E で文書固定済み（実装なし）:** 将来の当社 ingress が受け取るマスク済み payload の最小 JSON 形、`boundaryEvidence` の必須キー、`correlationId` の役割、未マスク疑い時の fail-closed 拒否の考え方、および Phase 3-E に含めない範囲（Edge Sanitizer、顧客 GCP deploy、BYOC、Terraform、sanitized payload 受理 endpoint）。正本は [docs/phase-3-e-direction.md](phase-3-e-direction.md) §5.2。
+**Phase 3-E で文書固定済み（実装なし）:** 将来の当社 ingress が受け取るマスク済み payload の最小 JSON 形、`boundaryEvidence` の必須キー、`correlationId` の役割、未マスク疑い時の fail-closed 拒否の考え方、および Phase 3-E に含めない範囲（Edge Sanitizer、顧客 GCP deploy、BYOC、Terraform、sanitized payload 受理 endpoint）。正本は [docs/phase-3-e-direction.md](archive/phase-3-e-direction.md) §5.2。
 
 **Phase 3-G で検討する未決（実装に入るとき）:**
 
@@ -382,7 +382,7 @@ M6 完了後、docs 上バラバラだった「画像ソース」「一括投入
 
 ## 関連ドキュメント
 
-- [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) — Phase 3-H-2 完了スナップショット（§13）
+- [docs/phase-3-h-2-direction.md](archive/phase-3-h-2-direction.md) — Phase 3-H-2 完了スナップショット（§13）
 - [docs/decisions.md](decisions.md) — 確定事項
 - [docs/architecture.md](architecture.md) — 技術構成
 - [docs/concept.md](concept.md) — プロダクトコンセプト

@@ -104,5 +104,5 @@ PDF media は `inputTokens` に算入されず（Gemini の image/media アタ�
 
 ## 関連ドキュメント
 
-- [docs/decisions.md](decisions.md) `D-P3-H-7 Q3` — 本計測値に基づく確定値
+- [docs/decisions.md](../decisions.md) `D-P3-H-7 Q3` — 本計測値に基づく確定値
 - [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8.3 M6-1 DoD — 着手ゲート 3 完了

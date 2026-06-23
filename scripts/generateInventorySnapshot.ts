@@ -1,5 +1,5 @@
 import './loadEnv';
-import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { curatorFlow } from '../src/agents/curator/flow';
 import { maskerRiskFlow } from '../src/agents/masker/flow';
@@ -8,7 +8,7 @@ import type { ResidualRiskOutputResult } from '../src/agents/masker/schema';
 
 /**
  * sample-data/accounting-office を curatorFlow に通し、
- * docs/w1-artifacts/inventory.snapshot.json として W1 回顧用の実 LLM 出力を保存する。
+ * docs/archive/w1-artifacts/inventory.snapshot.json として W1 回顧用の実 LLM 出力を保存する。
  *
  * この snapshot は実アプリ UI からは読まない。W1 の判定結果を後から確認するための
  * archived artifact として扱う。
@@ -27,6 +27,7 @@ const MASKED_DIR = path.resolve(process.cwd(), 'sample-data', 'masked');
 const OUTPUT_FILE = path.resolve(
   process.cwd(),
   'docs',
+  'archive',
   'w1-artifacts',
   'inventory.snapshot.json'
 );
@@ -115,6 +116,7 @@ async function main(): Promise<void> {
     );
   }
 
+  await mkdir(path.dirname(OUTPUT_FILE), { recursive: true });
   await writeFile(OUTPUT_FILE, JSON.stringify(snapshot, null, 2) + '\n', 'utf8');
   console.log(`\nWrote snapshot: ${path.relative(process.cwd(), OUTPUT_FILE)}`);
   console.log(

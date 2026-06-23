@@ -2,7 +2,7 @@
 
 Upload / Google Workspace import → Firestore/GCS → Inventory → Context Package → source bundle export を再現するための実行手順です。
 
-現時点の提出デモでは、PDF / CSV / XLSX / Google Sheets / Google Docs の主要 ingest、`/upload` の複数ファイルキュー、Phase 4-UX の purpose-driven candidate selection、Safety Review、Preview acknowledgement、async Context Package job、NotebookLM 用 source bundle が実装済みです。**Google Sheets** は [Phase 3-A](phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。
+現時点の提出デモでは、PDF / CSV / XLSX / Google Sheets / Google Docs の主要 ingest、`/upload` の複数ファイルキュー、Phase 4-UX の purpose-driven candidate selection、Safety Review、Preview acknowledgement、各文書・各候補の判断を可視化する **Decision Trace**（文書詳細 / Safety Review）、async Context Package job、NotebookLM 用 source bundle が実装済みです。**Google Sheets** は [Phase 3-A](archive/phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。
 
 デモ説明では、標準 profile は **`cloud-managed`** です。管理されたクラウド境界で文書を受け取り、Cloud DLP + Masker で安全化し、目的にひもづいた Context Package として NotebookLM / Gemini / RAG に渡す前段を作ります。NotebookLM には単一 `.md` ではなく、Context Package result panel から取得できる **source bundle zip** の全ファイルを source 追加します。
 
@@ -10,13 +10,18 @@ Upload / Google Workspace import → Firestore/GCS → Inventory → Context Pac
 
 3分動画やライブ説明では、細かいセットアップではなく次の画面順を正にします。
 
+この動画の背骨は **Decision Trace**（[demo-scenario.md](demo-scenario.md) の主役）。各文書・各候補に「どのエージェントがどう判断したか」が履歴として残ることを、画面で証明します。
+
 | 順 | 画面 | 見せること |
 |---:|---|---|
 | 1 | `/upload` | `sample-data/accounting-office/` の 5〜7 件を複数選択し、ファイルごとの処理状況を見せる |
 | 2 | `/` | Pipeline Funnel、KPI、文書一覧で AI利用可 / マスキング済み / 保護中を確認する |
-| 3 | `/context-package` | purpose を入力し、候補選択 → Safety Review → Preview acknowledgement を見せる |
-| 4 | result panel | Markdown copy/download と NotebookLM 用 bundle download の2導線を見せる |
-| 5 | NotebookLM | bundle の全ファイルを source 追加し、included / excluded / missing / questions の4分類が効くことを短く示す |
+| 3 | 文書詳細（マスク済み文書） | 文書を開くと先頭に出る **Decision Trace** で `Curator 分類 → Masker 判定（残存リスクなし）→ 最終状態（AI 利用可）` を見せる（伏線） |
+| 4 | 文書詳細（顧問契約書） | **クライマックス**: Decision Trace で `Masker 判定（残存リスクあり）→ 格上げ理由 → Safety Gate → 保護中`。「マスクしても渡さない理由まで残る」 |
+| 5 | `/context-package` | purpose を入力し、候補ごとの `Decision Trace` で include / exclude / needs_review を見せ、Safety Review → Preview acknowledgement へ |
+| 6 | Strategist 出力 | 使える / 除外 / 足りない / 人間への質問 の4分類を目的単位で見せる |
+| 7 | CI / eval（まわす挿入） | GitHub Actions の green と eval gate（`eval:p1d:quality --ci` / conversion eval）を5〜10秒だけ挿入する |
+| 8 | result panel → NotebookLM | Markdown copy/download と NotebookLM 用 bundle download の2導線、bundle の全ファイルを source 追加し4分類が効くことを示す |
 
 撮影用 purpose:
 
@@ -92,7 +97,7 @@ Upload / Google Workspace import → Firestore/GCS → Inventory → Context Pac
    gcloud services enable dlp.googleapis.com --project="$GOOGLE_CLOUD_PROJECT"
    ```
 
-6. （Phase 3-B）Google Workspace 由来の **同一 Drive `fileId` を再取り込みする de-dup 検索**に使う複合インデックスを用意する。設計根拠は [docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md)（§3 末尾・§6–10 のチェックリスト）を参照。
+6. （Phase 3-B）Google Workspace 由来の **同一 Drive `fileId` を再取り込みする de-dup 検索**に使う複合インデックスを用意する。設計根拠は [docs/phase-3-b-workspace-resync.md](archive/phase-3-b-workspace-resync.md)（§3 末尾・§6–10 のチェックリスト）を参照。
 
    リポジトリ直下の [`firestore.indexes.json`](../firestore.indexes.json) と同一定義を GCP に反映する方法の例:
 
@@ -248,7 +253,7 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 - **本番やインターネット公開**: **認証・認可・レート制限は必須**。Cloud Run を広く公開する場合は **IAP**、**token 検証**、**限定ネットワーク（VPC / internal ingress）**、**Cloud Armor / LB / アプリの rate limit**、ブラウザ経路では **SameSite / CSRF** など、多層の shield を設計ドキュメントに沿って入れること。
 - **この runbook が想定する PoC**: 主に **`localhost` の `pnpm dev`**、または **IAP や VPC で到達が限定された** Cloud Run など、**意図した利用者だけが URL にアクセスできる**前提。パブリック URL を一時的に出す場合は、上記に近い制御と **クォータ監視・事後の無効化** を手順に含める。
 
-未認証エンドポイントのリスクと本番要件の正本は [docs/phase-3-google-sheets-import.md](phase-3-google-sheets-import.md) の **「5. HTTP API と公開運用上のセキュリティ（PoC 制約）」** 節を参照。
+未認証エンドポイントのリスクと本番要件の正本は [docs/phase-3-google-sheets-import.md](archive/phase-3-google-sheets-import.md) の **「5. HTTP API と公開運用上のセキュリティ（PoC 制約）」** 節を参照。
 
 ## 6. Upload 後に見るポイント
 
@@ -268,6 +273,7 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 - トップページで **Pipeline Funnel**、KPI、**Firestore Inventory** セクションの status/sensitivity を確認
 - Pipeline Funnel では、登録された文書が AI 利用可 / マスキング済み / 保護中に分かれていることを見せる
 - KPI では `登録文書`、`AI利用可`、`マスキング実施`、`保護中（AI除外）` を短く読む
+- 文書一覧から個別文書を開くと、詳細ページ先頭に **Decision Trace** が出る。`Curator 分類 → AI 利用方針 → Masker 判定 → 格上げ理由 → Safety Gate → 最終状態` の判断履歴で、エージェントが自律的に判断していることを見せる（重複していた分類 dl・Curator 判定理由・格上げバナーは「補足属性」へ集約済みで、画面と語りが1対1で一致する）
 - Firestore 読み取り不能時のみ W1 snapshot fallback が使われる
 
 ## 7. Context Package export
@@ -281,7 +287,7 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 
 1. `/context-package` を開く。
 2. purpose に `新人スタッフ向けに、月次の給与計算業務を安全に学べるAIを作りたい` を入力する。
-3. 候補取得後、候補リストで include / exclude / needs review の違いを見せる。
+3. 候補取得後、候補リストで include / exclude / needs_review の違いを見せる。各候補の `Decision Trace` を開くと、目的との照合・関連スコア・除外/確認理由・決定ルールと最終判断が、本文を AI に渡す前に確認できる。
 4. Safety Review で、AI に渡す予定の文書、自動除外、warning を確認する。
 5. Preview acknowledgement が必要な場合は「内容を確認しました」をチェックする。
 6. Context Package を生成する。async 有効環境では `queued` / `running` / `succeeded` の polling 表示を短く見せる。ローカル同期環境ではそのまま結果表示へ進む。
@@ -315,7 +321,7 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 ### live と fixture の違い
 
 - `context:demo:live`: Firestore/GCS 正本のみを読む。失敗時は fallback せず non-zero で終了。
-- `context:demo:w1`: `docs/w1-artifacts/inventory.snapshot.json` を使う完全オフライン実行。
+- `context:demo:w1`: `docs/archive/w1-artifacts/inventory.snapshot.json` を使う完全オフライン実行（ローカル `docs/archive/` 要。無ければ `pnpm inventory:snapshot` で再生成）。
 
 ### `context:demo:live` と chunk（Phase 2）
 
@@ -552,11 +558,11 @@ Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で
 
 ## 13. Phase 3-B 運用（schemaVersion 2・インデックス・再取り込み・鮮度）
 
-[docs/phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) §6–12 の実装・完了条件に沿ったデモ／運用手順です。Phase 3-A の Sheets 取り込み（§5）に加え、**同じ Drive ファイルの上書き de-dup** と **詳細ページの鮮度バッジ**を見せるときに使います。
+[docs/phase-3-b-workspace-resync.md](archive/phase-3-b-workspace-resync.md) §6–12 の実装・完了条件に沿ったデモ／運用手順です。Phase 3-A の Sheets 取り込み（§5）に加え、**同じ Drive ファイルの上書き de-dup** と **詳細ページの鮮度バッジ**を見せるときに使います。
 
 ### 13.1 schemaVersion 2 への移行（`backfillSourceKind.ts`）
 
-既存の `documents` が `schemaVersion: 1` のまま残っていると、parser が `sourceKind` 必須化したビルドでは読み取りに失敗し得ます。Firestore へ一括で足す手順は **dry-run → confirm の 2 段**に固定されています（設計根拠: [phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) D-P3-B-3・§3「backfill script」）。
+既存の `documents` が `schemaVersion: 1` のまま残っていると、parser が `sourceKind` 必須化したビルドでは読み取りに失敗し得ます。Firestore へ一括で足す手順は **dry-run → confirm の 2 段**に固定されています（設計根拠: [phase-3-b-workspace-resync.md](archive/phase-3-b-workspace-resync.md) D-P3-B-3・§3「backfill script」）。
 
 前提:
 
@@ -564,10 +570,12 @@ Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で
 
 手順:
 
+> **スクリプトの所在**: schemaVersion 2 backfill は一度きりの移行であり、Phase 0–4 リファクタ（commit 644d31b）で `scripts/oneoff/backfillSourceKind.ts` に退避済みです。`pnpm backfill:source-kind` エイリアスは廃止されているため、下記のように oneoff スクリプトを直接 `pnpm tsx` で実行してください。
+
 1. **dry-run**（書き込みなし。対象件数と先頭 5 件の docId を表示）
 
    ```bash
-   pnpm backfill:source-kind -- --dry-run
+   pnpm tsx scripts/oneoff/backfillSourceKind.ts --dry-run
    ```
 
 2. 出力の `targetCount` / `previewDocIds` を確認する。
@@ -575,14 +583,14 @@ Phase 2 の chunk 生成・Firestore 保存・Context Package 反映を手動で
 3. **confirm**（`schemaVersion: 1` の document を batch で `schemaVersion: 2`, `sourceKind: 'upload'`, `externalSource: null` に更新）
 
    ```bash
-   pnpm backfill:source-kind -- --confirm
+   pnpm tsx scripts/oneoff/backfillSourceKind.ts --confirm
    ```
 
 `--dry-run` と `--confirm` は **どちらか一方だけ**指定してください（両方・未指定はエラー）。
 
 ### 13.2 Firestore 複合インデックス（`gcloud`）
 
-同一 Drive `fileId` の既存 document を検索する de-dup 用に、`externalSource.fileId` + `sourceKind` の複合インデックスが必要です。設計は [phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) §3「Firestore index」。ルートの [`firestore.indexes.json`](../firestore.indexes.json) と同一定義です。
+同一 Drive `fileId` の既存 document を検索する de-dup 用に、`externalSource.fileId` + `sourceKind` の複合インデックスが必要です。設計は [phase-3-b-workspace-resync.md](archive/phase-3-b-workspace-resync.md) §3「Firestore index」。ルートの [`firestore.indexes.json`](../firestore.indexes.json) と同一定義です。
 
 ```bash
 gcloud config set project "$GOOGLE_CLOUD_PROJECT"
@@ -604,11 +612,11 @@ gcloud firestore indexes composite create \
 3. 成功レスポンスに `kind: 'overwritten'` が含まれること、Inventory の **件数が増えない**（同一 docId）ことを確認する。
 4. 代替動線: 文書詳細 `http://localhost:3000/documents/{docId}` を開き、**再取り込み**ボタンから同じソースで上書きを実行する（Workspace 由来の document のみ）。
 
-`contentSha256` が Drive 側のバイト列と一致している場合は Vertex 等をスキップし `skipped: true` が返る短絡パスがあります（[phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) §5 上書きマトリクス）。
+`contentSha256` が Drive 側のバイト列と一致している場合は Vertex 等をスキップし `skipped: true` が返る短絡パスがあります（[phase-3-b-workspace-resync.md](archive/phase-3-b-workspace-resync.md) §5 上書きマトリクス）。
 
 ### 13.4 Drive 上で更新 → 詳細ページの鮮度バッジ
 
-**目的**: Drive の `modifiedTime` が取り込み済みスナップショットより新しいとき、詳細ページで **「Drive 上で更新されています」** が出ることを確認する（read-time で `GET /api/workspace/freshness?docId=...` が走る設計。正本: [phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) D-P3-B-5）。
+**目的**: Drive の `modifiedTime` が取り込み済みスナップショットより新しいとき、詳細ページで **「Drive 上で更新されています」** が出ることを確認する（read-time で `GET /api/workspace/freshness?docId=...` が走る設計。正本: [phase-3-b-workspace-resync.md](archive/phase-3-b-workspace-resync.md) D-P3-B-5）。
 
 1. §5 で Workspace 由来の Sheet（または Doc）を 1 件取り込み、Inventory から当該 document の **詳細**へ進む（`http://localhost:3000/documents/{docId}`）。
 2. ブラウザで Google Drive / Sheets を開き、**セルやタイトルなど実際に保存される変更**を加えて保存する（`modifiedTime` が進むこと）。

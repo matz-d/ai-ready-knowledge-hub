@@ -75,7 +75,7 @@ Phase 3-D はビジネスロジックを触らない。触るのは deployment /
 
 ### 固定値・命名
 
-`PROJECT_ID` / `REGION` / runtime service account は [docs/setup-gcp.md](setup-gcp.md) の Fixed Values が正本。ここでは Phase 3-D で追加・参照する命名のみ明記する。
+`PROJECT_ID` / `REGION` / runtime service account は [docs/setup-gcp.md](../setup-gcp.md) の Fixed Values が正本。ここでは Phase 3-D で追加・参照する命名のみ明記する。
 
 | 項目 | 値 | 備考 |
 |---|---|---|
@@ -434,9 +434,9 @@ Vertex / Firestore / GCS / DLP / Drive は runtime service account の ADC を�
 
 ## 13. 参考
 
-- [docs/decisions.md](decisions.md) — `D-P3-D` が意思決定ログの正本。
+- [docs/decisions.md](../decisions.md) — `D-P3-D` が意思決定ログの正本。
 - [docs/phase-3-c-direction.md](phase-3-c-direction.md) — Phase 3-D の元になった認証・デプロイ方針。
-- [docs/setup-gcp.md](setup-gcp.md) — 既存 GCP project / bucket / service account のセットアップ。
+- [docs/setup-gcp.md](../setup-gcp.md) — 既存 GCP project / bucket / service account のセットアップ。
 - [Google Cloud IAP: Getting the user's identity](https://cloud.google.com/iap/docs/identity-howto)
 - [Google Cloud IAM: Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation)
 - [Google Cloud IAM: Best practices for Workload Identity Federation](https://cloud.google.com/iam/docs/best-practices-for-using-workload-identity-federation)

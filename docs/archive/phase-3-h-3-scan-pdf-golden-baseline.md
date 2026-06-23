@@ -2,7 +2,7 @@
 
 > 実施日: 2026-05-21
 > 目的: M6 完了後の **精度チェック（golden recall）** を H-2 §7.4 と同型で 1 回記録し、sidecar を本線 OCR に揃える。
-> 正本: [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8.3 M6-5 / [docs/decisions.md](decisions.md) `D-P3-H-7 Q4`
+> 正本: [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) §8.3 M6-5 / [docs/decisions.md](../decisions.md) `D-P3-H-7 Q4`
 
 ## 1. 実行コマンド
 

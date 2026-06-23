@@ -1,6 +1,6 @@
 # docs/ インデックス
 
-`docs/` 内ドキュメントの入口。ファイルは移動せずリンクのみ（リンク切れ回避）。作業順・優先度の正本は各 doc 冒頭の宣言に従う。
+`docs/` 内ドキュメントの入口。作業順・優先度の正本は各 doc 冒頭の宣言に従う。
 
 ## 現役の正本
 
@@ -39,52 +39,8 @@
 | [security/npm-supply-chain-2026-05-12.md](security/npm-supply-chain-2026-05-12.md) | npm サプライチェーン対策 |
 | [curator-classification-precision-2026-06-09.md](curator-classification-precision-2026-06-09.md) | Curator 分類 precision 調査 |
 
-## 完了フェーズの歴史
+## 完了フェーズの歴史（Archive）
 
-実装・検証は完了。新規作業の正本にしない。証跡・当時の方針確認用。
+Phase 2〜4 の方向性・証跡・イベント記録は `docs/archive/` に移動済み。提出用の公開リポジトリでも過去の意思決定や evidence を辿れるよう、archive も repository に含める。
 
-### Phase 2
-
-| 文書 | 内容 |
-|---|---|
-| [phase-2-design.md](phase-2-design.md) | Phase 2 設計 |
-| [phase-2-live-smoke.md](phase-2-live-smoke.md) | live smoke 証跡 |
-
-### Phase 3（方向性・実装記録）
-
-| 文書 | 内容 |
-|---|---|
-| [phase-3-b-workspace-resync.md](phase-3-b-workspace-resync.md) | Google Workspace resync |
-| [phase-3-c-direction.md](phase-3-c-direction.md) | 認証・デプロイ方針 |
-| [phase-3-c-5-source-coverage.md](phase-3-c-5-source-coverage.md) | source coverage 確認 |
-| [phase-3-d-direction.md](phase-3-d-direction.md) | CI/CD + IAP + AuditEvent（完了） |
-| [phase-3-e-direction.md](phase-3-e-direction.md) | Processing Boundary（完了） |
-| [phase-3-google-sheets-import.md](phase-3-google-sheets-import.md) | Google Sheets import |
-| [phase-3-h-direction.md](phase-3-h-direction.md) | Document Conversion PoC 方針 |
-| [phase-3-h-2-direction.md](phase-3-h-2-direction.md) | official-doc-pdf 本線（完了） |
-| [phase-3-h-2-monthly-review.md](phase-3-h-2-monthly-review.md) | monthly review |
-| [phase-3-h-slide-pdf-poc.md](phase-3-h-slide-pdf-poc.md) | slide-pdf PoC |
-| [phase-3-h-3-direction.md](phase-3-h-3-direction.md) | slide/scan-pdf 本線（完了） |
-| [phase-3-h-3-slide-pdf-live-smoke.md](phase-3-h-3-slide-pdf-live-smoke.md) | slide-pdf live smoke |
-| [phase-3-h-3-scan-pdf-live-smoke.md](phase-3-h-3-scan-pdf-live-smoke.md) | scan-pdf live smoke |
-| [phase-3-h-3-scan-pdf-golden-baseline.md](phase-3-h-3-scan-pdf-golden-baseline.md) | scan-pdf golden baseline |
-| [phase-3-h-3-scan-pdf-poc-measurement.md](phase-3-h-3-scan-pdf-poc-measurement.md) | scan-pdf PoC 計測 |
-| [phase-3-h-3-scan-pdf-w5b-unmaskable-fixture.md](phase-3-h-3-scan-pdf-w5b-unmaskable-fixture.md) | unmaskable fixture |
-| [phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md) | PDF masker live smoke |
-| [iap-evidence/](iap-evidence/) | Phase 3-D IAP 完了証跡 |
-
-### Phase 4 UX
-
-| 文書 | 内容 |
-|---|---|
-| [phase-4-ux-direction.md](phase-4-ux-direction.md) | Phase 4 UX 方針 |
-| [phase-4-ux-manual-pass-2026-06-10.md](phase-4-ux-manual-pass-2026-06-10.md) | ブラウザ手動通し証跡 |
-| [phase-4-ux-evidence/](phase-4-ux-evidence/) | UX evidence（スクリーンショット等） |
-
-### その他の歴史・イベント
-
-| 文書 | 内容 |
-|---|---|
-| [week1-retrospective.md](week1-retrospective.md) | Week 1 振り返り |
-| [hackathon.md](hackathon.md) | ハッカソン記録 |
-| [w1-artifacts/inventory.snapshot.json](w1-artifacts/inventory.snapshot.json) | W1 inventory スナップショット |
+主な内容: Phase 2/3/4 direction・live smoke・IAP/UX evidence、`week1-retrospective.md`、`hackathon.md`、`w1-artifacts/inventory.snapshot.json` など。採用判断の正本は [decisions.md](decisions.md)。

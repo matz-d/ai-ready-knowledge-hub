@@ -114,6 +114,6 @@ Phase 3-E で contract-only として予約した高セキュリティ profile�
 
 ## 関連ドキュメント
 
-- [phase-3-e-direction.md](phase-3-e-direction.md) — ProcessingProfile / Cloud DLP Trust Modes
-- [phase-3-h-direction.md](phase-3-h-direction.md) — Document Conversion PoC
+- [phase-3-e-direction.md](archive/phase-3-e-direction.md) — ProcessingProfile / Cloud DLP Trust Modes
+- [phase-3-h-direction.md](archive/phase-3-h-direction.md) — Document Conversion PoC
 - [open-questions.md](open-questions.md) — 未決定事項

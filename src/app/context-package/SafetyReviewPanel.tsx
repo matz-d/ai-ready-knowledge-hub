@@ -5,6 +5,7 @@ import {
   groupCandidatesByRecommendation,
   type CandidateRow,
 } from './candidateSelectionUi';
+import { buildCandidateDecisionTrace } from '../../lib/decisionTrace';
 
 type SafetyReviewPanelProps = {
   candidates: CandidateRow[];
@@ -45,6 +46,7 @@ function ReviewColumn({
             const reason = candidateDisplayReason(candidate);
             const selected =
               showSelectedState && selectedDocIds?.has(candidate.docId);
+            const trace = buildCandidateDecisionTrace(candidate);
 
             return (
               <li key={candidate.docId} className="cp-safety-item">
@@ -56,6 +58,17 @@ function ReviewColumn({
                 {reason ? (
                   <span className="cp-safety-reason">{reason}</span>
                 ) : null}
+                <details className="cp-safety-trace">
+                  <summary>Decision Trace</summary>
+                  <ol>
+                    {trace.map((step) => (
+                      <li key={`${candidate.docId}-${step.label}`}>
+                        <strong>{step.label}</strong>
+                        <span>{step.detail}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
                 {showSelectedState ? (
                   <span
                     className={`cp-safety-selected${selected ? ' cp-safety-selected--on' : ''}`}

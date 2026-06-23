@@ -95,6 +95,6 @@ Flutter, Firebase, Veo, Elasticsearch (スポンサー), 他
 
 ## 関連ドキュメント
 
-- [docs/concept.md](concept.md) — プロダクトコンセプト
-- [docs/architecture.md](architecture.md) — 技術構成
-- [docs/decisions.md](decisions.md) — 意思決定ログ
+- [docs/concept.md](../concept.md) — プロダクトコンセプト
+- [docs/architecture.md](../architecture.md) — 技術構成
+- [docs/decisions.md](../decisions.md) — 意思決定ログ

@@ -111,7 +111,7 @@ User → purpose 入力
     → POST /api/context-package（既存生成経路 → safetyGate → Strategist）
 ```
 
-- **API 契約正本**: [docs/phase-4-ux-direction.md §候補 API 契約](phase-4-ux-direction.md)（request/response 型・status code・UI 既定動作）
+- **API 契約正本**: [docs/phase-4-ux-direction.md §候補 API 契約](archive/phase-4-ux-direction.md)（request/response 型・status code・UI 既定動作）
 - **決定正本**: [docs/decisions.md](decisions.md) `D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2`
 - **実装**: `src/services/candidateSelection/`（S1 純関数）, `src/app/api/context-package/candidates/route.ts`（S2 API）
 
@@ -507,7 +507,7 @@ MVP評価対象:
 
 ## 関連ドキュメント
 
-- [docs/phase-4-ux-direction.md](phase-4-ux-direction.md) — Phase 4-UX 候補 API 契約・作業分配（`D-P4UX-*`）
+- [docs/phase-4-ux-direction.md](archive/phase-4-ux-direction.md) — Phase 4-UX 候補 API 契約・作業分配（`D-P4UX-*`）
 - [docs/tech-stack.md](tech-stack.md) — 個別技術の詳細
 - [docs/decisions.md](decisions.md) — なぜこの構成か
 - [docs/concept.md](concept.md) — エージェント設計の背景

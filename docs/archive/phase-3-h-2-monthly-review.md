@@ -52,9 +52,9 @@ Phase 3-H-2 完了直後の golden 実行では、**recall が意図的に低い
    | `synthetic-employment-context-with-pii` | `synthetic-employment-context-with-pii.pdf` | 同上（**非 PII の残存情報のみ**を expected に書く） |
 
 3. 評価実装の入口:
-   - `runConversionEvalGoldenCheck` — [`src/eval/conversion/runConversionEvalGoldenCheck.ts`](../src/eval/conversion/runConversionEvalGoldenCheck.ts)
-   - `evalSemanticRetention` — [`src/eval/conversion/golden/evalSemanticRetention.ts`](../src/eval/conversion/golden/evalSemanticRetention.ts)
-   - Fixture 結合テスト — [`src/eval/conversion/golden/__tests__/evalSemanticRetention.fixtures.test.ts`](../src/eval/conversion/golden/__tests__/evalSemanticRetention.fixtures.test.ts)
+   - `runConversionEvalGoldenCheck` — [`src/eval/conversion/runConversionEvalGoldenCheck.ts`](../../src/eval/conversion/runConversionEvalGoldenCheck.ts)
+   - `evalSemanticRetention` — [`src/eval/conversion/golden/evalSemanticRetention.ts`](../../src/eval/conversion/golden/evalSemanticRetention.ts)
+   - Fixture 結合テスト — [`src/eval/conversion/golden/__tests__/evalSemanticRetention.fixtures.test.ts`](../../src/eval/conversion/golden/__tests__/evalSemanticRetention.fixtures.test.ts)
 
 4. `*.expected.json` の形（例）:
 
@@ -85,7 +85,7 @@ flowchart LR
 
 **GitHub Actions（M5-A 正本）**
 
-M5 完了後は [`.github/workflows/conversion-eval.yml`](../.github/workflows/conversion-eval.yml) の **`workflow_dispatch`** で golden のみ実行する（通常の `pull_request` / `push` ジョブからは **golden を呼ばない**）。
+M5 完了後は [`.github/workflows/conversion-eval.yml`](../../.github/workflows/conversion-eval.yml) の **`workflow_dispatch`** で golden のみ実行する（通常の `pull_request` / `push` ジョブからは **golden を呼ばない**）。
 
 1. GitHub → **Actions** → **Conversion eval**（ワークフロー名は M5 実装に合わせる）。
 2. **Run workflow** を選び、入力で `stage=golden`（または同等の M5-A ラベル）を指定。
@@ -104,7 +104,7 @@ M5 完了後は [`.github/workflows/conversion-eval.yml`](../.github/workflows/c
 
 **DocumentIR の更新が入った月**
 
-PDF から IR を再生成して sidecar を揃えてから golden を走らせる（PoC runner または本線 export 手順。詳細は [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) と PoC README を参照）。
+PDF から IR を再生成して sidecar を揃えてから golden を走らせる（PoC runner または本線 export 手順。詳細は [sample-data/document-conversion/README.md](../../sample-data/document-conversion/README.md) と PoC README を参照）。
 
 ```bash
 # 例: 単一 PDF の PoC 変換（IR 更新のたびに手順を再確認すること）
@@ -127,7 +127,7 @@ pnpm poc:conversion:official-doc-pdf \
 | `mhlw-overtime-limit-guide` | | | | | | |
 | `synthetic-employment-context-with-pii` | | | | | | 非 PII のみ |
 
-- `keyFieldRecall` = `found / len(expectedFields)`（実装: [`evalSemanticRetention`](../src/eval/conversion/golden/evalSemanticRetention.ts)）。
+- `keyFieldRecall` = `found / len(expectedFields)`（実装: [`evalSemanticRetention`](../../src/eval/conversion/golden/evalSemanticRetention.ts)）。
 - M5-A artifact に表が含まれる場合はそれをコピーし、無い場合は Step 1 のログから手で埋める。
 - **前月比** は直近の月次記録または前回 workflow の artifact と突き合わせる。
 
@@ -162,7 +162,7 @@ pnpm poc:conversion:official-doc-pdf \
 1. ブランチを切る（例: `chore/golden-expected-2026-05`）。
 2. 変更対象の `sample-data/document-conversion/official-doc-pdf/<basename>.expected.json` を編集する。
    - `documentId` は basename と一致させる。
-   - 追加する文字列は **chunk 連結テキストに substring として載る** 表現を選ぶ（全角 / 半角は正規化で吸収されるが、改行で分割された語は chunk 境界を跨ぐ必要がある場合あり — テスト [`evalSemanticRetention.test.ts`](../src/eval/conversion/golden/__tests__/evalSemanticRetention.test.ts) 参照）。
+   - 追加する文字列は **chunk 連結テキストに substring として載る** 表現を選ぶ（全角 / 半角は正規化で吸収されるが、改行で分割された語は chunk 境界を跨ぐ必要がある場合あり — テスト [`evalSemanticRetention.test.ts`](../../src/eval/conversion/golden/__tests__/evalSemanticRetention.test.ts) 参照）。
    - `notes` に改版・意図・レビュー日を書く。
 3. DocumentIR sidecar も変えた場合は `*.document-ir.json` を同じ PR に含める。
 4. 検証:
@@ -195,4 +195,4 @@ pnpm poc:conversion:official-doc-pdf \
 - [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) — M4 golden / M5 CI gate
 - [docs/phase-3-e-direction.md](phase-3-e-direction.md) — 三段階成熟度と golden の意味
 - [docs/phase-3-h-direction.md](phase-3-h-direction.md) — subtype 別 eval 方針
-- [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) — fixture 出典・ライセンス
+- [sample-data/document-conversion/README.md](../../sample-data/document-conversion/README.md) — fixture 出典・ライセンス

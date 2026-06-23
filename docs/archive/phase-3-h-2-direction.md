@@ -23,7 +23,7 @@ Phase 3-H-2 では `official-doc-pdf` を **薄い本線統合 + Eval 育成ル�
 
 > 「PDF を本線に入れる」ではなく、**「PDF を Curator 判定まで本線に入れ、`aiUsePolicy === 'direct'` の PDF だけ chunk 化する」**。`requires_masking` / `blocked` の PDF は `documents/{docId}.status = 'curated'` で停止し、`maskingPending: true` フラグだけ立てる。
 
-> **後続（2026-05-29）:** 新規 PDF upload は [docs/decisions.md](decisions.md) **`D-P3-M-PDF-1`** により `maskingPending` park せず Masker 本線へ。上記は H-2 M1 の歴史的境界。
+> **後続（2026-05-29）:** 新規 PDF upload は [docs/decisions.md](../decisions.md) **`D-P3-M-PDF-1`** により `maskingPending` park せず Masker 本線へ。上記は H-2 M1 の歴史的境界。
 
 ---
 
@@ -221,7 +221,7 @@ M1 を通過した変換ごとに `ConversionEvalResult`（health stage）を Fi
 
 ## 6. M3: Heuristic 閾値抽出
 
-> **状態: 完了（2026-05-20）**。閾値の正本は [docs/decisions.md](decisions.md) `D-P3-H-5`。
+> **状態: 完了（2026-05-20）**。閾値の正本は [docs/decisions.md](../decisions.md) `D-P3-H-5`。
 
 ### 6.1 ゴール
 
@@ -421,9 +421,9 @@ Phase 3-H-2 全体は次を満たしたら完了とする。**2026-05-20 時点�
 - [docs/phase-3-h-direction.md](phase-3-h-direction.md) — Phase 3-H Document Conversion PoC 方針（subtype 起点）
 - [docs/phase-3-e-direction.md](phase-3-e-direction.md) — Document Conversion Eval 契約（6 軸 / 3 段階成熟度 / ロールアップ案B）
 - [docs/phase-3-d-direction.md](phase-3-d-direction.md) — CI/CD + IAP + AuditEvent の正本
-- [docs/decisions.md](decisions.md) — `D-P3-H` / `D-P3-H-2` / `D-P3-H-3` / `D-P3-H-4` / `D-P3-H-5` / `D-P3-H-5b` / `D-P3-H-6`
+- [docs/decisions.md](../decisions.md) — `D-P3-H` / `D-P3-H-2` / `D-P3-H-3` / `D-P3-H-4` / `D-P3-H-5` / `D-P3-H-5b` / `D-P3-H-6`
 - [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) — Phase 3-H-3 subtype 2/3 足場（§9 引き継ぎ先）
-- [docs/open-questions.md](open-questions.md) — Document Conversion Eval 関連の未決
+- [docs/open-questions.md](../open-questions.md) — Document Conversion Eval 関連の未決
 - [docs/phase-3-h-2-monthly-review.md](phase-3-h-2-monthly-review.md) — Golden eval 月次レビュー手順（M5-A 手動 trigger）
-- [docs/firestore-schema.md](firestore-schema.md) — Firestore document shape の正本
-- [docs/architecture.md](architecture.md) — Upload pipeline / Masker pipeline 構造
+- [docs/firestore-schema.md](../firestore-schema.md) — Firestore document shape の正本
+- [docs/architecture.md](../architecture.md) — Upload pipeline / Masker pipeline 構造

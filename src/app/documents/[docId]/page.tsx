@@ -6,12 +6,11 @@ import { parseFirestoreDocumentSnapshot } from '../../../lib/parseFirestoreDocum
 import {
   adaptFirestoreDocumentToInventory,
 } from '../../../lib/inventoryFirestoreAdapter';
-import { wasPromotedByMasker } from '../../../agents/masker/upgrade';
 import {
-  AI_USE_POLICY_LABELS,
   DOCUMENT_STATUS_LABELS,
   SENSITIVITY_LABELS,
 } from '../../../lib/displayLabels';
+import { buildInventoryDecisionTrace } from '../../../lib/decisionTrace';
 import type { InventoryDocument } from '../../../lib/inventory';
 import { DocumentDetailClient } from './DocumentDetailClient';
 
@@ -49,6 +48,8 @@ export default async function DocumentDetailPage({ params }: Props) {
     notFound();
   }
 
+  const decisionTrace = buildInventoryDecisionTrace(doc);
+
   return (
     <main className="page-shell">
       <nav className="doc-detail-breadcrumb">
@@ -78,67 +79,33 @@ export default async function DocumentDetailPage({ params }: Props) {
         <DocumentDetailClient doc={doc} />
 
         <section className="doc-detail-section">
-          <h2>分類情報</h2>
+          <h2>Decision Trace</h2>
+          <p className="doc-detail-trace-lead">
+            この文書が Curator → Masker / Safety Gate → 最終状態と、どのエージェントの判断を経て現在の扱いになったかの履歴です。
+          </p>
+          <ol className="doc-decision-trace">
+            {decisionTrace.map((step) => (
+              <li key={step.label}>
+                <strong>{step.label}</strong>
+                <span>{step.detail}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section className="doc-detail-section">
+          <h2>補足属性</h2>
           <dl className="doc-detail-dl">
-            <div>
-              <dt>文書種別</dt>
-              <dd>{doc.documentType}</dd>
-            </div>
-            <div>
-              <dt>業務領域</dt>
-              <dd>{doc.businessDomain}</dd>
-            </div>
-            <div>
-              <dt>機密度</dt>
-              <dd>{SENSITIVITY_LABELS[doc.sensitivity]}</dd>
-            </div>
             <div>
               <dt>鮮度</dt>
               <dd>{doc.freshness}</dd>
             </div>
             <div>
-              <dt>AI利用方針</dt>
-              <dd>{AI_USE_POLICY_LABELS[doc.aiUsePolicy]}</dd>
-            </div>
-            <div>
               <dt>正本候補</dt>
               <dd>{doc.isAuthoritativeCandidate ? 'はい' : 'いいえ'}</dd>
             </div>
-            <div>
-              <dt>機密度の根拠</dt>
-              <dd>{doc.sensitivitySource}</dd>
-            </div>
-            {doc.sensitivityReason ? (
-              <div>
-                <dt>機密度判定理由</dt>
-                <dd>{doc.sensitivityReason}</dd>
-              </div>
-            ) : null}
-            {doc.originalCuratorSensitivity ? (
-              <div>
-                <dt>Curator の元判定</dt>
-                <dd>{SENSITIVITY_LABELS[doc.originalCuratorSensitivity]}</dd>
-              </div>
-            ) : null}
           </dl>
         </section>
-
-        {doc.curator?.rationale ? (
-          <section className="doc-detail-section">
-            <h2>Curator 判定理由</h2>
-            <p className="doc-detail-rationale">{doc.curator.rationale}</p>
-          </section>
-        ) : null}
-
-        {wasPromotedByMasker(doc) ? (
-          <p className="inventory-masker-promo" role="status">
-            Masker により厳重管理へ格上げ（Curator の元判定:{' '}
-            {doc.originalCuratorSensitivity
-              ? SENSITIVITY_LABELS[doc.originalCuratorSensitivity]
-              : '—'}
-            ）
-          </p>
-        ) : null}
 
         <section className="doc-detail-section">
           <h2>ストレージ情報</h2>

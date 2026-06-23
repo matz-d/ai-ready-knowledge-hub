@@ -137,7 +137,7 @@
 - [CLAUDE.md](../CLAUDE.md) — 製品定義・Safety Invariants・Verification Policy の正本
 - [docs/operate-deliver-readiness.md](operate-deliver-readiness.md) — 「まわす」「とどける」軸の DoD（本書は「つくる」軸の正本）
 - [docs/decisions.md](decisions.md) — 決定内容・閾値・採用理由の正本（`D-P4UX-*` / `D-P3-M-PDF-1` / `D-P3-D` / `D-P3-E` / `D-PROD-*`）
-- [docs/phase-4-ux-direction.md](phase-4-ux-direction.md) — Phase 4-UX 作業分配（S1–S11）
+- [docs/phase-4-ux-direction.md](archive/phase-4-ux-direction.md) — Phase 4-UX 作業分配（S1–S11）
 - [docs/setup-gcp.md](setup-gcp.md) §8 — 非同期 production smoke / 監視・アラート（運用正本）
 - [docs/open-questions.md](open-questions.md) — 未決事項
 - [docs/firestore-schema.md](firestore-schema.md) — Firestore 形状の正本

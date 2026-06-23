@@ -45,7 +45,7 @@ function resolveMode(argv: string[]): DemoMode {
 function buildW1FixtureExportInput() {
   const snapshotPath = join(
     process.cwd(),
-    'docs/w1-artifacts/inventory.snapshot.json'
+    'docs/archive/w1-artifacts/inventory.snapshot.json'
   );
   const raw = JSON.parse(readFileSync(snapshotPath, 'utf-8'));
   const documents = adaptW1SnapshotEntries(raw);

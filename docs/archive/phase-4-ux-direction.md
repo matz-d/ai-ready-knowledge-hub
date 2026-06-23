@@ -2,7 +2,7 @@
 
 **日付**: 2026-06-03
 **状態**: S1–S7（Phase 4-UX MVP 機能）実装済み。S8/S9/S10 Production Hardening は production smoke 完了、GitHub issue #15/#16 close 済み。
-**正本ポリシー**: 本フェーズの命名・スコープ・分類規則・セキュリティ境界の決定は [docs/decisions.md](decisions.md) `D-P4UX-0` を正とする。本書は作業分配と実装者向け指示文の正本。製品定義そのものはリポジトリ直下 `CLAUDE.md` を正とする。
+**正本ポリシー**: 本フェーズの命名・スコープ・分類規則・セキュリティ境界の決定は [docs/decisions.md](../decisions.md) `D-P4UX-0` を正とする。本書は作業分配と実装者向け指示文の正本。製品定義そのものはリポジトリ直下 `CLAUDE.md` を正とする。
 
 > **命名注意**: `docs/decisions.md` 既存の「Phase 4」は *マルチテナント商用化 / BigQuery write-once audit* を指す（行 971, 1164, 1395 ほか）。本フェーズはそれとは別物であり、UX 改善フェーズとして **Phase 4-UX** と呼ぶ。旧「Phase 4（商用化）」の参照は壊さず温存する。
 
@@ -74,7 +74,7 @@ S0 の4決定は上表（`D-P4UX-0`）で確定。以降の作業はこれを前
 
 ### 候補 API 契約（S1/S2/S3 共通の正本 — UI 実装者向け単一情報源）
 
-> **正本ポリシー**: 本節が `POST /api/context-package/candidates` の request/response 型・status code・reasonCode・UI 既定動作の**唯一の正本**。製品判断（命名・二層構造・分類規則）は [docs/decisions.md](decisions.md) `D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2`。TypeScript 型の実装正本は `src/services/candidateSelection/types.ts`。API ルートは `src/app/api/context-package/candidates/route.ts`。
+> **正本ポリシー**: 本節が `POST /api/context-package/candidates` の request/response 型・status code・reasonCode・UI 既定動作の**唯一の正本**。製品判断（命名・二層構造・分類規則）は [docs/decisions.md](../decisions.md) `D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2`。TypeScript 型の実装正本は `src/services/candidateSelection/types.ts`。API ルートは `src/app/api/context-package/candidates/route.ts`。
 >
 > S5/S6/S7（UI）は本契約のみに依存して並行着手できる。本文・`aiSafeContent`・`maskedText`・chunk は**絶対にレスポンスに含めない**。
 
@@ -352,7 +352,7 @@ type CandidatesResponse = {
   - Firestore TTL（`context_package_jobs.expiresAt`）と GCS lifecycle（`context-package/job-results/`, 14日削除）を設定。
   - log-based metrics `context_package_job_errors` / `context_package_stale_recoveries` と alert policies 3本（job errors / stale recoveries / Cloud Tasks backlog）を作成。
   - **2026-06-08 追補**: Cloud Scheduler `context-package-job-sweeper` は `ENABLED`。manual run で Cloud Run log `[context-package-job] sweeper completed` を確認。production revision `ai-ready-knowledge-hub-00041-2kr` で final async smoke job `5d51117a-6a46-40bd-b981-9bc250a448ba` が HTTP `202` → `succeeded` → result HTTP `200`、`expiresAt.timestampValue`、queue empty、Token Creator cleanup を確認済み。
-  - **2026-06-08 追補（notification channel）**: email channel `projects/ai-ready-knowledge-hub/notificationChannels/10853988392687424315`（displayName `AI Ready Knowledge Hub ops alerts`, type `email`, `enabled: true`）を作成し、alert policy 3本（async job errors / stale running jobs recovered / Cloud Tasks backlog）に `notificationChannels` を紐付け済み（channel configured / policies attached）。`verificationStatus` は API 出力なし。synthetic alert `alert-email-delivery-sustained-20260608T081523Z` で delivery test 受信確認済み（alert `0.o8szm1c7od96`, 17:24 JST）。[production-readiness.md](production-readiness.md) §4 は ✅。
+  - **2026-06-08 追補（notification channel）**: email channel `projects/ai-ready-knowledge-hub/notificationChannels/10853988392687424315`（displayName `AI Ready Knowledge Hub ops alerts`, type `email`, `enabled: true`）を作成し、alert policy 3本（async job errors / stale running jobs recovered / Cloud Tasks backlog）に `notificationChannels` を紐付け済み（channel configured / policies attached）。`verificationStatus` は API 出力なし。synthetic alert `alert-email-delivery-sustained-20260608T081523Z` で delivery test 受信確認済み（alert `0.o8szm1c7od96`, 17:24 JST）。[production-readiness.md](../production-readiness.md) §4 は ✅。
 - **指示文**: §6 参照。
 
 ### S11. Decision エントリ / direction doc 整備
@@ -547,10 +547,10 @@ worker lease 15分 / queue max-retry-duration ≥1800s（setup-gcp.md §2）の�
 ---
 
 ## 関連ドキュメント
-- [docs/decisions.md](decisions.md) `D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2` — 製品判断・API 契約・コアモジュール設計の正本
-- [docs/architecture.md](architecture.md) — Phase 4-UX フロー概要（§Phase 4-UX 参照）
-- [CLAUDE.md](../CLAUDE.md) — 製品定義の正本
+- [docs/decisions.md](../decisions.md) `D-P4UX-0` / `D-P4UX-1` / `D-P4UX-2` — 製品判断・API 契約・コアモジュール設計の正本
+- [docs/architecture.md](../architecture.md) — Phase 4-UX フロー概要（§Phase 4-UX 参照）
+- [CLAUDE.md](../../CLAUDE.md) — 製品定義の正本
 - [docs/phase-3-m-pdf-masker-live-smoke.md](phase-3-m-pdf-masker-live-smoke.md) — Context Package 同期/非同期 live smoke 証跡
-- [docs/setup-gcp.md](setup-gcp.md) §8 — Context Package 非同期 production smoke（runbook 正本）
-- [docs/open-questions.md](open-questions.md) R10 — async job follow-ups（#15 / #16 の起点）
-- [docs/firestore-schema.md](firestore-schema.md) — Firestore document shape の正本
+- [docs/setup-gcp.md](../setup-gcp.md) §8 — Context Package 非同期 production smoke（runbook 正本）
+- [docs/open-questions.md](../open-questions.md) R10 — async job follow-ups（#15 / #16 の起点）
+- [docs/firestore-schema.md](../firestore-schema.md) — Firestore document shape の正本

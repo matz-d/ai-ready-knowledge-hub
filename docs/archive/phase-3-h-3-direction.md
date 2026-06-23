@@ -28,9 +28,9 @@ Phase 3-H-3 では、PoC で確立した次の 2 subtype を **subtype 1 と同�
 
 **M1 境界（subtype 1 踏襲）:**
 
-> 「PDF を本線に入れる」ではなく、**「PDF を Curator 判定まで本線に入れ、`aiUsePolicy === 'direct'` の PDF だけ chunk 化する」**。`requires_masking` / `blocked` は [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §4.5 / [docs/decisions.md](decisions.md) `D-P3-H-4 Q5` と同じ。
+> 「PDF を本線に入れる」ではなく、**「PDF を Curator 判定まで本線に入れ、`aiUsePolicy === 'direct'` の PDF だけ chunk 化する」**。`requires_masking` / `blocked` は [docs/phase-3-h-2-direction.md](phase-3-h-2-direction.md) §4.5 / [docs/decisions.md](../decisions.md) `D-P3-H-4 Q5` と同じ。
 
-> **後続（2026-05-29）:** 新規 PDF の `requires_masking` は [docs/decisions.md](decisions.md) **`D-P3-M-PDF-1`** により Masker 本線 + masked chunks まで処理。上記は H-3 設計時の境界の正本。
+> **後続（2026-05-29）:** 新規 PDF の `requires_masking` は [docs/decisions.md](../decisions.md) **`D-P3-M-PDF-1`** により Masker 本線 + masked chunks まで処理。上記は H-3 設計時の境界の正本。
 
 **着手前提（Phase 3-H-2 完了 — 2026-05-20）:**
 
@@ -71,8 +71,8 @@ Phase 3-H-3 では、PoC で確立した次の 2 subtype を **subtype 1 と同�
 
 | subtype | 本線 first-choice（案） | fallback | PoC 参照 |
 |---|---|---|---|
-| `slide-pdf` | `slidePdfGeminiExtractor`（PDF を `application/pdf` media で Gemini 直読み） | なし（PoC runner の `pdf-parse` fallback は本線へ持ち込まない） | [poc/document-conversion/slide-pdf/runner.ts](../poc/document-conversion/slide-pdf/runner.ts)、[docs/phase-3-h-slide-pdf-poc.md](phase-3-h-slide-pdf-poc.md) |
-| `scan-pdf` | `scanPdfGeminiOcrExtractor`（Gemini OCR JSON → DocumentIR） | なし（OCR 失敗は fail-closed 候補） | [poc/document-conversion/scan-pdf/runner.ts](../poc/document-conversion/scan-pdf/runner.ts) |
+| `slide-pdf` | `slidePdfGeminiExtractor`（PDF を `application/pdf` media で Gemini 直読み） | なし（PoC runner の `pdf-parse` fallback は本線へ持ち込まない） | [poc/document-conversion/slide-pdf/runner.ts](../../poc/document-conversion/slide-pdf/runner.ts)、[docs/phase-3-h-slide-pdf-poc.md](phase-3-h-slide-pdf-poc.md) |
+| `scan-pdf` | `scanPdfGeminiOcrExtractor`（Gemini OCR JSON → DocumentIR） | なし（OCR 失敗は fail-closed 候補） | [poc/document-conversion/scan-pdf/runner.ts](../../poc/document-conversion/scan-pdf/runner.ts) |
 
 ### 2.3 upload pipeline 上の挿入点
 
@@ -125,7 +125,7 @@ sequenceDiagram
 
 | flagId | 対象 `sourceSubtype` | 備考 |
 |---|---|---|
-| `pdf-conversion-subtype-1` | `official-doc-pdf` | Phase 3-H-2 M1 で確定（[docs/decisions.md](decisions.md) `D-P3-H-4 Q1`） |
+| `pdf-conversion-subtype-1` | `official-doc-pdf` | Phase 3-H-2 M1 で確定（[docs/decisions.md](../decisions.md) `D-P3-H-4 Q1`） |
 | `pdf-conversion-subtype-2` | `slide-pdf` | 本フェーズで新設 |
 | `pdf-conversion-subtype-3` | `scan-pdf` | 本フェーズで新設 |
 
@@ -161,11 +161,11 @@ inferenceDestination: {
 };
 ```
 
-本リポジトリでは、同等 shape を `AuditInferenceDestination` として [src/lib/audit/auditEvent.ts](../src/lib/audit/auditEvent.ts) に既に定義済み。`document.export`（Strategist / Context Package 生成）では **設定済み**（[src/app/api/context-package/route.ts](../src/app/api/context-package/route.ts)）。`document.convert` では Phase 3-H-2 M2 時点で **未設定のまま予約**。
+本リポジトリでは、同等 shape を `AuditInferenceDestination` として [src/lib/audit/auditEvent.ts](../../src/lib/audit/auditEvent.ts) に既に定義済み。`document.export`（Strategist / Context Package 生成）では **設定済み**（[src/app/api/context-package/route.ts](../../src/app/api/context-package/route.ts)）。`document.convert` では Phase 3-H-2 M2 時点で **未設定のまま予約**。
 
 ### 4.2 `document.convert` への `inferenceDestination` 必須化（仕様確定）
 
-Phase 3-H-2 M2-C で [src/lib/audit/auditEvent.ts](../src/lib/audit/auditEvent.ts) に予約した `inferenceDestination` について、Phase 3-H-3 実装時に次を **正本仕様** とする。
+Phase 3-H-2 M2-C で [src/lib/audit/auditEvent.ts](../../src/lib/audit/auditEvent.ts) に予約した `inferenceDestination` について、Phase 3-H-3 実装時に次を **正本仕様** とする。
 
 #### 型（`AuditInferenceDestination`）
 
@@ -232,7 +232,7 @@ conversion?: {
 };
 ```
 
-Phase 3-H-3 では、§4.2 の必須化条件を満たす `document.convert` に `inferenceDestination` を **同じ AuditEvent 行**へ必須で併記する。テスト方針: [src/lib/audit/__tests__/auditEvent.test.ts](../src/lib/audit/__tests__/auditEvent.test.ts) の「未設定」ケースは subtype 1 / fallback のまま残し、subtype 2/3 + Gemini 成功用ケースを追加する。
+Phase 3-H-3 では、§4.2 の必須化条件を満たす `document.convert` に `inferenceDestination` を **同じ AuditEvent 行**へ必須で併記する。テスト方針: [src/lib/audit/__tests__/auditEvent.test.ts](../../src/lib/audit/__tests__/auditEvent.test.ts) の「未設定」ケースは subtype 1 / fallback のまま残し、subtype 2/3 + Gemini 成功用ケースを追加する。
 
 ---
 
@@ -317,8 +317,8 @@ scan-pdf の実装は次の順に進める。
 Phase 3-H-2 M6 の docs 完了条件 — **すべて達成:**
 
 - [x] [docs/phase-3-h-3-direction.md](phase-3-h-3-direction.md) が本ファイルとして存在する
-- [x] [docs/decisions.md](decisions.md) に `D-P3-H-6` 確定エントリがある（2026-05-20 確定）
-- [x] 未決が [docs/open-questions.md](open-questions.md) に H-2 解消 / H-3 持ち越しとして整理されている
+- [x] [docs/decisions.md](../decisions.md) に `D-P3-H-6` 確定エントリがある（2026-05-20 確定）
+- [x] 未決が [docs/open-questions.md](../open-questions.md) に H-2 解消 / H-3 持ち越しとして整理されている
 - [x] 関連リンク（phase-3-e §6.1、phase-3-h-2 §13、auditEvent.ts）が切れていない
 
 ### 8.2 subtype 2（slide-pdf）実装 DoD（完了 2026-05-20）
@@ -341,7 +341,7 @@ PR #3（`38d15ff`）で M1〜M5 + live smoke 完了:
 
 - [x] subtype 2 M1〜M5 + live smoke 完了（`D-P3-H-7` 着手ゲート 1）
 - [x] `D-P3-H-7` Q1〜Q4 確定（2026-05-21）
-- [x] **Q1 fixture #2〜#5 取得と [sample-data README](../sample-data/document-conversion/README.md) inventory 追記**（着手ゲート 4、2026-05-21 完了 — README L36）
+- [x] **Q1 fixture #2〜#5 取得と [sample-data README](../../sample-data/document-conversion/README.md) inventory 追記**（着手ゲート 4、2026-05-21 完了 — README L36）
 - [x] **Q3 PoC 実測完了（fixture 全件 × 3 回）と `D-P3-H-7 Q3` への数値追補**（2026-05-21）— timeout 60s、5 MiB、$0.66/月 確定。詳細: [docs/phase-3-h-3-scan-pdf-poc-measurement.md](phase-3-h-3-scan-pdf-poc-measurement.md)
 
 **M6 マイルストーン別 DoD:**
@@ -372,19 +372,19 @@ scan-pdf の公開範囲拡大は M6 完了で自動的には実施しない。*
 
 ## 9. Fixture policy（scan-pdf M6）
 
-`D-P3-H-7 Q1` で確定した fixture 調達方針の運用詳細。fixture 自体は [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) の inventory を正本とし、本節は方針の説明に留める。
+`D-P3-H-7 Q1` で確定した fixture 調達方針の運用詳細。fixture 自体は [sample-data/document-conversion/README.md](../../sample-data/document-conversion/README.md) の inventory を正本とし、本節は方針の説明に留める。
 
 ### 9.1 commit する fixture（5 本想定）
 
 | # | fixture 名（仮） | 役割 | 調達元 | PII | License |
 |---|---|---|---|---|---|
 | 1 | `synthetic-employment-form-scan.pdf`（既存維持） | safety_readiness + PII recall baseline | local synthetic | 合成 PII | Repo fixture |
-| 2 | `mhlw-labor-conditions-notice-blank-scan.pdf` | OCR coverage（表組み、PII フリー） | 既存 [mhlw-labor-conditions-notice-general.pdf](../sample-data/document-conversion/official-doc-pdf/mhlw-labor-conditions-notice-general.pdf) 由来の白紙様式 → 紙化 / 印刷 → scan | なし | 公共データ利用規約 1.0、出典明記 |
+| 2 | `mhlw-labor-conditions-notice-blank-scan.pdf` | OCR coverage（表組み、PII フリー） | 既存 [mhlw-labor-conditions-notice-general.pdf](../../sample-data/document-conversion/official-doc-pdf/mhlw-labor-conditions-notice-general.pdf) 由来の白紙様式 → 紙化 / 印刷 → scan | なし | 公共データ利用規約 1.0、出典明記 |
 | 3 | `nta-withholding-form-blank-scan.pdf` | locator quality（複雑な表） | 国税庁公開様式（白紙） → scan | なし | 国税庁利用規約、出典明記 |
 | 4 | `synthetic-invoice-with-pii-scan.pdf` | 士業ドメイン、合成 PII、フォーム欄 | local synthetic（公開請求書テンプレ + 合成会社名 / 口座 / 担当者氏名） | 合成 PII | Repo fixture |
 | 5 | `degraded-scan-fail-closed.pdf`（任意） | **5 MiB 超 → 413 size-limit 証跡**（OCR fail-closed 用ではない） | #2 を ImageMagick で 5度傾け + ノイズ → Ghostscript 120dpi 圧縮（6 MB） | なし | 公共データ利用規約 1.0、出典明記 |
 
-各 fixture を追加するごとに [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) の inventory 表に行を追加する。
+各 fixture を追加するごとに [sample-data/document-conversion/README.md](../../sample-data/document-conversion/README.md) の inventory 表に行を追加する。
 
 **OCR fail-closed 証跡（M6 実装）:** Gemini OCR timeout / quota / schema 失敗の fail-closed は **≤5 MiB の専用 fixture + `scanPdfDocumentExtractor` integration test** で取る。`degraded-scan-fail-closed.pdf` は本線 upload の **413 size-limit 専用**（6 MB、PoC runner 観測は継続可）。
 
@@ -413,7 +413,7 @@ scan-pdf の公開範囲拡大は M6 完了で自動的には実施しない。*
 
 ### 9.4 fixture 追加時の手順
 
-1. [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) の inventory 表に行を追加（fixture file / subtype / Source URL / License / PII）
+1. [sample-data/document-conversion/README.md](../../sample-data/document-conversion/README.md) の inventory 表に行を追加（fixture file / subtype / Source URL / License / PII）
 2. 公的文書由来の場合は出典明記（URL + 取得日）
 3. 合成 PII fixture の場合は生成スクリプトを `poc/document-conversion/scan-pdf/fixtures/` に置く
 4. 該当 fixture を `pnpm poc:conversion:scan-pdf <path>` で走らせ、`D-P3-H-7 Q3` 実測手順の対象に加える
@@ -428,7 +428,7 @@ scan-pdf の公開範囲拡大は M6 完了で自動的には実施しない。*
 - [docs/phase-3-h-slide-pdf-poc.md](phase-3-h-slide-pdf-poc.md) — slide-pdf PoC コスト・fallback
 - [docs/phase-3-h-3-slide-pdf-live-smoke.md](phase-3-h-3-slide-pdf-live-smoke.md) — slide-pdf 本線 live smoke 証跡
 - [docs/phase-3-h-3-scan-pdf-golden-baseline.md](phase-3-h-3-scan-pdf-golden-baseline.md) — scan-pdf golden recall 初回ベースライン + sidecar 本線化
-- [docs/decisions.md](decisions.md) — `D-P3-H-4` / `D-P3-H-5` / `D-P3-H-6` / `D-P3-H-7`
-- [docs/open-questions.md](open-questions.md) — Phase 3-H-3 未決
-- [poc/document-conversion/README.md](../poc/document-conversion/README.md) — PoC runner 一覧
-- [sample-data/document-conversion/README.md](../sample-data/document-conversion/README.md) — fixture inventory 正本
+- [docs/decisions.md](../decisions.md) — `D-P3-H-4` / `D-P3-H-5` / `D-P3-H-6` / `D-P3-H-7`
+- [docs/open-questions.md](../open-questions.md) — Phase 3-H-3 未決
+- [poc/document-conversion/README.md](../../poc/document-conversion/README.md) — PoC runner 一覧
+- [sample-data/document-conversion/README.md](../../sample-data/document-conversion/README.md) — fixture inventory 正本
