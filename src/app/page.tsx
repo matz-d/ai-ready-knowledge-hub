@@ -116,6 +116,19 @@ function statusBadgeClass(status: InventoryDocument['status']): string {
   return `document-flow-status-badge document-flow-status-badge--${suffix}`;
 }
 
+function maskerOutcomeNote(doc: InventoryDocument): {
+  label: string;
+  tone: 'safe' | 'restricted';
+} | null {
+  if (doc.status === 'ai_safe') {
+    return { label: 'マスキングで利用可能化', tone: 'safe' };
+  }
+  if (wasPromotedByMasker(doc)) {
+    return { label: 'マスク後も保護', tone: 'restricted' };
+  }
+  return null;
+}
+
 export default async function Home() {
   const [inventoryState, liveStatusCounts] = await Promise.all([
     readInventorySection(),
@@ -228,9 +241,12 @@ export default async function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {documents.slice(0, 8).map((doc) => (
+                    {documents.slice(0, 8).map((doc) => {
+                      const outcomeNote = maskerOutcomeNote(doc);
+
+                      return (
                       <tr
-                        className={wasPromotedByMasker(doc) ? 'promoted-row' : ''}
+                        className={outcomeNote ? 'promoted-row' : ''}
                         key={doc.id}
                       >
                         <td>
@@ -243,9 +259,11 @@ export default async function Home() {
                           <span>
                             {doc.documentType} · {doc.businessDomain}
                           </span>
-                          {wasPromotedByMasker(doc) ? (
-                            <span className="promotion-note">
-                              マスキングで利用可能化
+                          {outcomeNote ? (
+                            <span
+                              className={`promotion-note promotion-note--${outcomeNote.tone}`}
+                            >
+                              {outcomeNote.label}
                             </span>
                           ) : null}
                         </td>
@@ -278,7 +296,8 @@ export default async function Home() {
                           ) : null}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

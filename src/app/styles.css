@@ -247,9 +247,16 @@ h2 {
   margin-top: 8px;
   padding: 4px 7px;
   border-radius: 999px;
-  background: var(--danger);
   color: #fff;
   font-weight: 700;
+}
+
+.promotion-note--safe {
+  background: var(--success);
+}
+
+.promotion-note--restricted {
+  background: var(--danger);
 }
 
 .insight-grid {
@@ -1491,7 +1498,7 @@ body {
   text-decoration: none;
 }
 
-.site-header__nav a:first-child {
+.site-header__nav a[aria-current='page'] {
   background: var(--accent-soft);
   color: var(--accent);
 }
