@@ -98,6 +98,15 @@ describe('purposeTerms', () => {
       'deadline',
     ]);
   });
+
+  it('expands Japanese continuous phrases into searchable subterms', () => {
+    const terms = purposeTerms(
+      '新人スタッフ向けに、月次の給与計算業務を安全に学べるAIを作りたい',
+    );
+
+    expect(terms).toContain('給与計算');
+    expect(terms).toContain('月次');
+  });
 });
 
 describe('estimateTokensFromChars', () => {
