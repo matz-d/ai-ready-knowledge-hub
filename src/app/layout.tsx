@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { SiteNav } from './_components/SiteNav';
 import './styles.css';
 
 export const metadata: Metadata = {
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ja">
-      <body>
+      <body suppressHydrationWarning>
         <header className="site-header">
           <div className="site-header__inner">
             <Link href="/" className="site-header__brand">
@@ -21,12 +22,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               </span>
               <span>AI-Ready Knowledge Hub</span>
             </Link>
-            <nav className="site-header__nav" aria-label="主要ナビゲーション">
-              <Link href="/">ダッシュボード</Link>
-              <Link href="/upload">アップロード</Link>
-              <Link href="/import/google-sheets">Google Sheets 取り込み</Link>
-              <Link href="/context-package">Context Package</Link>
-            </nav>
+            <SiteNav />
           </div>
         </header>
         {children}

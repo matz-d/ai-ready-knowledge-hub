@@ -34,9 +34,15 @@ export type StrategistInputBudgetConfig = {
  * 既定 budget。`maxCharsPerChunk` は `prompt.ts#formatChunkInputForPrompt` の
  * 1200 文字 truncate と一致させること（ここを変える場合は両方そろえる）。
  * `maxTotalPromptChars` は sync target (20s) を満たすための主 guard として調整する。
+ *
+ * `maxDocuments` は ingest 側の一括アップロード上限（最大 20 件）に合わせている。
+ * これにより 20 件まとめて投入した corpus が 1 回の同期 Context Package に
+ * 全件出現し得る。prompt の実サイズは `maxTotalPromptChars` / `maxChunks` で
+ * 別途上限がかかるため、この値を上げても 1 回のプロンプト長やレイテンシは増えない
+ * （広さは増えるが、件数が増えるほど 1 文書あたりの chunk は薄くなる）。
  */
 export const DEFAULT_STRATEGIST_INPUT_BUDGET: StrategistInputBudgetConfig = {
-  maxDocuments: 5,
+  maxDocuments: 20,
   maxChunks: 80,
   maxTotalPromptChars: 45_000,
   maxCharsPerChunk: 1_200,
@@ -111,10 +117,27 @@ export function scoringTextForChunk(chunk: KnowledgeChunk): string {
   return chunk.maskedText ?? chunk.text;
 }
 
+const CJK_RUN_PATTERN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー]+/gu;
+const MAX_PURPOSE_TERMS = 128;
+
+function cjkSubterms(term: string): string[] {
+  const subterms: string[] = [];
+  const cjkRuns = term.match(CJK_RUN_PATTERN) ?? [];
+  for (const run of cjkRuns) {
+    for (let start = 0; start < run.length; start += 1) {
+      for (let length = 2; length <= 6 && start + length <= run.length; length += 1) {
+        subterms.push(run.slice(start, start + length));
+      }
+    }
+  }
+  return subterms;
+}
+
 /**
  * Purpose を簡易トークンに分解する（決定論的）。
- * 空白・句読点・記号で分割し、2文字以上のトークンを小文字化して返す。
- * 日本語の連続語はトークン化しきれないが、ファイル名・領域・英数字の一致には十分。
+ * 空白・句読点・記号で分割した語に加え、日本語の連続語は短い n-gram に展開する。
+ * これにより「月次の給与計算業務...」から `給与計算` などを拾い、budget 選別で
+ * 関連文書が後回しにならないようにする。
  */
 export function purposeTerms(purpose: string): string[] {
   const raw = purpose
@@ -122,7 +145,10 @@ export function purposeTerms(purpose: string): string[] {
     .split(/[\s、。,.\/・:;：；（）()「」『』\[\]{}<>"'`!?！？\-_=+|~@#$%^&*]+/u)
     .map((term) => term.trim())
     .filter((term) => term.length >= 2);
-  return Array.from(new Set(raw));
+  return Array.from(new Set(raw.flatMap((term) => [term, ...cjkSubterms(term)]))).slice(
+    0,
+    MAX_PURPOSE_TERMS,
+  );
 }
 
 /** 指定テキスト内に出現する purpose term の数（重複 term はカウントしない） */
