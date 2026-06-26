@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { isDemoMode } from '../lib/demoMode';
 import { SiteNav } from './_components/SiteNav';
 import './styles.css';
 
@@ -11,6 +12,8 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  const demoMode = isDemoMode();
+
   return (
     <html lang="ja">
       <body suppressHydrationWarning>
@@ -22,9 +25,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               </span>
               <span>AI-Ready Knowledge Hub</span>
             </Link>
-            <SiteNav />
+            <SiteNav demoMode={demoMode} />
           </div>
         </header>
+        {demoMode ? (
+          <div className="demo-mode-banner" role="status">
+            <strong>公開デモ</strong>
+            <span>
+              任意アップロードは無効です。投入できるのは合成サンプルのみで、環境は定期リセット前提です。
+            </span>
+          </div>
+        ) : null}
         {children}
       </body>
     </html>

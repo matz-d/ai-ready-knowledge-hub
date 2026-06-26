@@ -2,6 +2,28 @@
 
 Upload / Google Workspace import → Firestore/GCS → Inventory → Context Package → source bundle export を再現するための実行手順です。
 
+## Public Demo URL 方針
+
+提出フォームに載せる公開 URL は、通常の IAP 保護サービスではなく demo 専用 Cloud Run service を使う。
+
+- 通常 service: `ai-ready-knowledge-hub`。IAP 保護。任意 upload / Google Workspace import を許す配布物・個別環境向け。
+- 公開 demo service: `ai-ready-knowledge-hub-demo`。`DEMO_MODE=true`。任意 upload / Google Workspace import を無効化し、合成サンプルだけを取り込む。
+- demo service は `AUTH_MODE=local` で匿名閲覧可能にし、`KNOWLEDGE_HUB_TENANT_ID=public-demo` で audit tenant を固定する。
+- demo service では Context Package 候補・生成・文書一覧・文書詳細を `demoSampleSet=accounting-office` の文書だけにスコープする。
+- Docker image は同一。環境変数で入口とデータスコープだけを切り替えるため、配布形式の説明と矛盾しない。
+
+GitHub Actions は [`.github/workflows/deploy-demo.yml`](../.github/workflows/deploy-demo.yml) を手動実行する。必要な GitHub Variables は通常 deploy の値を流用し、必要なら `DEMO_` prefix で上書きする。
+
+| Variable | 用途 |
+|---|---|
+| `DEMO_CLOUD_RUN_SERVICE` | 省略時 `ai-ready-knowledge-hub-demo` |
+| `DEMO_GCP_PROJECT_ID` / `DEMO_GCP_REGION` | 省略時 `GCP_PROJECT_ID` / `GCP_REGION` |
+| `DEMO_ARTIFACT_REGISTRY_REPO` | 省略時 `ARTIFACT_REGISTRY_REPO` |
+| `DEMO_WIF_PROVIDER` / `DEMO_DEPLOY_SERVICE_ACCOUNT` | 省略時は通常 deploy と同じ WIF / deploy SA |
+| `DEMO_RUNTIME_SERVICE_ACCOUNT` | 省略時 `RUNTIME_SERVICE_ACCOUNT` |
+| `DEMO_KNOWLEDGE_HUB_BUCKET` | 省略時 `KNOWLEDGE_HUB_BUCKET`。可能なら demo 用 bucket を推奨 |
+| `DEMO_KNOWLEDGE_HUB_TENANT_ID` | 省略時 `public-demo` |
+
 現時点の提出デモでは、PDF / CSV / XLSX / Google Sheets / Google Docs の主要 ingest、`/upload` の複数ファイルキュー、Phase 4-UX の purpose-driven candidate selection、Safety Review、Preview acknowledgement、各文書・各候補の判断を可視化する **Decision Trace**（文書詳細 / Safety Review）、async Context Package job、NotebookLM 用 source bundle が実装済みです。**Google Sheets** は [Phase 3-A](archive/phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。
 
 デモ説明では、標準 profile は **`cloud-managed`** です。管理されたクラウド境界で文書を受け取り、Cloud DLP + Masker で安全化し、目的にひもづいた Context Package として NotebookLM / Gemini / RAG に渡す前段を作ります。NotebookLM には単一 `.md` ではなく、Context Package result panel から取得できる **source bundle zip** の全ファイルを source 追加します。

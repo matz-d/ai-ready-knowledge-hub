@@ -48,6 +48,7 @@ const stubCandidate = {
 
 describe('POST /api/context-package/candidates', () => {
   beforeEach(() => {
+    delete process.env.DEMO_MODE;
     vi.clearAllMocks();
     listInventoryDocumentsMock.mockResolvedValue([sampleDoc()]);
     selectCandidatesMock.mockReturnValue({
@@ -119,6 +120,20 @@ describe('POST /api/context-package/candidates', () => {
 
   it('returns 400 invalid_request when purpose is empty', async () => {
     const response = await handleCandidatesPost(buildRequest({ purpose: '' }), deps());
+
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.code).toBe('invalid_request');
+    expect(listInventoryDocumentsMock).not.toHaveBeenCalled();
+  });
+
+  it('limits purpose length in demo mode', async () => {
+    process.env.DEMO_MODE = 'true';
+
+    const response = await handleCandidatesPost(
+      buildRequest({ purpose: 'あ'.repeat(801) }),
+      deps(),
+    );
 
     expect(response.status).toBe(400);
     const json = await response.json();

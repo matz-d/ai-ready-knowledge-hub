@@ -157,6 +157,7 @@ async function parseJson(response: Response): Promise<Record<string, unknown>> {
 }
 
 beforeEach(() => {
+  delete process.env.DEMO_MODE;
   vi.clearAllMocks();
   getServiceAccountEmailMock.mockResolvedValue(
     'importer-sa@example.iam.gserviceaccount.com'
@@ -200,6 +201,23 @@ beforeEach(() => {
 });
 
 describe('POST /api/import/google-sheets', () => {
+  it('blocks external imports in demo mode', async () => {
+    process.env.DEMO_MODE = 'true';
+
+    const response = await POST(
+      buildRequest({ urlOrFileId: 'https://docs.google.com/spreadsheets/d/abc' })
+    );
+
+    expect(response.status).toBe(403);
+    expect(await parseJson(response)).toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining('外部文書'),
+      })
+    );
+    expect(orchestrateImportedSnapshotProcessingMock).not.toHaveBeenCalled();
+    expect(orchestrateImportedDocsSnapshotProcessingMock).not.toHaveBeenCalled();
+  });
+
   it('routes Google Docs document URLs to the Docs orchestrator', async () => {
     const docsUrl =
       'https://docs.google.com/document/d/1abc12345678901234567/edit';

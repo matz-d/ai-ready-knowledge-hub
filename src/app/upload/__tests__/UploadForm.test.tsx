@@ -63,6 +63,44 @@ function submit(container: HTMLElement) {
 }
 
 describe('UploadForm multi-file queue', () => {
+  it('renders curated sample import instead of file input in demo mode', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, {
+        imported: 1,
+        alreadyPresent: 0,
+        failed: 0,
+        documents: [
+          {
+            fileName: '給与計算チェックリスト.md',
+            status: 'imported',
+            docId: 'doc-1',
+          },
+        ],
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = render(<UploadForm demoMode />);
+
+    expect(screen.getByText('合成サンプル文書を取り込む')).toBeTruthy();
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'サンプル文書を取り込む' })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('サンプル取り込み結果')).toBeTruthy();
+    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/demo/sample-documents', {
+      method: 'POST',
+    });
+    expect(screen.getByText('給与計算チェックリスト.md')).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: /Context Package を作成/ })
+    ).toBeTruthy();
+  });
+
   it('uploads multiple files, continues past a failure, and shows per-file status', async () => {
     const fetchMock = vi
       .fn()

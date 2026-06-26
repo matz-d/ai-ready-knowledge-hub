@@ -28,6 +28,7 @@ import {
 import { auditActorFromRequest, recordAuditEvent } from '../../../../lib/audit/auditEvent';
 import { parseGoogleDocsInput } from '../../../../lib/googleDocsSnapshotImporter';
 import { parseGoogleSheetsInput } from '../../../../lib/googleSheetsSnapshotImporter';
+import { isDemoMode } from '../../../../lib/demoMode';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -95,6 +96,16 @@ function shouldUseGoogleDocsImporter(urlOrFileId: string): boolean {
 }
 
 export async function POST(request: Request) {
+  if (isDemoMode()) {
+    return NextResponse.json(
+      {
+        error:
+          '公開デモでは外部文書の取り込みを無効化しています。サンプル文書を取り込んでお試しください。',
+      },
+      { status: 403 }
+    );
+  }
+
   let rawBody: unknown;
   try {
     rawBody = await request.json();

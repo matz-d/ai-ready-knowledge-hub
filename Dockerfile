@@ -40,6 +40,7 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/sample-data ./sample-data
 
 # Cloud Tasks SDK loads proto JSON dynamically, so Next.js standalone tracing misses it.
 COPY --from=builder /app/node_modules/.pnpm/@google-cloud+tasks@*/node_modules/@google-cloud/tasks/build/protos /tmp/cloud-tasks-protos

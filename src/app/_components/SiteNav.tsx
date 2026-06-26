@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 const navItems = [
   { href: '/', label: 'ダッシュボード' },
   { href: '/upload', label: 'アップロード' },
-  { href: '/import/google-sheets', label: 'Google Sheets 取り込み' },
+  { href: '/import/google-sheets', label: 'Google Sheets 取り込み', hiddenInDemo: true },
   { href: '/context-package', label: 'Context Package' },
 ] as const;
 
@@ -15,12 +15,19 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SiteNav() {
+type SiteNavProps = {
+  demoMode?: boolean;
+};
+
+export function SiteNav({ demoMode = false }: SiteNavProps) {
   const pathname = usePathname();
+  const visibleNavItems = demoMode
+    ? navItems.filter((item) => !('hiddenInDemo' in item && item.hiddenInDemo))
+    : navItems;
 
   return (
     <nav className="site-header__nav" aria-label="主要ナビゲーション">
-      {navItems.map((item) => {
+      {visibleNavItems.map((item) => {
         const isActive = isActivePath(pathname, item.href);
 
         return (

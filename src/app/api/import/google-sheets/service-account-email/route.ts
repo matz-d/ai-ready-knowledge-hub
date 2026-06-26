@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
+import { isDemoMode } from '../../../../../lib/demoMode';
 import { getServiceAccountEmail } from '../../../../../lib/googleWorkspaceClient';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  if (isDemoMode()) {
+    return NextResponse.json({ error: 'demo_mode_disabled' }, { status: 403 });
+  }
+
   try {
     const serviceAccountEmail = await getServiceAccountEmail();
     return NextResponse.json({ serviceAccountEmail });

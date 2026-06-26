@@ -172,6 +172,7 @@ const defaultPdfDispatchSuccess = {
 };
 
 beforeEach(() => {
+  delete process.env.DEMO_MODE;
   vi.clearAllMocks();
   getKnowledgeHubBucketNameMock.mockReturnValue('bucket-1');
   getFirestoreClientMock.mockReturnValue({ collection: vi.fn() });
@@ -202,6 +203,19 @@ beforeEach(() => {
 });
 
 describe('POST /api/documents', () => {
+  it('blocks arbitrary uploads in demo mode', async () => {
+    process.env.DEMO_MODE = 'true';
+    const file = new File(['hello'], 'sample.txt', { type: 'text/plain' });
+
+    const response = await POST(buildRequestWithFile(file));
+    const body = await parseJson(response);
+
+    expect(response.status).toBe(403);
+    expect(body.error).toContain('任意ファイル');
+    expect(orchestrateUploadProcessingMock).not.toHaveBeenCalled();
+    expect(replaceChunksForDocMock).not.toHaveBeenCalled();
+  });
+
   it('returns curated success response shape', async () => {
     const file = new File(['hello'], 'sample.txt', { type: 'text/plain' });
 

@@ -11,6 +11,7 @@ import {
   resolveInventoryDocumentsByIds,
   type ResolvedInventoryDocument,
 } from '../../lib/inventoryFirestoreAdapter';
+import type { DemoSampleSetId } from '../../lib/demoMode';
 import type { InventoryDocument } from '../../lib/inventory';
 import type { KnowledgeChunk } from '../../lib/knowledgeChunkSchema';
 import type {
@@ -157,6 +158,8 @@ export type RunStrategistOrchestratorInput = {
    * `full`: 全 safe chunk をバッチ分割して逐次 strategistFlow（async 専用）。
    */
   coverage?: StrategistCoverageMode;
+  /** Public demo scope: when set, only curated sample documents with this marker are eligible. */
+  demoSampleSet?: DemoSampleSetId;
 };
 
 export type RunStrategistOrchestratorDeps = {
@@ -277,9 +280,16 @@ export async function runStrategistOrchestrator(
   const usesDocIdFilter = requestedDocIds.length > 0;
   const listInventoryDocuments =
     deps.listInventoryDocuments ??
-    (() => listInventoryDocumentsFromFirestore(limit));
+    (() =>
+      listInventoryDocumentsFromFirestore(limit, {
+        ...(input.demoSampleSet ? { demoSampleSet: input.demoSampleSet } : {}),
+      }));
   const resolveByIds =
-    deps.resolveInventoryDocumentsByIds ?? resolveInventoryDocumentsByIds;
+    deps.resolveInventoryDocumentsByIds ??
+    ((docIds: string[]) =>
+      resolveInventoryDocumentsByIds(docIds, {
+        ...(input.demoSampleSet ? { demoSampleSet: input.demoSampleSet } : {}),
+      }));
   const listChunks =
     deps.listChunks ??
     createChunkFirestoreAdapter().listChunksForDocument;

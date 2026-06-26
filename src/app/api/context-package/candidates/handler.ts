@@ -4,6 +4,11 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import type { InventoryDocument } from '../../../../lib/inventory';
+import {
+  DEMO_MAX_PURPOSE_LENGTH,
+  DEMO_SAMPLE_SET_ID,
+  isDemoMode,
+} from '../../../../lib/demoMode';
 import { listInventoryDocumentsFromFirestore } from '../../../../lib/inventoryFirestoreAdapter';
 import {
   selectCandidates,
@@ -64,8 +69,23 @@ export async function handleCandidatesPost(
   }
 
   const { purpose, inventoryLimit, responseLimit } = parsed.data;
+  const demoMode = isDemoMode();
+  if (demoMode && purpose.length > DEMO_MAX_PURPOSE_LENGTH) {
+    return NextResponse.json(
+      {
+        code: 'invalid_request',
+        details: `公開デモの Purpose は ${DEMO_MAX_PURPOSE_LENGTH} 文字以内にしてください。`,
+      },
+      { status: 400 },
+    );
+  }
+
   const listInventoryDocuments =
-    deps.listInventoryDocuments ?? listInventoryDocumentsFromFirestore;
+    deps.listInventoryDocuments ??
+    ((limit: number) =>
+      listInventoryDocumentsFromFirestore(limit, {
+        ...(demoMode ? { demoSampleSet: DEMO_SAMPLE_SET_ID } : {}),
+      }));
   const runSelectCandidates = deps.selectCandidates ?? selectCandidates;
 
   try {
