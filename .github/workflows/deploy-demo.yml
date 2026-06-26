@@ -169,7 +169,7 @@ jobs:
       - name: Grant public invoker
         shell: bash
         run: |
-          gcloud beta run services add-iam-policy-binding "${CLOUD_RUN_SERVICE}" \
+          gcloud run services add-iam-policy-binding "${CLOUD_RUN_SERVICE}" \
             --project="${GCP_PROJECT_ID}" \
             --region="${GCP_REGION}" \
             --member=allUsers \
