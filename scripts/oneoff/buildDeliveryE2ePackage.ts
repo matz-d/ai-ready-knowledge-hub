@@ -95,9 +95,9 @@ const input: ContextPackageExportInput = {
   // 除外は「断言」: 本文は同梱しない。名前と理由のみ（古い料金は判別テストの肝）。
   excludedDocuments: [
     {
-      fileName: '古い料金表_2023.csv',
+      fileName: '料金表_2023.csv',
       reason:
-        '旧版料金表（superseded）。現行 料金表_2026.csv に置き換え済みのため除外',
+        '2023年版料金表（superseded）。現行 料金表_2026.csv に置き換え済みのため除外',
       status: 'Superseded / excluded',
     },
   ],

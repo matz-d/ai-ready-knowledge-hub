@@ -161,7 +161,7 @@ exports[`candidateSelection golden (S4) > matches snapshot for payroll onboardin
     {
       "businessDomain": "料金管理",
       "docId": "doc-stale-pricing",
-      "fileName": "古い料金表_2023.csv",
+      "fileName": "料金表_2023.csv",
       "matchReason": null,
       "reasonCode": "superseded_or_stale",
       "reasonLabel": "古い／上書き候補",
@@ -345,7 +345,7 @@ exports[`candidateSelection golden (S4) > matches snapshot for payroll purpose (
     {
       "businessDomain": "料金管理",
       "docId": "doc-stale-pricing",
-      "fileName": "古い料金表_2023.csv",
+      "fileName": "料金表_2023.csv",
       "matchReason": null,
       "reasonCode": "superseded_or_stale",
       "reasonLabel": "古い／上書き候補",

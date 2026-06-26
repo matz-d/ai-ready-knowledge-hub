@@ -32,7 +32,7 @@ function baseInput(
       },
     ],
     excludedDocuments: [
-      { fileName: '古い料金表_2023.csv', reason: 'superseded' },
+      { fileName: '料金表_2023.csv', reason: 'superseded' },
     ],
     humanReviewDocuments: [
       { fileName: '顧問契約書.txt', reason: 'Restricted' },
@@ -72,12 +72,12 @@ describe('exportContextPackageSourceBundle', () => {
     const { files } = exportContextPackageSourceBundle(baseInput());
     const names = files.map((f) => f.fileName);
 
-    expect(names).not.toContain('古い料金表_2023.csv');
+    expect(names).not.toContain('料金表_2023.csv');
     expect(names).not.toContain('顧問契約書.txt');
 
     // ただし guide には名前と理由が残る（除外の根拠を開示する）。
     const guide = files.find((f) => f.role === 'guide')!;
-    expect(guide.content).toContain('古い料金表_2023.csv');
+    expect(guide.content).toContain('料金表_2023.csv');
     expect(guide.content).toContain('顧問契約書.txt');
   });
 

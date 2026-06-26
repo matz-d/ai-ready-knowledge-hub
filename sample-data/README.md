@@ -37,7 +37,7 @@ AI-Ready Knowledge Hub の各エージェント (Curator / Masker / Strategist /
 | `accounting-office/就業規則テンプレート.md` | 汎用テンプレ。Internal、AI参照可 |
 | `accounting-office/年末調整_案内文.txt` | 顧客向け案内文。Internal、AI参照可 |
 | `accounting-office/料金表_2026.csv` | 現行料金表。Internal、鮮度=現行 |
-| `accounting-office/古い料金表_2023.csv` | 旧版料金表。Curator 鮮度判定で「旧版候補」フラグが立つ想定 |
+| `accounting-office/料金表_2023.csv` | 2023年版料金表。Curator 鮮度判定で「旧版候補」フラグが立つ想定 |
 
 ### candidate-selection（Phase 4-UX S4）
 

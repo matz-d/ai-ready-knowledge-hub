@@ -28,9 +28,9 @@
     "freshness": "superseded_candidate",
     "isAuthoritativeCandidate": true,
     "aiUsePolicy": "direct",
-    "rationale": "ファイル名に「古い料金表」とあり、サービス内容と料金が記載された表形式の文書であるため、料金管理に関する古い表と判断しました。内部情報であり、AIによる直接利用が可能です。",
-    "fileName": "古い料金表_2023.csv",
-    "sourcePath": "sample-data/accounting-office/古い料金表_2023.csv"
+    "rationale": "ファイル名に「料金表」とあり、サービス内容と料金が記載された表形式の文書であるため、料金管理に関する古い表と判断しました。内部情報であり、AIによる直接利用が可能です。",
+    "fileName": "料金表_2023.csv",
+    "sourcePath": "sample-data/accounting-office/料金表_2023.csv"
   },
   {
     "documentType": "テンプレート",
