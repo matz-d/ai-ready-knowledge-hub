@@ -1988,6 +1988,16 @@ body {
   line-height: 1.35;
 }
 
+.review-item strong a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.review-item strong a:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+
 .review-item small,
 .empty-side-note {
   color: var(--muted);

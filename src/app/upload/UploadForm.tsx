@@ -33,6 +33,7 @@ type DemoSampleDocument = {
   docId?: string;
   status: 'imported' | 'already_present' | 'failed';
   lifecycleStatus?: string;
+  result?: DocumentUploadSuccessResponse;
   error?: string;
 };
 
@@ -248,6 +249,18 @@ export function UploadForm({ demoMode = false }: UploadFormProps) {
                   {doc.error ? (
                     <p className="upload-queue__error" role="alert">
                       {doc.error}
+                    </p>
+                  ) : null}
+                  {doc.result ? (
+                    <div className="upload-queue__result">
+                      <CuratorResultCard result={doc.result} />
+                      <MaskerResultCard result={doc.result} />
+                    </div>
+                  ) : doc.docId ? (
+                    <p className="upload-queue__cta upload-queue__cta--inline">
+                      <Link href={`/documents/${doc.docId}`}>
+                        文書詳細を開く →
+                      </Link>
                     </p>
                   ) : null}
                 </li>
