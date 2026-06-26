@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { NextResponse } from 'next/server';
 import { modelId } from '../../../../agents/_shared/genkitClient';
 import { buildCsvCuratorInput } from '../../../../lib/extractors/csvExtractor';
-import { getFirestoreClient } from '../../../../lib/firestore';
+import { FieldValue, getFirestoreClient } from '../../../../lib/firestore';
 import { hashContentSha256 } from '../../../../lib/firestoreSchema';
 import {
   DEMO_SAMPLE_SET_FIELD,
@@ -55,13 +55,18 @@ async function findExistingDocId(contentSha256: string): Promise<string | null> 
   return snapshot.docs[0]?.id ?? null;
 }
 
-async function markDemoSampleDocument(docId: string): Promise<void> {
+async function markDemoSampleDocument(
+  docId: string,
+  fileName: string
+): Promise<void> {
   await getFirestoreClient()
     .collection(DOCUMENTS_COLLECTION)
     .doc(docId)
     .set(
       {
+        fileName,
         [DEMO_SAMPLE_SET_FIELD]: DEMO_SAMPLE_SET_ID,
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
@@ -82,7 +87,8 @@ async function ingestSample(
     const contentSha256 = hashContentSha256(buffer);
     const existingDocId = await findExistingDocId(contentSha256);
     if (existingDocId) {
-      await markDemoSampleDocument(existingDocId);
+      await markDemoSampleDocument(existingDocId, fileName);
+      await replaceChunksForDoc(existingDocId);
       return { fileName, docId: existingDocId, status: 'already_present' };
     }
 
@@ -103,7 +109,7 @@ async function ingestSample(
     });
 
     await replaceChunksForDoc(result.docId);
-    await markDemoSampleDocument(result.docId);
+    await markDemoSampleDocument(result.docId, fileName);
 
     try {
       const { tenantId, actor } = auditActorFromRequest(request);
