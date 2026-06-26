@@ -131,6 +131,7 @@ jobs:
           docker push "${{ steps.image.outputs.image }}:demo-latest"
 
       - name: Deploy public demo to Cloud Run
+        id: deploy
         shell: bash
         run: |
           # Public demo uses the same Docker artifact, but runtime env disables
@@ -158,3 +159,37 @@ jobs:
             --allow-unauthenticated \
             --set-env-vars="${ENV_CSV}" \
             --quiet
+
+          service_url="$(gcloud run services describe "${CLOUD_RUN_SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='value(status.url)')"
+          echo "service_url=${service_url}" >> "${GITHUB_OUTPUT}"
+
+      - name: Grant public invoker
+        shell: bash
+        run: |
+          gcloud beta run services add-iam-policy-binding "${CLOUD_RUN_SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --member=allUsers \
+            --role=roles/run.invoker \
+            --quiet
+
+      - name: Verify public demo URL
+        shell: bash
+        run: |
+          service_url="${{ steps.deploy.outputs.service_url }}"
+          if [[ -z "${service_url}" ]]; then
+            echo "Missing deployed service URL." >&2
+            exit 1
+          fi
+
+          status="$(curl -sS -o /tmp/demo-home.html -w '%{http_code}' "${service_url}/")"
+          if [[ "${status}" != "200" ]]; then
+            echo "Expected public demo URL to return 200, got ${status}" >&2
+            sed -n '1,80p' /tmp/demo-home.html >&2
+            exit 1
+          fi
+
+          echo "Public demo URL: ${service_url}"
