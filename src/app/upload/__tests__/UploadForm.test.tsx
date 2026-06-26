@@ -47,6 +47,30 @@ function successBody(docId: string, fileName: string) {
   };
 }
 
+function aiSafeBody(docId: string, fileName: string) {
+  return {
+    ...successBody(docId, fileName),
+    status: 'ai_safe',
+    aiSafeStoragePath: `masked/${docId}/${fileName}`,
+    curator: {
+      ...successBody(docId, fileName).curator,
+      aiUsePolicy: 'requires_masking',
+      sensitivity: 'Confidential',
+    },
+    masker: {
+      decision: 'ai_safe_ready',
+      provider: 'simple-rule',
+      maskedSpansCount: 2,
+      ruleHits: { phone_like: 1, email: 1 },
+      residualRisk: { detected: false, reasons: [] },
+      rationale: 'マスク済みで利用可能です。',
+      recommendedSensitivity: 'Confidential',
+      completedAt: '2026-06-01T00:00:01.000Z',
+      modelId: 'test-model',
+    },
+  };
+}
+
 function pdf(name: string): File {
   return new File(['content'], name, { type: 'application/pdf' });
 }
@@ -74,6 +98,7 @@ describe('UploadForm multi-file queue', () => {
             fileName: '給与計算チェックリスト.md',
             status: 'imported',
             docId: 'doc-1',
+            result: aiSafeBody('doc-1', '給与計算チェックリスト.md'),
           },
         ],
       })
@@ -95,7 +120,9 @@ describe('UploadForm multi-file queue', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/demo/sample-documents', {
       method: 'POST',
     });
-    expect(screen.getByText('給与計算チェックリスト.md')).toBeTruthy();
+    expect(screen.getAllByText('給与計算チェックリスト.md').length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('Curator 分類結果')).toBeTruthy();
+    expect(screen.getByLabelText('Masker 処理結果')).toBeTruthy();
     expect(
       screen.getByRole('link', { name: /Context Package を作成/ })
     ).toBeTruthy();

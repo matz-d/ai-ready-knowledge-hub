@@ -221,6 +221,7 @@ export default async function Home() {
       {inventoryState ? (
         <section
           className="dashboard-grid inventory-demo-section"
+          id="document-list"
           aria-labelledby="inventory-demo-heading"
         >
           <div className="inventory-workbench">
@@ -257,7 +258,7 @@ export default async function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {documents.slice(0, 8).map((doc) => {
+                    {documents.map((doc) => {
                       const outcomeNote = maskerOutcomeNote(doc);
 
                       return (
@@ -332,7 +333,7 @@ export default async function Home() {
             <section className="side-panel">
               <div className="panel-heading-row">
                 <h2>保護中の文書</h2>
-                <Link href="/context-package">すべて見る</Link>
+                <Link href="#document-list">すべて見る</Link>
               </div>
               <div className="review-list">
                 {protectedDocuments.slice(0, 3).map((doc) => (
@@ -343,7 +344,9 @@ export default async function Home() {
                     >
                       {SENSITIVITY_LABELS[doc.sensitivity]}
                     </span>
-                    <strong>{doc.fileName}</strong>
+                    <strong>
+                      <Link href={`/documents/${doc.id}`}>{doc.fileName}</Link>
+                    </strong>
                     <small>
                       {doc.businessDomain} · {AI_USE_POLICY_LABELS[doc.aiUsePolicy]}
                     </small>

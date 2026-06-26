@@ -17,18 +17,28 @@ import {
 import { replaceChunksForDoc } from '../../../../lib/chunkRegenerator';
 import { getKnowledgeHubBucketName } from '../../../../lib/storage';
 import { DOCUMENTS_COLLECTION } from '../../../../lib/documents';
+import type { DocumentUploadSuccessResponse } from '../../../../lib/documents';
+import {
+  documentUploadSuccessBodyFromFirestoreDocument,
+  documentUploadSuccessBodyFromOrchestrate,
+} from '../../../../lib/documentUploadResponseMapper';
 import { auditActorFromRequest, recordAuditEvent } from '../../../../lib/audit/auditEvent';
+import { parseFirestoreDocumentSnapshot } from '../../../../lib/parseFirestoreDocumentData';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const DEMO_SAMPLE_FILES = [
-  '給与計算チェックリスト.md',
-  '給与計算_例外対応メモ.txt',
-  '就業規則テンプレート.md',
-  '料金表_2026.csv',
-  '料金表_2023.csv',
   '顧客対応メモ_匿名化.txt',
+  '料金表_2023.csv',
+  '料金表_2026.csv',
+  '就業規則テンプレート.md',
+  '給与計算_例外対応メモ.txt',
+  '給与計算チェックリスト.md',
+  '年末調整_案内文.txt',
+  '顧問契約書テンプレ.md',
+  '顧客対応メモ_書式.md',
+  '顧問契約書_実案件サンプル.txt',
 ] as const;
 
 type DemoSampleDocument = {
@@ -36,6 +46,7 @@ type DemoSampleDocument = {
   docId?: string;
   status: 'imported' | 'already_present' | 'failed';
   lifecycleStatus?: OrchestrateResult['kind'];
+  result?: DocumentUploadSuccessResponse;
   error?: string;
 };
 
@@ -72,6 +83,25 @@ async function markDemoSampleDocument(
     );
 }
 
+async function readDemoSampleResult(args: {
+  docId: string;
+  kind: 'created' | 'overwritten';
+}): Promise<DocumentUploadSuccessResponse | undefined> {
+  const snapshot = await getFirestoreClient()
+    .collection(DOCUMENTS_COLLECTION)
+    .doc(args.docId)
+    .get();
+  if (!snapshot.exists) return undefined;
+
+  const parsed = parseFirestoreDocumentSnapshot(snapshot);
+  return (
+    documentUploadSuccessBodyFromFirestoreDocument({
+      doc: parsed,
+      ingestMeta: { kind: args.kind },
+    }) ?? undefined
+  );
+}
+
 function samplePath(fileName: string): string {
   return join(process.cwd(), 'sample-data', 'accounting-office', fileName);
 }
@@ -89,7 +119,17 @@ async function ingestSample(
     if (existingDocId) {
       await markDemoSampleDocument(existingDocId, fileName);
       await replaceChunksForDoc(existingDocId);
-      return { fileName, docId: existingDocId, status: 'already_present' };
+      const result = await readDemoSampleResult({
+        docId: existingDocId,
+        kind: 'overwritten',
+      });
+      return {
+        fileName,
+        docId: existingDocId,
+        status: 'already_present',
+        lifecycleStatus: result?.status,
+        ...(result ? { result } : {}),
+      };
     }
 
     const csvInput = fileName.toLowerCase().endsWith('.csv')
@@ -110,6 +150,17 @@ async function ingestSample(
 
     await replaceChunksForDoc(result.docId);
     await markDemoSampleDocument(result.docId, fileName);
+
+    const responseResult =
+      (await readDemoSampleResult({ docId: result.docId, kind: 'created' })) ??
+      documentUploadSuccessBodyFromOrchestrate({
+        displayName: fileName,
+        contentType,
+        byteSize: buffer.length,
+        modelId,
+        result,
+        ingestMeta: { kind: 'created' },
+      });
 
     try {
       const { tenantId, actor } = auditActorFromRequest(request);
@@ -134,6 +185,7 @@ async function ingestSample(
       docId: result.docId,
       status: 'imported',
       lifecycleStatus: result.kind,
+      result: responseResult,
     };
   } catch (error) {
     console.error('[demo] sample ingest failed', { fileName, error });
