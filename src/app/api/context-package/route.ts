@@ -24,6 +24,11 @@ import {
 } from '../../../lib/audit/auditEvent';
 import { PROCESSING_PROFILE_PRESETS } from '../../../lib/processingProfile';
 import {
+  DEMO_MAX_PURPOSE_LENGTH,
+  DEMO_SAMPLE_SET_ID,
+  isDemoMode,
+} from '../../../lib/demoMode';
+import {
   createContextPackageJob,
   failContextPackageJob,
 } from '../../../lib/contextPackageJobs/firestoreAdapter';
@@ -118,8 +123,19 @@ export async function POST(request: Request) {
   }
 
   const { purpose, limit, docIds, mode } = parsed.data;
+  const demoMode = isDemoMode();
+  if (demoMode && purpose.length > DEMO_MAX_PURPOSE_LENGTH) {
+    return NextResponse.json(
+      {
+        error: 'invalid_request',
+        details: `公開デモの Purpose は ${DEMO_MAX_PURPOSE_LENGTH} 文字以内にしてください。`,
+      },
+      { status: 400 },
+    );
+  }
 
   const { tenantId, actor } = auditActorFromRequest(request);
+  const executionMode: ExecutionMode = demoMode ? 'sync' : mode;
   const jobRequest: ContextPackageJobRequest = {
     purpose,
     limit,
@@ -129,7 +145,7 @@ export async function POST(request: Request) {
   };
 
   // 明示 async は同期実行を試さず即 job 化する。
-  if (mode === 'async') {
+  if (executionMode === 'async') {
     return enqueueJobResponse(jobRequest);
   }
 
@@ -138,6 +154,7 @@ export async function POST(request: Request) {
       purpose,
       limit,
       ...(docIds && docIds.length > 0 ? { docIds } : {}),
+      ...(demoMode ? { demoSampleSet: DEMO_SAMPLE_SET_ID } : {}),
     });
 
     try {
@@ -182,7 +199,7 @@ export async function POST(request: Request) {
     }
     if (e instanceof StrategistSyncBudgetExceededError) {
       // budget 超過: auto なら 422 で諦めず job 化へフォールバックする。
-      if (shouldFallbackToAsync(mode)) {
+      if (shouldFallbackToAsync(executionMode)) {
         return enqueueJobResponse(jobRequest, {
           syncBudget: {
             estimatedSeconds: e.estimatedSeconds,

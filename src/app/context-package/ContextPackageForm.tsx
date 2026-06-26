@@ -22,7 +22,8 @@ import {
   type SourceBundleZipInput,
 } from './sourceBundleZip';
 
-const MAX_PURPOSE = 2000;
+const DEFAULT_MAX_PURPOSE = 2000;
+const DEMO_MAX_PURPOSE = 800;
 
 /**
  * 非同期 job 経路（mode:"auto"）の有効化フラグ。Cloud Tasks queue が配線済みの環境
@@ -121,6 +122,10 @@ type UiState = 'idle' | 'loading' | 'polling' | 'done' | 'error';
 
 type CandidatesFetchState = 'idle' | 'loading' | 'ready' | 'error';
 
+type ContextPackageFormProps = {
+  demoMode?: boolean;
+};
+
 export function parseDocIds(raw: string): string[] {
   return [...new Set(raw.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean))];
 }
@@ -150,7 +155,7 @@ async function copyMarkdownToClipboard(markdown: string): Promise<boolean> {
   }
 }
 
-export function ContextPackageForm() {
+export function ContextPackageForm({ demoMode = false }: ContextPackageFormProps) {
   const [purpose, setPurpose] = useState('');
   const [docIdsRaw, setDocIdsRaw] = useState('');
   const [uiState, setUiState] = useState<UiState>('idle');
@@ -186,7 +191,8 @@ export function ContextPackageForm() {
   const isBusy = uiState === 'loading' || uiState === 'polling';
   const isFetchingCandidates = candidatesFetchState === 'loading';
   const isFormDisabled = isBusy || isFetchingCandidates;
-  const remaining = MAX_PURPOSE - purpose.length;
+  const maxPurpose = demoMode ? DEMO_MAX_PURPOSE : DEFAULT_MAX_PURPOSE;
+  const remaining = maxPurpose - purpose.length;
   const candidatesStale = isCandidatesStale(purpose, candidatesPurpose);
   const candidatesReady = candidatesFetchState === 'ready' && !candidatesStale;
   const docIdsForGeneration = useMemo(
@@ -401,7 +407,7 @@ export function ContextPackageForm() {
         body: JSON.stringify({
           purpose: purpose.trim(),
           docIds,
-          ...(ASYNC_ENABLED ? { mode: 'auto' } : {}),
+          ...(ASYNC_ENABLED && !demoMode ? { mode: 'auto' } : {}),
         }),
       });
 
@@ -491,9 +497,14 @@ export function ContextPackageForm() {
           <span
             className={`cp-char-count${remaining < 100 ? ' cp-char-count--warn' : ''}`}
           >
-            {purpose.length} / {MAX_PURPOSE}
+            {purpose.length} / {maxPurpose}
           </span>
         </div>
+        {demoMode ? (
+          <p className="cp-demo-note">
+            公開デモのため、目的には実名・顧客情報・機密情報を入力しないでください。
+          </p>
+        ) : null}
         <textarea
           id="cp-purpose"
           className="cp-textarea"
@@ -501,7 +512,7 @@ export function ContextPackageForm() {
           value={purpose}
           onChange={(e) => handlePurposeChange(e.target.value)}
           disabled={isFormDisabled}
-          maxLength={MAX_PURPOSE}
+          maxLength={maxPurpose}
           rows={5}
           placeholder="例: 新入社員向けに給与計算業務を学べる AI を作りたい"
           required
@@ -579,30 +590,32 @@ export function ContextPackageForm() {
           </>
         ) : null}
 
-        <details className="cp-advanced">
-          <summary className="cp-advanced-summary">
-            上級者向け: Doc ID を直接指定
-          </summary>
-          <p className="cp-advanced-hint">
-            入力がある場合はチェックボックス選択より優先して生成します（改行またはカンマ区切り・最大
-            {MAX_CONTEXT_PACKAGE_DOC_IDS} 件）。
-          </p>
-          <textarea
-            id="cp-doc-ids"
-            className="cp-textarea"
-            name="docIds"
-            value={docIdsRaw}
-            onChange={(e) => {
-              setDocIdsRaw(e.target.value);
-              setPreviewAcknowledged(false);
-            }}
-            disabled={isFormDisabled}
-            rows={3}
-            placeholder={'例:\ndoc-abc123\ndoc-def456'}
-            spellCheck={false}
-            aria-label="対象 Doc IDs（上級者向け）"
-          />
-        </details>
+        {!demoMode ? (
+          <details className="cp-advanced">
+            <summary className="cp-advanced-summary">
+              上級者向け: Doc ID を直接指定
+            </summary>
+            <p className="cp-advanced-hint">
+              入力がある場合はチェックボックス選択より優先して生成します（改行またはカンマ区切り・最大
+              {MAX_CONTEXT_PACKAGE_DOC_IDS} 件）。
+            </p>
+            <textarea
+              id="cp-doc-ids"
+              className="cp-textarea"
+              name="docIds"
+              value={docIdsRaw}
+              onChange={(e) => {
+                setDocIdsRaw(e.target.value);
+                setPreviewAcknowledged(false);
+              }}
+              disabled={isFormDisabled}
+              rows={3}
+              placeholder={'例:\ndoc-abc123\ndoc-def456'}
+              spellCheck={false}
+              aria-label="対象 Doc IDs（上級者向け）"
+            />
+          </details>
+        ) : null}
 
         {preGenerationPreview ? (
           <PreGenerationPreviewPanel

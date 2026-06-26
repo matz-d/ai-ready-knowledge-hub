@@ -45,6 +45,7 @@ import {
 import { PdfTableAssistTaskSigningNotConfiguredError } from '../../../lib/pdfTableAssistTaskSigning';
 import type { PdfFlagEnabledReader } from '../../../lib/extractors/pdfExtractionDispatcher';
 import type { OrchestrateAuditContext } from '../../../lib/uploadOrchestrator';
+import { isDemoMode } from '../../../lib/demoMode';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -109,6 +110,16 @@ function defaultContentTypeForExt(
 }
 
 export async function POST(request: Request) {
+  if (isDemoMode()) {
+    return NextResponse.json(
+      {
+        error:
+          '公開デモでは任意ファイルのアップロードを無効化しています。サンプル文書を取り込んでお試しください。',
+      },
+      { status: 403 }
+    );
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();

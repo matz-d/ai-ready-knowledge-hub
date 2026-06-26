@@ -2,6 +2,11 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import '../../styles.css';
 import { getFirestoreClient } from '../../../lib/firestore';
+import {
+  DEMO_SAMPLE_SET_FIELD,
+  DEMO_SAMPLE_SET_ID,
+  isDemoMode,
+} from '../../../lib/demoMode';
 import { parseFirestoreDocumentSnapshot } from '../../../lib/parseFirestoreDocumentData';
 import {
   adaptFirestoreDocumentToInventory,
@@ -21,6 +26,12 @@ async function fetchDocument(docId: string): Promise<InventoryDocument | null> {
     const db = getFirestoreClient();
     const snapshot = await db.collection('documents').doc(docId).get();
     if (!snapshot.exists) return null;
+    if (
+      isDemoMode() &&
+      snapshot.get(DEMO_SAMPLE_SET_FIELD) !== DEMO_SAMPLE_SET_ID
+    ) {
+      return null;
+    }
     const parsed = parseFirestoreDocumentSnapshot(snapshot);
     return adaptFirestoreDocumentToInventory(snapshot.id, parsed);
   } catch {

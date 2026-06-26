@@ -5,6 +5,11 @@
  */
 import { NextResponse } from 'next/server';
 import { getFirestoreClient } from '../../../../lib/firestore';
+import {
+  DEMO_SAMPLE_SET_FIELD,
+  DEMO_SAMPLE_SET_ID,
+  isDemoMode,
+} from '../../../../lib/demoMode';
 import { parseFirestoreDocumentSnapshot } from '../../../../lib/parseFirestoreDocumentData';
 import { adaptFirestoreDocumentToInventory } from '../../../../lib/inventoryFirestoreAdapter';
 
@@ -25,6 +30,13 @@ export async function GET(
   const snapshot = await db.collection('documents').doc(docId).get();
 
   if (!snapshot.exists) {
+    return NextResponse.json({ error: 'document_not_found' }, { status: 404 });
+  }
+
+  if (
+    isDemoMode() &&
+    snapshot.get(DEMO_SAMPLE_SET_FIELD) !== DEMO_SAMPLE_SET_ID
+  ) {
     return NextResponse.json({ error: 'document_not_found' }, { status: 404 });
   }
 

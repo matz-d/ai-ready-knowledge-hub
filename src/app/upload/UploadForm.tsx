@@ -28,6 +28,21 @@ type QueueItem = {
   rejectedLocally?: boolean;
 };
 
+type DemoSampleDocument = {
+  fileName: string;
+  docId?: string;
+  status: 'imported' | 'already_present' | 'failed';
+  lifecycleStatus?: string;
+  error?: string;
+};
+
+type DemoSampleResponse = {
+  imported: number;
+  alreadyPresent: number;
+  failed: number;
+  documents: DemoSampleDocument[];
+};
+
 const ACCEPT =
   '.txt,.md,.csv,.xlsx,.pdf,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf';
 
@@ -38,9 +53,17 @@ const STATUS_LABEL: Record<ItemStatus, string> = {
   failed: '失敗',
 };
 
-export function UploadForm() {
+type UploadFormProps = {
+  demoMode?: boolean;
+};
+
+export function UploadForm({ demoMode = false }: UploadFormProps) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [batchError, setBatchError] = useState<string | null>(null);
+  const [demoState, setDemoState] = useState<
+    'idle' | 'loading' | 'done' | 'error'
+  >('idle');
+  const [demoResult, setDemoResult] = useState<DemoSampleResponse | null>(null);
   /** Synchronous single-flight guard: a run may be in flight before React has
    *  re-rendered any item to `uploading`, so a ref (not derived state) is the
    *  reliable lock against overlapping runs / double-clicks. */
@@ -133,6 +156,115 @@ export function UploadForm() {
   const retryAllFailed = () => {
     void runItems(retryableFailedItems);
   };
+
+  const importDemoSamples = async () => {
+    if (demoState === 'loading') return;
+    setBatchError(null);
+    setDemoResult(null);
+    setDemoState('loading');
+    try {
+      const res = await fetch('/api/demo/sample-documents', { method: 'POST' });
+      const body = (await res.json().catch(() => null)) as
+        | DemoSampleResponse
+        | { error?: string }
+        | null;
+      if (!res.ok) {
+        setBatchError(
+          body && 'error' in body && body.error
+            ? body.error
+            : 'サンプル文書の取り込みに失敗しました。'
+        );
+        setDemoState('error');
+        return;
+      }
+      setDemoResult(body as DemoSampleResponse);
+      setDemoState('done');
+    } catch {
+      setBatchError('ネットワークエラーが発生しました。');
+      setDemoState('error');
+    }
+  };
+
+  if (demoMode) {
+    return (
+      <div className="upload-layout">
+        <section className="demo-sample-panel" aria-labelledby="demo-sample-heading">
+          <div>
+            <p className="chapter-kicker">公開デモ</p>
+            <h2 id="demo-sample-heading">合成サンプル文書を取り込む</h2>
+            <p>
+              公開デモでは任意ファイルのアップロードを無効化しています。
+              判定済みの架空データだけを取り込み、目的入力から Context Package
+              生成までを試せます。
+            </p>
+          </div>
+          <button
+            type="button"
+            className="upload-submit"
+            onClick={() => void importDemoSamples()}
+            disabled={demoState === 'loading'}
+          >
+            {demoState === 'loading' ? '取り込み中…' : 'サンプル文書を取り込む'}
+          </button>
+        </section>
+
+        {batchError ? (
+          <div className="upload-error-panel" role="alert">
+            <strong>エラー</strong>
+            <p>{batchError}</p>
+          </div>
+        ) : null}
+
+        {demoResult ? (
+          <section className="upload-queue" aria-label="サンプル取り込み結果">
+            <div className="upload-queue__head">
+              <h2>
+                サンプル取り込み（新規 {demoResult.imported} 件 / 既存{' '}
+                {demoResult.alreadyPresent} 件）
+              </h2>
+            </div>
+            <ul className="upload-queue__list">
+              {demoResult.documents.map((doc) => (
+                <li
+                  key={doc.fileName}
+                  className={`upload-queue__item upload-queue__item--${
+                    doc.status === 'failed' ? 'failed' : 'succeeded'
+                  }`}
+                >
+                  <div className="upload-queue__row">
+                    <span
+                      className={`upload-queue__badge upload-queue__badge--${
+                        doc.status === 'failed' ? 'failed' : 'succeeded'
+                      }`}
+                    >
+                      {doc.status === 'imported'
+                        ? '取り込み'
+                        : doc.status === 'already_present'
+                          ? '登録済み'
+                          : '失敗'}
+                    </span>
+                    <span className="upload-queue__name">{doc.fileName}</span>
+                  </div>
+                  {doc.error ? (
+                    <p className="upload-queue__error" role="alert">
+                      {doc.error}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            {demoResult.failed === 0 ? (
+              <p className="upload-queue__cta">
+                <Link href="/context-package">
+                  サンプル文書で Context Package を作成する →
+                </Link>
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="upload-layout">

@@ -276,6 +276,7 @@ const EXPECTED_SAFETY_EXCLUDED = [
 const STUB_MARKDOWN = '# Context Package\n\n## 目的\nテスト用途\n';
 
 beforeEach(() => {
+  delete process.env.DEMO_MODE;
   vi.clearAllMocks();
   runStrategistOrchestratorMock.mockResolvedValue(STUB_RESULT);
   buildStrategistContextPackageMock.mockReturnValue({ input: {}, markdown: STUB_MARKDOWN });
@@ -285,6 +286,37 @@ beforeEach(() => {
 });
 
 describe('POST /api/context-package', () => {
+  it('scopes generation to curated sample documents in demo mode', async () => {
+    process.env.DEMO_MODE = 'true';
+
+    const response = await POST(
+      buildRequest({ purpose: 'デモ用途', mode: 'async' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(createContextPackageJobMock).not.toHaveBeenCalled();
+    expect(enqueueMock).not.toHaveBeenCalled();
+    expect(runStrategistOrchestratorMock).toHaveBeenCalledWith({
+      purpose: 'デモ用途',
+      limit: 100,
+      demoSampleSet: 'accounting-office',
+    });
+  });
+
+  it('limits purpose length in demo mode', async () => {
+    process.env.DEMO_MODE = 'true';
+
+    const response = await POST(buildRequest({ purpose: 'あ'.repeat(801) }));
+
+    expect(response.status).toBe(400);
+    expect(await parseJson(response)).toEqual(
+      expect.objectContaining({
+        error: 'invalid_request',
+      }),
+    );
+    expect(runStrategistOrchestratorMock).not.toHaveBeenCalled();
+  });
+
   it('returns full response shape on success', async () => {
     const response = await POST(buildRequest({ purpose: 'テスト用途', limit: 50 }));
     const body = await parseJson(response);

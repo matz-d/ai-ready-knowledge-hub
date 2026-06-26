@@ -8,6 +8,7 @@ import {
   countDocumentsByStatusFromFirestore,
   listInventoryDocumentsFromFirestore,
 } from '../lib/inventoryFirestoreAdapter';
+import { DEMO_SAMPLE_SET_ID, isDemoMode } from '../lib/demoMode';
 import {
   AI_USE_POLICY_LABELS,
   DOCUMENT_STATUS_LABELS,
@@ -71,16 +72,24 @@ function readW1InventoryFallback(
   }
 }
 
-async function readInventorySection(): Promise<InventorySectionState | null> {
+async function readInventorySection(
+  demoMode: boolean
+): Promise<InventorySectionState | null> {
   try {
-    const documents = await listInventoryDocumentsFromFirestore();
+    const documents = await listInventoryDocumentsFromFirestore(
+      undefined,
+      demoMode ? { demoSampleSet: DEMO_SAMPLE_SET_ID } : {}
+    );
     return buildInventoryState({
       source: 'firestore',
       documents,
-      purpose: 'Firestore documents inventory - effective metadata for AI-ready review',
-      kicker: 'ライブ一覧',
-      note:
-        'アップロード済みの文書を、Curator の分類と Masker の判定結果つきで一覧表示しています。',
+      purpose: demoMode
+        ? 'Public demo inventory - curated synthetic sample documents only'
+        : 'Firestore documents inventory - effective metadata for AI-ready review',
+      kicker: demoMode ? '公開デモ' : 'ライブ一覧',
+      note: demoMode
+        ? '公開デモでは、判定済みの合成サンプル文書だけを一覧表示しています。'
+        : 'アップロード済みの文書を、Curator の分類と Masker の判定結果つきで一覧表示しています。',
     });
   } catch (e) {
     const fallbackReason = e instanceof Error ? e.message : String(e);
@@ -130,9 +139,10 @@ function maskerOutcomeNote(doc: InventoryDocument): {
 }
 
 export default async function Home() {
+  const demoMode = isDemoMode();
   const [inventoryState, liveStatusCounts] = await Promise.all([
-    readInventorySection(),
-    readPipelineStatusCounts(),
+    readInventorySection(demoMode),
+    demoMode ? Promise.resolve(null) : readPipelineStatusCounts(),
   ]);
   const documents = inventoryState?.documents ?? [];
 
@@ -157,7 +167,11 @@ export default async function Home() {
     <main className="page-shell dashboard-shell">
       <section className="dashboard-topbar" aria-label="ワークスペース">
         <div>
-          <p className="workspace-label">ワークスペース: サンプル会計事務所</p>
+          <p className="workspace-label">
+            {demoMode
+              ? 'ワークスペース: 公開デモ（合成サンプル）'
+              : 'ワークスペース: サンプル会計事務所'}
+          </p>
           <h1 className="dashboard-title">ダッシュボード</h1>
           <p className="dashboard-lead">
             散らばった社内文書を分類・マスキングし、目的別に AI へ渡せる Context
@@ -165,11 +179,13 @@ export default async function Home() {
           </p>
         </div>
         <div className="dashboard-actions">
-          <Link className="secondary-action" href="/import/google-sheets">
-            Google Sheets 連携
-          </Link>
+          {!demoMode ? (
+            <Link className="secondary-action" href="/import/google-sheets">
+              Google Sheets 連携
+            </Link>
+          ) : null}
           <Link className="primary-action" href="/upload">
-            アップロード
+            {demoMode ? 'サンプル取り込み' : 'アップロード'}
           </Link>
         </div>
       </section>

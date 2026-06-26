@@ -1,5 +1,9 @@
 import type { ResidualRiskOutputResult } from '../agents/masker/schema';
 import { DOCUMENTS_COLLECTION } from './documents';
+import {
+  DEMO_SAMPLE_SET_FIELD,
+  type DemoSampleSetId,
+} from './demoMode';
 import { getFirestoreClient } from './firestore';
 import type {
   FirestoreCuratorBlock,
@@ -22,6 +26,10 @@ const INVENTORY_TERMINAL_STATUSES = new Set<FirestoreDocumentStatus>([
   'ai_safe',
   'restricted',
 ]);
+
+type InventoryScopeOptions = {
+  demoSampleSet?: DemoSampleSetId;
+};
 
 function serializeCuratorBlock(curator: FirestoreCuratorBlock) {
   return {
@@ -148,7 +156,8 @@ export type ResolvedInventoryDocument =
  * 最近のものでなくても確実に解決できる。順序は入力 docIds に合わせて返す。
  */
 export async function resolveInventoryDocumentsByIds(
-  docIds: string[]
+  docIds: string[],
+  options: InventoryScopeOptions = {}
 ): Promise<ResolvedInventoryDocument[]> {
   if (docIds.length === 0) {
     return [];
@@ -164,6 +173,13 @@ export async function resolveInventoryDocumentsByIds(
   return docIds.map((docId): ResolvedInventoryDocument => {
     const snapshot = snapshotById.get(docId);
     if (!snapshot || !snapshot.exists) {
+      return { docId, outcome: 'unknown' };
+    }
+
+    if (
+      options.demoSampleSet &&
+      snapshot.get(DEMO_SAMPLE_SET_FIELD) !== options.demoSampleSet
+    ) {
       return { docId, outcome: 'unknown' };
     }
 
@@ -222,15 +238,18 @@ export async function countDocumentsByStatusFromFirestore(): Promise<PipelineSta
 }
 
 export async function listInventoryDocumentsFromFirestore(
-  limit = 100
+  limit = 100,
+  options: InventoryScopeOptions = {}
 ): Promise<InventoryDocument[]> {
-  const snapshot = await getFirestoreClient()
-    .collection(DOCUMENTS_COLLECTION)
-    .orderBy('updatedAt', 'desc')
-    .limit(limit)
-    .get();
+  const collection = getFirestoreClient().collection(DOCUMENTS_COLLECTION);
+  const snapshot = options.demoSampleSet
+    ? await collection
+        .where(DEMO_SAMPLE_SET_FIELD, '==', options.demoSampleSet)
+        .limit(limit)
+        .get()
+    : await collection.orderBy('updatedAt', 'desc').limit(limit).get();
 
-  return snapshot.docs.flatMap((docSnapshot) => {
+  const rows = snapshot.docs.flatMap((docSnapshot) => {
     try {
       const parsed = parseFirestoreDocumentSnapshot(docSnapshot);
       const row = adaptFirestoreDocumentToInventory(docSnapshot.id, parsed);
@@ -261,4 +280,8 @@ export async function listInventoryDocumentsFromFirestore(
       return [];
     }
   });
+
+  return rows.sort((a, b) =>
+    (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')
+  );
 }
