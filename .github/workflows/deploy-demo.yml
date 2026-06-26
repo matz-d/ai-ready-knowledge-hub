@@ -156,7 +156,7 @@ jobs:
             --service-account="${RUNTIME_SERVICE_ACCOUNT}" \
             --timeout=600 \
             --max-instances=2 \
-            --allow-unauthenticated \
+            --no-invoker-iam-check \
             --set-env-vars="${ENV_CSV}" \
             --quiet
 
@@ -165,16 +165,6 @@ jobs:
             --region="${GCP_REGION}" \
             --format='value(status.url)')"
           echo "service_url=${service_url}" >> "${GITHUB_OUTPUT}"
-
-      - name: Grant public invoker
-        shell: bash
-        run: |
-          gcloud run services add-iam-policy-binding "${CLOUD_RUN_SERVICE}" \
-            --project="${GCP_PROJECT_ID}" \
-            --region="${GCP_REGION}" \
-            --member=allUsers \
-            --role=roles/run.invoker \
-            --quiet
 
       - name: Verify public demo URL
         shell: bash
