@@ -184,7 +184,7 @@ pnpm dev
 - `年末調整_案内文.txt`（案内文・現行資料）
 - `顧客対応メモ_書式.md`（ai_safe 想定）
 - `顧問契約書_実案件サンプル.txt`（restricted になり得る）
-- `古い料金表_2023.csv`（運用条件により blocked / review 寄りになり得る）
+- `料金表_2023.csv`（運用条件により blocked / review 寄りになり得る）
 - **`.xlsx`**（Excel）も Phase 2 の upload 対象。料金表・顧客一覧などをシート単位で投入し、`chunks:regenerate` では CSV と同様に spreadsheet chunk 化できる
 
 ### 4.1 複数ファイル upload の撮影ポイント

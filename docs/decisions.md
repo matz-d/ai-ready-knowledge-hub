@@ -428,7 +428,7 @@ If required information is missing, ask the human owner.
 
 ## Excluded Documents
 
-- 古い料金表_2023.csv
+- 料金表_2023.csv
   - Reason: 旧版候補。今回の目的には使わない
 - 顧問契約書_サンプル.pdf
   - Reason: Masker detected residual re-identification risk

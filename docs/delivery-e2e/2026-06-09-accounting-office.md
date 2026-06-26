@@ -41,8 +41,8 @@ If required information is missing, ask the human owner.
 
 ## Excluded Documents
 
-- 古い料金表_2023.csv
-  - Reason: 旧版料金表（superseded）。現行 料金表_2026.csv に置き換え済みのため除外
+- 料金表_2023.csv
+  - Reason: 2023年版料金表（superseded）。現行 料金表_2026.csv に置き換え済みのため除外
   - Status: Superseded / excluded
 - 顧問契約書_実案件サンプル.txt
   - Reason: Restricted（実案件の契約書）。Masker でも残留リスクあり、下流 AI 不可

@@ -15,7 +15,7 @@
 | 生成方法 | ☐ production app（IAP 越し、最も強い証跡） / ☑ offline fallback: `pnpm tsx scripts/buildDeliveryE2ePackage.ts`（実フォーマッタ `exportContextPackageMarkdown` を使用） |
 | データ | sample-data/accounting-office の synthetic / masked fixture のみ（実 PII なし） |
 | included | 料金表_2026.csv（full body）/ 給与計算チェックリスト.md / 就業規則テンプレート.md / 年末調整_案内文.txt / 顧客対応メモ_匿名化.txt（AI-safe via masking） |
-| excluded | 古い料金表_2023.csv（superseded） |
+| excluded | 料金表_2023.csv（superseded） |
 | human review | 顧問契約書_実案件サンプル.txt（Restricted）/ 顧客対応メモ_書式.md（masking 待ち） |
 
 > 注: offline fallback は「とどける（出力フォーマッタ + 下流 AI の挙動）」の検証用。strategist の purpose/freshness 選定の再現ではない。ライブ生成が可能なら、2023 が実パイプラインで excluded に落ちる事実まで含めて記録すると証跡が最強。

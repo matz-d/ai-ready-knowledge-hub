@@ -43,7 +43,7 @@
   },
   {
     "id": "doc-stale-pricing",
-    "fileName": "古い料金表_2023.csv",
+    "fileName": "料金表_2023.csv",
     "documentType": "表",
     "businessDomain": "料金管理",
     "sensitivity": "Internal",
@@ -51,7 +51,7 @@
     "isAuthoritativeCandidate": false,
     "aiUsePolicy": "direct",
     "status": "curated",
-    "rationale": "旧版料金表",
+    "rationale": "2023年版料金表",
     "sensitivitySource": "curator",
     "updatedAt": "2023-12-01T10:00:00.000Z"
   },

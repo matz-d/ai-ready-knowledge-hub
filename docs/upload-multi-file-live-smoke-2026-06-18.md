@@ -28,7 +28,7 @@ continued to completion.
 | --- | --- | --- | --- | --- |
 | `給与計算_例外対応メモ.txt` | `de2d2835-85b2-4145-9666-f19e3daf07ae` | `curated` | `Internal` | `direct` |
 | `給与計算チェックリスト.md` | `100cedf5-6a67-4bb5-b264-de388a642a8c` | `curated` | `Public` | `direct` |
-| `古い料金表_2023.csv` | `8be31bf1-cb41-4531-8e90-0cd467257d9e` | `curated` | `Internal` | `direct` |
+| `料金表_2023.csv` | `8be31bf1-cb41-4531-8e90-0cd467257d9e` | `curated` | `Internal` | `direct` |
 | `顧客対応メモ_書式.md` | `b05fc72e-76c4-4019-977d-6af66d9e03aa` | `curated` | `Public` | `direct` |
 | `顧客対応メモ_匿名化.txt` | `3fa6bcbb-b2db-4b91-b38a-b0756d03a027` | `curated` | `Internal` | `direct` |
 | `顧問契約書_実案件サンプル.txt` | `461b9593-a52b-4bab-9396-dc7a0ad923cb` | `restricted` | `Restricted` | `blocked` |
