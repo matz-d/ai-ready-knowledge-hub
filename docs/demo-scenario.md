@@ -10,7 +10,7 @@
 | #1 AIエージェントである必然性（最重要） | **Decision Trace**。各文書・各候補に「どのエージェントがどう判断したか」の履歴が残る |
 | #2 課題アプローチ・新規性 | 機密文書を持つ SME の「AI 活用の前段」。士業事務所題材 |
 | #4 実用性・突き抜けた体験 | マスキングで「渡せない情報を渡せる化」、さらに「渡せない理由まで残す」 |
-| #3 ユーザビリティ | 自然言語の Purpose 入力 → 生成前 Safety Review |
+| #3 ユーザビリティ | 自然言語の Purpose 入力 → 生成前の安全確認 |
 | #5 実装力・まわす | eval / CI による判断品質の継続検証を 1 カット挿入 |
 
 ## 主役: Decision Trace（エージェント判断の可視化）
@@ -20,9 +20,9 @@
 という複数エージェントの自律判断と権限委譲を、画面の判断履歴として見せる。
 
 - **文書詳細ページ**: 文書を開くと最上部に Decision Trace（`Curator 分類 → AI 利用方針 → 分類理由 → Masker 判定 → 格上げ理由 → Safety Gate → 最終状態`）。同じ事実を繰り返す分類 dl や個別セクションは整理済みで、画面が判断の物語を1本で語る。
-- **Context Package 生成前の Safety Review**: 候補ごとに `Decision Trace` を開くと、`include / exclude / needs_review` の最終判断と根拠（目的との照合・関連スコア・除外/確認理由・決定ルール）が、生成前に人間の目で確認できる。
+- **Context Package 生成前の安全確認**: 候補ごとに `Decision Trace` を開くと、`include / exclude / needs_review` の最終判断と根拠（目的との照合・関連スコア・除外/確認理由・決定ルール）が、生成前に人間の目で確認できる。
 
-> 設計上の正直さ（ナレーションには出さないが破らない約束）: 候補選択は metadata-only の助言レイヤで本文を読まない。`include` は「渡せる**候補**」という予測、`exclude` は断言。本文を AI に渡す最終ゲートは生成経路の Safety Gate。Decision Trace の文言もこの区別を守っている。
+> 設計上の正直さ（ナレーションには出さないが破らない約束）: 候補文書の選定は metadata-only の助言レイヤで本文を読まない。`include` は「渡せる**候補**」という予測、`exclude` は断言。本文を AI に渡す最終ゲートは生成経路の Safety Gate。Decision Trace の文言もこの区別を守っている。
 
 ---
 
@@ -49,7 +49,7 @@
 | 0:40-1:00 | Inventory / Funnel | トップの Pipeline Funnel・KPI・文書一覧 | 「ただ保存ではなく、AI 可・マスク済・保護中へ自動で振り分く」 |
 | 1:00-1:25 | **マスクで参照可能化（伏線）** | 顧客情報を含む文書の詳細 → Decision Trace | 「個人情報を落として AI 参照版に。Curator→Masker→最終が履歴で見えます」 |
 | 1:25-1:55 | **クライマックス: 渡さない判断が見える** | 顧問契約書の詳細 Decision Trace | 「Masker が『マスク後も再識別可能』と判定 → Restricted へ格上げ → Safety Gate が除外。**渡さない理由まで残る**」 |
-| 1:55-2:30 | Purpose → Safety Review | Purpose 入力 → 候補ごとの Decision Trace | 「目的を入れると、候補ごとに include / exclude / needs_review の判断が生成前に見えます」 |
+| 1:55-2:30 | Purpose → 候補文書 | Purpose 入力 → 「候補を表示」→ 候補ごとの Decision Trace | 「目的を入れると、候補ごとに include / exclude / needs_review の判断が生成前に見えます」 |
 | 2:30-2:45 | Strategist 出力 | 使える / 除外 / 足りない / 質問 | 「目的単位で、使える・渡せない・まだ足りない・人間に聞く、を整理」 |
 | 2:45-2:55 | **まわす（1カット挿入）** | CI green / eval gate の画面 | 「この判断品質は eval と CI で継続検証しています」 |
 | 2:55-3:00 | クロージング / Export | Markdown + NotebookLM bundle | 「使う理由と除外する理由を付けて、下流 AI に渡せる前段が完成」 |
@@ -99,10 +99,10 @@ Curator が文書種別 / 業務領域 / 機密度 / 鮮度 / 正本候補 / AI 
 
 > ナレーション例:「マスクで渡せる情報もあれば、マスクしても渡せない情報もある。このエージェントは、AI に渡さない理由まで残します。」
 
-### 6. Purpose Query → 生成前 Safety Review
+### 6. Purpose Query → 候補文書と生成前の安全確認
 > 「新人スタッフ向けに、月次の給与計算業務を安全に学べる AI を作りたい」
 
-Purpose を入れたら、すぐ生成せず、まず候補選択 / Safety Review を見せる。候補ごとに `Decision Trace` を開き、`include / exclude / needs_review` の最終判断と根拠（目的との照合・関連スコア・除外/確認理由・決定ルール）を映す。山場（5）の格上げ結果が、ここでも顧問契約書が exclude 側に並ぶ形で引き継がれていることを示す。
+Purpose を入れたら、すぐ生成せず、まず「候補を表示」で候補文書を見せ、生成前の安全確認を映す。候補ごとに `Decision Trace` を開き、`include / exclude / needs_review` の最終判断と根拠（目的との照合・関連スコア・除外/確認理由・決定ルール）を映す。山場（5）の格上げ結果が、ここでも顧問契約書が exclude 側に並ぶ形で引き継がれていることを示す。
 
 > ナレーション例:「本文を AI に渡す前に、候補ごとの判断を人間が確認できます。」
 
@@ -138,7 +138,7 @@ result panel の2つの export を見せる。
 ### Decision Trace の見せ方（最重要）
 - 文書詳細は整理済みで、開くと **Decision Trace が最初のセクション**に出る。カメラはまずここに当てる。重複していた分類 dl・Curator 判定理由セクション・格上げバナーは「補足属性（鮮度・正本候補）」へ集約済みなので、画面と語りが1対1で一致する。
 - 山場（顧問契約書）は、`Masker 判定 → 格上げ理由 → Safety Gate → 最終状態` の4ステップを上から順に指でなぞるように見せると、「覆して・止める」協調が伝わる。
-- Safety Review では、`exclude` 列の候補で `Decision Trace` を開き、決定ルール（例: `restricted_sensitivity`）まで見せると「除外は断言」が伝わる。
+- 生成前の安全確認では、「除外すべき」列の候補で `Decision Trace` を開き、決定ルール（例: `restricted_sensitivity`）まで見せると「除外は断言」が伝わる。
 
 ### マスキングの見せ方
 - 「機密で渡せない」→「マスクで渡せる」の変化を視覚的に。人名が `[REDACTED:PERSON_NAME]` などに置換される瞬間を見せる。
@@ -160,7 +160,7 @@ result panel の2つの export を見せる。
 - NotebookLM / Gemini の代替に見せる（本作品は前段）
 - RAG チャットの実演（スコープ外）
 - 税務・労務などの専門判断を AI が代替するように見せる
-- 実装にないエージェント名を語る（実装は Curator / Masker / Strategist と、metadata-only の Candidate selector。質問は Strategist が生成する）
+- 実装にないエージェント名を語る（実装は Curator / Masker / Strategist の3エージェント。候補文書は metadata-only の選定フローで、質問は Strategist が生成する）
 - 複雑な技術用語の連発（機密文書を扱う SME の経営者目線で説明する）
 
 ---

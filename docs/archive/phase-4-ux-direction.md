@@ -16,13 +16,13 @@
 ### 背景
 - 現行 UI（`src/app/context-package/ContextPackageForm.tsx`）は purpose textarea + **docId 手入力 textarea**。実務担当者が docId を知っている前提は非現実的。
 - バックエンドは既に強い: `runStrategistOrchestrator`（`src/services/strategistOrchestrator/orchestrator.ts`）が deterministic safety gate → pre-LLM budget → Strategist(Gemini) を実装済み。除外理由 taxonomy・budget truncation 可視化・strict docId 解決・async job 経路まで揃っている。
-- 足りないのは **「purpose → 候補文書」を出す軽い前段**と、それを見せる **候補選択 UI / 生成前の安心 UI**。
+- 足りないのは **「purpose → 候補文書」を出す軽い前段**と、それを見せる **候補文書 UI / 生成前の安心 UI**。
 
 ### やること
 1. Purpose → 候補文書の **deterministic ランキング & 分類**（include / exclude / needs_review）+ missing hints
 2. それを返す **`POST /api/context-package/candidates`** API
 3. 候補リストを見せ、選択して生成へ渡す **Candidate Selection UI**
-4. 生成前に「なぜ使える/除外/人間確認/足りない」を見せる **Safety Review Panel**
+4. 生成前に「なぜ使える/除外/人間確認/足りない」を見せる **生成前の安全確認**（`SafetyReviewPanel`）
 5. 生成前に「この情報を AI に渡します（raw PII / Restricted / stale が混ざっていない）」を見せる **Preview**
 6. **Operational Hardening**: #15 job GC / stuck-running recovery、#16 large result GCS offload、smoke runbook 定着、monitoring/alert
 
@@ -240,7 +240,7 @@ type CandidatesResponse = {
 | `exclude` | **選択不可（disabled）** | `reasonLabel`（+ `reasonDetail?`） | 渡さない |
 | `needs_review` | **既定 OFF**（ユーザーが ON 可） | `reasonLabel`（+ `reasonDetail?`） | 明示 ON の docId のみ |
 
-- `missingHints` は候補リストとは別枠で表示（S6 Safety Review Panel）。
+- `missingHints` は候補リストとは別枠で表示（S6 生成前の安全確認）。
 - purpose を変更したら `candidates` / 選択 docIds / preview を **invalidate** し、再取得完了まで生成ボタンを無効化（stale candidates で生成させない）。
 - 候補取得後の生成は既存 `POST /api/context-package` に `{ purpose, docIds: string[] }` を渡す（docId 手入力は上級者向け折りたたみに退避）。
 
@@ -302,7 +302,7 @@ type CandidatesResponse = {
 - **検証**: `pnpm test src/app/context-package` + 手動 / **完了条件**: purpose だけで候補が出て、選択して生成でき、docId 手入力なしで一巡。purpose 変更時に stale candidates で生成させない。
 - **指示文**: §6 参照。
 
-### S6. Safety Review Panel（M3）— **実装済み**
+### S6. 生成前の安全確認（M3）— **実装済み**
 - **目的**: 生成前に「AI に渡せる / 除外すべき / 人間確認すべき / 足りない」を候補 API 出力から表示。
 - **対象**: `src/app/context-package/SafetyReviewPanel.tsx`, `src/app/styles.css`
 - **推奨担当AI**: **Cursor Composer**（UI）/ taxonomy→文言マッピングは Claude Code が下書き
@@ -436,7 +436,7 @@ type CandidatesResponse = {
 ### ▶ S1 → Claude Code（設計・実装）
 ```
 リポジトリ方針（CLAUDE.md / .claude/skills/project-context、pnpm、npm 禁止）に従う。
-src/services/candidateSelection/ に purpose-driven candidate selection の決定論コアを実装する。
+src/services/candidateSelection/ に目的に応じた候補文書選定の決定論コアを実装する。
 これは metadata-only の「助言レイヤ」であり、本文・chunk・GCS・aiSafeContent・LLM を一切読まない/呼ばない。
 入力: purpose: string と InventoryDocument[]（src/lib/inventory.ts）。
 出力: CandidateDoc[]（recommendation 'include'|'exclude'|'needs_review'、reasonCode?/reasonLabel?/reasonDetail? は除外・確認時のみ、include には matchReason?/scoreBreakdown? を付与）と missingHints: string[]。本文・aiSafeContent・maskedText は含めない。
@@ -486,7 +486,7 @@ M1 では audit を書かない（候補表示は export ではない。必要�
 synthetic な inventory fixture（実顧客データ・PII 禁止）で候補ランキングの golden snapshot を作り、スコア式変更時の回帰を検知できるようにする。sample-data/ には synthetic / masked のみ。pnpm test を通す。
 ```
 
-### ▶ S5 → Cursor Composer（候補選択 UI）
+### ▶ S5 → Cursor Composer（候補文書 UI）
 ```
 pnpm 前提。src/app/context-package/ContextPackageForm.tsx を二段フローに変更:
 purpose 入力 → /api/context-package/candidates → 候補リスト（fileName, documentType・businessDomain, sensitivity バッジ, recommendation バッジ, reasonLabel/matchReason）→ チェックボックス選択 → 選択 docIds で既存 /api/context-package に生成依頼。
@@ -496,7 +496,7 @@ purpose が変更されたら candidates / selectedDocIds / preview を invalida
 既存の async polling(pollJob)・budget truncation 警告・エラー表示は維持。型/状態は既存 UiState 流儀。styles.css に追記。pnpm test src/app/context-package を通す。
 ```
 
-### ▶ S6 → Cursor Composer（Safety Review Panel）
+### ▶ S6 → Cursor Composer（生成前の安全確認）
 ```
 src/app/context-package/ に SafetyReviewPanel.tsx を追加。candidates API レスポンスから include/exclude/needs_review を3カラム、missingHints を別枠で生成前に表示。文言は reasonLabel（ExclusionReasonLabels）を使う。本文は出さない。生成後 result パネルと視覚言語を揃える。styles.css に追記。
 ```

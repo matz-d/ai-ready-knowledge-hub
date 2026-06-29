@@ -140,7 +140,7 @@ tmp/p1d-quality-report.json
 |---|---|---|---|---|
 | `publicDirectRate` | live | 公開文書が `Public` / `Internal` + `direct` に留まる割合 | 公的空欄様式、公開ガイド | live curator run |
 | `falseMaskedTokenCount` | stable hygiene / live drift | stable では公開 sidecar に `[REDACTED:*]` が混入していないことの tripwire。実 over-mask は live drift で測る | 公的空欄様式、公開ガイド | committed sidecar / live DLP run |
-| `overRestrictedCount` | live | 公開文書が `Confidential` / `Restricted` または non-direct に寄った件数 | Curator / candidate selection | live curator run |
+| `overRestrictedCount` | live | 公開文書が `Confidential` / `Restricted` または non-direct に寄った件数 | Curator / 候補文書選定 | live curator run |
 | `fieldRecall` | stable | 期待 key field が抽出結果に存在する割合 | 帳票、規程、統合報告書 | `expectedFields` / structured expected |
 | `coreFieldRecall` | stable | `expectedFieldTiers` で `core` 指定された重要 field の recall。将来の blocker 候補 | 帳票、公開様式 | `expectedFields` + `expectedFieldTiers` |
 | `valuePrecision` | stable | key に対応する value が正しい粒度で保持された割合 | 帳票、表、財務数値 | structured expected |

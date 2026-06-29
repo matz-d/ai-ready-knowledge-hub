@@ -24,7 +24,7 @@ GitHub Actions は [`.github/workflows/deploy-demo.yml`](../.github/workflows/de
 | `DEMO_KNOWLEDGE_HUB_BUCKET` | 省略時 `KNOWLEDGE_HUB_BUCKET`。可能なら demo 用 bucket を推奨 |
 | `DEMO_KNOWLEDGE_HUB_TENANT_ID` | 省略時 `public-demo` |
 
-現時点の提出デモでは、PDF / CSV / XLSX / Google Sheets / Google Docs の主要 ingest、`/upload` の複数ファイルキュー、Phase 4-UX の purpose-driven candidate selection、Safety Review、Preview acknowledgement、各文書・各候補の判断を可視化する **Decision Trace**（文書詳細 / Safety Review）、async Context Package job、NotebookLM 用 source bundle が実装済みです。**Google Sheets** は [Phase 3-A](archive/phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。
+現時点の提出デモでは、PDF / CSV / XLSX / Google Sheets / Google Docs の主要 ingest、`/upload` の複数ファイルキュー、Phase 4-UX の目的に応じた候補文書選定、「候補を表示」、生成前の安全確認、生成前プレビュー、各文書・各候補の判断を可視化する **Decision Trace**（文書詳細 / 生成前の安全確認）、async Context Package job、NotebookLM 用 source bundle が実装済みです。**Google Sheets** は [Phase 3-A](archive/phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。
 
 デモ説明では、標準 profile は **`cloud-managed`** です。管理されたクラウド境界で文書を受け取り、Cloud DLP + Masker で安全化し、目的にひもづいた Context Package として NotebookLM / Gemini / RAG に渡す前段を作ります。NotebookLM には単一 `.md` ではなく、Context Package result panel から取得できる **source bundle zip** の全ファイルを source 追加します。
 
@@ -40,7 +40,7 @@ GitHub Actions は [`.github/workflows/deploy-demo.yml`](../.github/workflows/de
 | 2 | `/` | Pipeline Funnel、KPI、文書一覧で AI利用可 / マスキング済み / 保護中を確認する |
 | 3 | 文書詳細（マスク済み文書） | 文書を開くと先頭に出る **Decision Trace** で `Curator 分類 → Masker 判定（残存リスクなし）→ 最終状態（AI 利用可）` を見せる（伏線） |
 | 4 | 文書詳細（顧問契約書） | **クライマックス**: Decision Trace で `Masker 判定（残存リスクあり）→ 格上げ理由 → Safety Gate → 保護中`。「マスクしても渡さない理由まで残る」 |
-| 5 | `/context-package` | purpose を入力し、候補ごとの `Decision Trace` で include / exclude / needs_review を見せ、Safety Review → Preview acknowledgement へ |
+| 5 | `/context-package` | purpose を入力し、「候補を表示」で候補文書を選び、候補ごとの `Decision Trace` で include / exclude / needs_review を見せ、生成前の安全確認 → 生成前プレビューへ |
 | 6 | Strategist 出力 | 使える / 除外 / 足りない / 人間への質問 の4分類を目的単位で見せる |
 | 7 | CI / eval（まわす挿入） | GitHub Actions の green と eval gate（`eval:p1d:quality --ci` / conversion eval）を5〜10秒だけ挿入する |
 | 8 | result panel → NotebookLM | Markdown copy/download と NotebookLM 用 bundle download の2導線、bundle の全ファイルを source 追加し4分類が効くことを示す |
@@ -309,9 +309,9 @@ UI のフォームは **`POST /api/import/google-sheets`** を呼ぶ。現状の
 
 1. `/context-package` を開く。
 2. purpose に `新人スタッフ向けに、月次の給与計算業務を安全に学べるAIを作りたい` を入力する。
-3. 候補取得後、候補リストで include / exclude / needs_review の違いを見せる。各候補の `Decision Trace` を開くと、目的との照合・関連スコア・除外/確認理由・決定ルールと最終判断が、本文を AI に渡す前に確認できる。
-4. Safety Review で、AI に渡す予定の文書、自動除外、warning を確認する。
-5. Preview acknowledgement が必要な場合は「内容を確認しました」をチェックする。
+3. 「候補を表示」で候補文書を取得し、include / exclude / needs_review の違いを見せる。各候補の `Decision Trace` を開くと、目的との照合・関連スコア・除外/確認理由・決定ルールと最終判断が、本文を AI に渡す前に確認できる。
+4. 生成前の安全確認で、「AI に渡せる候補」「除外すべき」「人間確認すべき」「足りない情報」を確認する。
+5. 生成前プレビューで確認チェックが必要な場合は「除外・警告・未知の docId を確認しました」をチェックする。
 6. Context Package を生成する。async 有効環境では `queued` / `running` / `succeeded` の polling 表示を短く見せる。ローカル同期環境ではそのまま結果表示へ進む。
 7. result panel で `Markdown をコピー`、`Markdown をダウンロード`、`NotebookLM 用 bundle をダウンロード` を見せる。
 8. zip を解凍し、`00-CONTEXT-PACKAGE-GUIDE.md` と included source files だけがあることを見せる。

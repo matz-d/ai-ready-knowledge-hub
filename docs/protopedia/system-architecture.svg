@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="495" viewBox="0 0 880 495">
+<defs>
+<marker id="ah" markerWidth="9" markerHeight="9" refX="6.5" refY="3.2" orient="auto">
+  <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#2563EB"/>
+</marker>
+<marker id="ahr" markerWidth="9" markerHeight="9" refX="6.5" refY="3.2" orient="auto">
+  <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#DC2626"/>
+</marker>
+</defs>
+<rect x="0" y="0" width="880" height="495" rx="0" ry="0" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="0" opacity="1.0"/>
+<text x="24" y="31" font-family="Noto Sans CJK JP" font-size="19" font-weight="700" fill="#1F2937" text-anchor="start">AI-Ready Knowledge Hub — システム構成</text>
+<text x="24" y="49" font-family="Noto Sans CJK JP" font-size="10.5" font-weight="normal" fill="#6B7280" text-anchor="start">SMEの散らばった社内文書を分類・マスキングし、AIに渡せる Context Package へ変換する前段プラットフォーム</text>
+<rect x="730" y="18" width="126" height="22" rx="8" ry="8" fill="#EAF1FE" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="793.0" y="32.42" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="600" fill="#1D4ED8" text-anchor="middle">Google Cloud / Genkit</text>
+<rect x="16" y="66" width="132" height="364" rx="12" ry="12" fill="#F7F9FC" stroke="#D8E0EC" stroke-width="1.2" opacity="1.0"/>
+<text x="28" y="88" font-family="Noto Sans CJK JP" font-size="9" font-weight="700" fill="#6B7280" text-anchor="start" letter-spacing="1.5">INPUT</text>
+<text x="28" y="108" font-family="Noto Sans CJK JP" font-size="12" font-weight="700" fill="#1F2937" text-anchor="start">散らばった</text>
+<text x="28" y="124" font-family="Noto Sans CJK JP" font-size="12" font-weight="700" fill="#1F2937" text-anchor="start">社内文書</text>
+<rect x="28" y="138" width="108" height="26" rx="8" ry="8" fill="#FFFFFF" stroke="#D8E0EC" stroke-width="1" opacity="1.0"/>
+<text x="82.0" y="154.42" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="600" fill="#1F2937" text-anchor="middle">PDF</text>
+<rect x="28" y="171" width="108" height="26" rx="8" ry="8" fill="#FFFFFF" stroke="#D8E0EC" stroke-width="1" opacity="1.0"/>
+<text x="82.0" y="187.42" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="600" fill="#1F2937" text-anchor="middle">CSV / XLSX</text>
+<rect x="28" y="204" width="108" height="26" rx="8" ry="8" fill="#FFFFFF" stroke="#D8E0EC" stroke-width="1" opacity="1.0"/>
+<text x="82.0" y="220.42" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="600" fill="#1F2937" text-anchor="middle">Google Sheets</text>
+<rect x="28" y="237" width="108" height="26" rx="8" ry="8" fill="#FFFFFF" stroke="#D8E0EC" stroke-width="1" opacity="1.0"/>
+<text x="82.0" y="253.42" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="600" fill="#1F2937" text-anchor="middle">Word・メモ</text>
+<rect x="28" y="270" width="108" height="26" rx="8" ry="8" fill="#FFFFFF" stroke="#D8E0EC" stroke-width="1" opacity="1.0"/>
+<text x="82.0" y="286.42" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="600" fill="#1F2937" text-anchor="middle">旧版・テンプレ</text>
+<rect x="28" y="303" width="108" height="26" rx="8" ry="8" fill="#FFFFFF" stroke="#D8E0EC" stroke-width="1" opacity="1.0"/>
+<text x="82.0" y="319.42" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="600" fill="#1F2937" text-anchor="middle">暗黙知</text>
+<rect x="28" y="340" width="108" height="44" rx="8" ry="8" fill="#FEF2F2" stroke="#FBD5D5" stroke-width="1" opacity="1.0"/>
+<text x="82.0" y="358" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="600" fill="#DC2626" text-anchor="middle">顧客情報・個人情報・</text>
+<text x="82.0" y="371" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="600" fill="#DC2626" text-anchor="middle">古い資料が混在</text>
+<line x1="150" y1="248.0" x2="162" y2="248.0" stroke="#2563EB" stroke-width="2.4" marker-end="url(#ah)"/>
+<rect x="164" y="66" width="448" height="364" rx="14" ry="14" fill="#F4F8FF" stroke="#CFE0FB" stroke-width="1.4" opacity="1.0"/>
+<rect x="176" y="76" width="200" height="22" rx="8" ry="8" fill="#2563EB" stroke="#2563EB" stroke-width="1" opacity="1.0"/>
+<text x="276.0" y="90.6" font-family="Noto Sans CJK JP" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">Next.js App Router  ▸  Cloud Run</text>
+<text x="600" y="91" font-family="Noto Sans CJK JP" font-size="9" font-weight="600" fill="#1D4ED8" text-anchor="end">つくる × とどける</text>
+<text x="178" y="118" font-family="Noto Sans CJK JP" font-size="10" font-weight="700" fill="#1F2937" text-anchor="start">① フロントエンド UI</text>
+<rect x="178.0" y="124" width="133.33333333333334" height="24" rx="7" ry="7" fill="#FFFFFF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="244.66666666666669" y="139.096" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="600" fill="#1D4ED8" text-anchor="middle">Dump Box（アップロード）</text>
+<rect x="321.33333333333337" y="124" width="133.33333333333334" height="24" rx="7" ry="7" fill="#FFFFFF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="388.00000000000006" y="139.096" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="600" fill="#1D4ED8" text-anchor="middle">Inventory Map</text>
+<rect x="464.6666666666667" y="124" width="133.33333333333334" height="24" rx="7" ry="7" fill="#FFFFFF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="531.3333333333334" y="139.096" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="600" fill="#1D4ED8" text-anchor="middle">Purpose Console</text>
+<rect x="178" y="158" width="420" height="26" rx="8" ry="8" fill="#EEF4FF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="188" y="175" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="700" fill="#1D4ED8" text-anchor="start">② uploadOrchestrator</text>
+<text x="588" y="175" font-family="Noto Sans CJK JP" font-size="8.4" font-weight="normal" fill="#6B7280" text-anchor="end">GCS / Firestore / Curator / Masker の順序制御・rollback</text>
+<rect x="178" y="192" width="420" height="160" rx="10" ry="10" fill="#FFFFFF" stroke="#C9DBFB" stroke-width="1.2" opacity="1.0"/>
+<text x="188" y="208" font-family="Noto Sans CJK JP" font-size="10" font-weight="700" fill="#1F2937" text-anchor="start">③ Agent Layer（Genkit / TypeScript）</text>
+<rect x="188.0" y="250" width="91.0" height="88" rx="9" ry="9" fill="#EAF1FE" stroke="#B9D2FB" stroke-width="1.2" opacity="1.0"/>
+<text x="233.5" y="268" font-family="Noto Sans CJK JP" font-size="10.5" font-weight="700" fill="#1D4ED8" text-anchor="middle">Curator</text>
+<text x="233.5" y="283" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="600" fill="#1F2937" text-anchor="middle">分類</text>
+<text x="233.5" y="299" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="middle">種別 / 業務領域</text>
+<text x="233.5" y="310.5" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="middle">機密度 / 鮮度</text>
+<text x="233.5" y="322.0" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="middle">AI 利用可否</text>
+<rect x="291.0" y="250" width="91.0" height="88" rx="9" ry="9" fill="#EAF1FE" stroke="#B9D2FB" stroke-width="1.2" opacity="1.0"/>
+<text x="336.5" y="268" font-family="Noto Sans CJK JP" font-size="10.5" font-weight="700" fill="#1D4ED8" text-anchor="middle">Masker</text>
+<text x="336.5" y="283" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="600" fill="#1F2937" text-anchor="middle">マスキング</text>
+<text x="336.5" y="299" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="middle">Cloud DLP +</text>
+<text x="336.5" y="310.5" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="middle">Gemini で PII 検出</text>
+<text x="336.5" y="322.0" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="middle">残存リスク再評価</text>
+<rect x="394.0" y="250" width="91.0" height="88" rx="9" ry="9" fill="#EAF1FE" stroke="#B9D2FB" stroke-width="1.2" opacity="1.0"/>
+<text x="439.5" y="268" font-family="Noto Sans CJK JP" font-size="10.5" font-weight="700" fill="#1D4ED8" text-anchor="middle">Strategist</text>
+<text x="439.5" y="283" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="600" fill="#1F2937" text-anchor="middle">目的 → 計画</text>
+<text x="439.5" y="299" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="middle">使える / 除外</text>
+<text x="439.5" y="310.5" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="middle">不足情報を判定</text>
+<rect x="497.0" y="250" width="91.0" height="88" rx="9" ry="9" fill="#EAF1FE" stroke="#B9D2FB" stroke-width="1.2" opacity="1.0"/>
+<text x="542.5" y="268" font-family="Noto Sans CJK JP" font-size="10.5" font-weight="700" fill="#1D4ED8" text-anchor="middle">Interviewer</text>
+<text x="542.5" y="283" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="600" fill="#1F2937" text-anchor="middle">質問生成</text>
+<text x="542.5" y="299" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="middle">暗黙知を</text>
+<text x="542.5" y="310.5" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="middle">人間に確認</text>
+<line x1="280.0" y1="294.0" x2="290.0" y2="294.0" stroke="#2563EB" stroke-width="2.2" marker-end="url(#ah)"/>
+<line x1="383.0" y1="294.0" x2="393.0" y2="294.0" stroke="#2563EB" stroke-width="2.2" marker-end="url(#ah)"/>
+<line x1="486.0" y1="294.0" x2="496.0" y2="294.0" stroke="#2563EB" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M 336.5 250 C 336.5 234, 233.5 234, 233.5 250" fill="none" stroke="#DC2626" stroke-width="2" marker-end="url(#ahr)"/>
+<text x="285.0" y="232" font-family="Noto Sans CJK JP" font-size="8" font-weight="600" fill="#DC2626" text-anchor="middle">Restricted 格上げ（A8 逆フィードバック）</text>
+<text x="178" y="372" font-family="Noto Sans CJK JP" font-size="10" font-weight="700" fill="#1F2937" text-anchor="start">④ GCP マネージドサービス</text>
+<rect x="178.0" y="378" width="97.5" height="40" rx="8" ry="8" fill="#F2F7FF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="226.75" y="395" font-family="Noto Sans CJK JP" font-size="8.0" font-weight="700" fill="#1D4ED8" text-anchor="middle">Vertex AI（Gemini 3.x Flash）</text>
+<text x="226.75" y="409" font-family="Noto Sans CJK JP" font-size="7.2" font-weight="normal" fill="#6B7280" text-anchor="middle">構造化出力・推論</text>
+<rect x="285.5" y="378" width="97.5" height="40" rx="8" ry="8" fill="#F2F7FF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="334.25" y="395" font-family="Noto Sans CJK JP" font-size="8.0" font-weight="700" fill="#1D4ED8" text-anchor="middle">Cloud DLP</text>
+<text x="334.25" y="409" font-family="Noto Sans CJK JP" font-size="7.2" font-weight="normal" fill="#6B7280" text-anchor="middle">構造化PII検出</text>
+<rect x="393.0" y="378" width="97.5" height="40" rx="8" ry="8" fill="#F2F7FF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="441.75" y="395" font-family="Noto Sans CJK JP" font-size="8.0" font-weight="700" fill="#1D4ED8" text-anchor="middle">Firestore</text>
+<text x="441.75" y="409" font-family="Noto Sans CJK JP" font-size="7.2" font-weight="normal" fill="#6B7280" text-anchor="middle">メタデータ / 監査</text>
+<rect x="500.5" y="378" width="97.5" height="40" rx="8" ry="8" fill="#F2F7FF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="549.25" y="395" font-family="Noto Sans CJK JP" font-size="8.0" font-weight="700" fill="#1D4ED8" text-anchor="middle">Cloud Storage</text>
+<text x="549.25" y="409" font-family="Noto Sans CJK JP" font-size="7.2" font-weight="normal" fill="#6B7280" text-anchor="middle">raw / masked 原本</text>
+<line x1="613" y1="216" x2="625" y2="216" stroke="#2563EB" stroke-width="2.4" marker-end="url(#ah)"/>
+<rect x="628" y="66" width="236" height="196" rx="12" ry="12" fill="#FFFFFF" stroke="#D8E0EC" stroke-width="1.2" opacity="1.0"/>
+<rect x="640" y="78" width="212" height="26" rx="8" ry="8" fill="#2563EB" stroke="#2563EB" stroke-width="1" opacity="1.0"/>
+<text x="746.0" y="94.96" font-family="Noto Sans CJK JP" font-size="11" font-weight="700" fill="#FFFFFF" text-anchor="middle">Context Package</text>
+<rect x="640" y="114" width="212" height="32" rx="7" ry="7" fill="#ECFDF3" stroke="none" stroke-width="0" opacity="1.0"/>
+<text x="652" y="135" font-family="Noto Sans CJK JP" font-size="13" font-weight="700" fill="#16A34A">✓</text>
+<text x="670" y="129" font-family="Noto Sans CJK JP" font-size="9.6" font-weight="700" fill="#1F2937" text-anchor="start">使える情報</text>
+<text x="670" y="141" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="start">理由付きで投入</text>
+<rect x="640" y="150" width="212" height="32" rx="7" ry="7" fill="#FEF2F2" stroke="none" stroke-width="0" opacity="1.0"/>
+<text x="652" y="171" font-family="Noto Sans CJK JP" font-size="13" font-weight="700" fill="#DC2626">✕</text>
+<text x="670" y="165" font-family="Noto Sans CJK JP" font-size="9.6" font-weight="700" fill="#1F2937" text-anchor="start">除外すべき情報</text>
+<text x="670" y="177" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="start">Restricted は本文を渡さない</text>
+<rect x="640" y="186" width="212" height="32" rx="7" ry="7" fill="#FFF7ED" stroke="none" stroke-width="0" opacity="1.0"/>
+<text x="652" y="207" font-family="Noto Sans CJK JP" font-size="13" font-weight="700" fill="#D97706">△</text>
+<text x="670" y="201" font-family="Noto Sans CJK JP" font-size="9.6" font-weight="700" fill="#1F2937" text-anchor="start">足りない情報</text>
+<text x="670" y="213" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="start">不足領域を明示</text>
+<rect x="640" y="222" width="212" height="32" rx="7" ry="7" fill="#EEF4FF" stroke="none" stroke-width="0" opacity="1.0"/>
+<text x="652" y="243" font-family="Noto Sans CJK JP" font-size="13" font-weight="700" fill="#1D4ED8">？</text>
+<text x="670" y="237" font-family="Noto Sans CJK JP" font-size="9.6" font-weight="700" fill="#1F2937" text-anchor="start">確認すべき質問</text>
+<text x="670" y="249" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="start">人間に確認する問い</text>
+<text x="746.0" y="280" font-family="Noto Sans CJK JP" font-size="8.5" font-weight="700" fill="#1D4ED8" text-anchor="middle">Export</text>
+<text x="746.0" y="292" font-family="Noto Sans CJK JP" font-size="7.8" font-weight="normal" fill="#6B7280" text-anchor="middle">Markdown / NotebookLM source bundle (.zip)</text>
+<line x1="746.0" y1="296" x2="746.0" y2="310" stroke="#2563EB" stroke-width="2.2" marker-end="url(#ah)"/>
+<rect x="628" y="314" width="236" height="116" rx="12" ry="12" fill="#F7F9FC" stroke="#D8E0EC" stroke-width="1.2" opacity="1.0"/>
+<text x="640" y="334" font-family="Noto Sans CJK JP" font-size="9.6" font-weight="700" fill="#1F2937" text-anchor="start">下流 AI（置き換えない）</text>
+<rect x="640.0" y="344" width="65.33333333333333" height="24" rx="7" ry="7" fill="#EAF1FE" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="672.6666666666666" y="359.168" font-family="Noto Sans CJK JP" font-size="8.8" font-weight="600" fill="#1D4ED8" text-anchor="middle">NotebookLM</text>
+<rect x="713.3333333333334" y="344" width="65.33333333333333" height="24" rx="7" ry="7" fill="#EAF1FE" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="746.0" y="359.168" font-family="Noto Sans CJK JP" font-size="8.8" font-weight="600" fill="#1D4ED8" text-anchor="middle">Gemini</text>
+<rect x="786.6666666666666" y="344" width="65.33333333333333" height="24" rx="7" ry="7" fill="#EAF1FE" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="819.3333333333333" y="359.168" font-family="Noto Sans CJK JP" font-size="8.8" font-weight="600" fill="#1D4ED8" text-anchor="middle">RAG</text>
+<text x="746.0" y="420" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="600" fill="#1D4ED8" text-anchor="middle">→ 根拠つき回答で業務を加速</text>
+<rect x="16" y="440" width="848" height="40" rx="10" ry="10" fill="#1E293B" stroke="#1E293B" stroke-width="0" opacity="1.0"/>
+<text x="32" y="458" font-family="Noto Sans CJK JP" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="start">DevOps（まわす）</text>
+<text x="32" y="473" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="normal" fill="#CBD5E1" text-anchor="start">GitHub Actions: main push → Cloud Run 自動デプロイ</text>
+<text x="848" y="458" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="normal" fill="#CBD5E1" text-anchor="end">PR: Curator eval ・ conversion eval ・ P1-D quality gate</text>
+<text x="848" y="473" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="normal" fill="#CBD5E1" text-anchor="end">Vitest ・ typecheck ・ masker drift（継続検証）</text>
+</svg>

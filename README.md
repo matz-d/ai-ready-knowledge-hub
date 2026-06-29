@@ -19,7 +19,7 @@ AI-Ready Knowledge Hub は、その前段を担当します。文書をアップ
 1. `/upload` から複数ファイルをまとめて投入する
 2. Inventory で AI 利用可、マスキング済み、保護中の文書を確認する
 3. `/context-package` で目的を入力する
-4. 候補選択、Safety Review、Preview acknowledgement を確認する
+4. 「候補を表示」で候補文書を選び、生成前の安全確認と生成前プレビューを確認する
 5. Markdown または NotebookLM 用 source bundle zip として出力する
 
 撮影用 purpose:
@@ -37,6 +37,7 @@ AI-Ready Knowledge Hub は、その前段を担当します。文書をアップ
 - **Curator agent**: 文書種別、業務領域、鮮度、機密性、AI 利用可否を分類
 - **Masker agent**: 個人情報や再識別リスクを検出し、AI 参照版または除外へ振り分け
 - **Strategist agent**: 目的に対して必要な文書・不足情報・確認質問を整理
+- **候補文書**: 目的から Inventory を metadata-only でスキャンし、生成前に人間が文書を選べる
 - **Context Package export**: Markdown と NotebookLM 用 source bundle zip を生成
 - **Document conversion**: official PDF / slide PDF / scan PDF を DocumentIR に変換し、評価可能な chunk へ変換
 - **Quality gates**: extraction / masking / scan PDF drift を CI と eval で継続確認
@@ -49,7 +50,8 @@ AI-Ready Knowledge Hub は、その前段を担当します。文書をアップ
 | Curator | 文書を分類し、業務領域・鮮度・AI 利用可否を判断する |
 | Masker | 個人情報・顧客情報・再識別リスクを検出し、安全化または除外する |
 | Strategist | 目的に対して必要な情報、除外理由、不足情報、確認質問をまとめる |
-| Candidate selector | 目的から候補文書を metadata-only で事前選定し、生成前に人間が確認できる状態にする |
+
+候補文書の選定は独立したエージェントではなく、`/context-package` の metadata-only フロー（「候補を表示」→ 生成前の安全確認 → 生成前プレビュー）で行います。
 
 ## Google Cloud / DevOps 要件への対応
 
@@ -161,7 +163,7 @@ PR #55 merge 時点で以下を確認済みです。
 | `src/app/` | Next.js pages / API routes |
 | `src/agents/` | Curator / Masker / Strategist flows |
 | `src/lib/` | upload, extractors, storage, Firestore, masking, chunk generation |
-| `src/services/` | Context Package orchestration and candidate selection |
+| `src/services/` | Context Package orchestration と候補文書選定（`selectCandidates`） |
 | `src/eval/` | conversion eval / quality gates |
 | `sample-data/` | synthetic / public / masked fixtures |
 | `docs/` | design docs, runbooks, evidence |

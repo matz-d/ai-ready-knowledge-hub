@@ -169,7 +169,7 @@ AI-safe 版 / Restricted 昇格を保存）、Inventory 実 Firestore UI、Purpo
 | ~~Phase 3-H-3 subtype 2~~ | ~~slide-pdf 本線統合 + `inferenceDestination` + live smoke~~ | **完了** (2026-05-20, PR #3) |
 | ~~Phase 3-H-3 subtype 3 (M6)~~ | ~~scan-pdf 本線統合 + OCR fail-closed + `unmaskablePiiFindings` warn~~ | **完了** (2026-05-21, live smoke DoD YES) |
 | ~~Masker 本線統合（PDF 経路）~~ | ~~`requires_masking` PDF の chunk 化と Context Package 接続~~ | **完了**（2026-05-29、`D-P3-M-PDF-1` / `feat/masker-pdf-mainline`） |
-| ~~Phase 4-UX MVP~~ | ~~purpose-driven candidate selection + Safety Review + Preview~~ | **完了**（2026-06-03 実装、2026-06-10 ブラウザ手動通し証跡） |
+| ~~Phase 4-UX MVP~~ | ~~目的に応じた候補文書選定 + 生成前の安全確認 + 生成前プレビュー~~ | **完了**（2026-06-03 実装、2026-06-10 ブラウザ手動通し証跡） |
 | ~~Production Hardening close-out~~ | ~~#15 job GC / stale recovery、#16 result GCS offload の production smoke と issue close~~ | **完了**（2026-06-08、#15/#16 closed） |
 | Phase 3-F | デモ polish・動画シナリオ・見栄え調整 | 次候補 |
 | **Ingest: standalone images** | `image/jpeg` / `image/png` 等を upload ソースとして追加（scan-pdf とは別。写真・図面・スクショ単体） | 情報源拡張（下記 §Ingest 起票） |

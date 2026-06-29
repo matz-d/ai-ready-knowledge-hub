@@ -29,7 +29,7 @@ POST /api/context-package 200 in 8.4s
 1. Opened `/context-package` on localhost.
 2. Entered purpose.
 3. Clicked `候補を表示`.
-4. Confirmed candidate API result and Safety Review:
+4. Confirmed candidate API result and 生成前の安全確認:
    - AI に渡せる候補: 30
    - 除外すべき: 3
    - 人間確認すべき: 6
@@ -65,7 +65,7 @@ POST /api/context-package 200 in 8.4s
 ### Passed
 
 - Purpose-driven candidate discovery works from the browser.
-- Safety Review clearly separates includable, restricted, human-review, and missing information.
+- 生成前の安全確認 clearly separates includable, restricted, human-review, and missing information.
 - Advanced Doc ID narrowing updates the pre-generation preview before generation.
 - Context Package generation succeeds when `GOOGLE_CLOUD_LOCATION=global` is used.
 - Markdown result rendering and copy action work.
@@ -79,4 +79,4 @@ POST /api/context-package 200 in 8.4s
 
 ## Verdict
 
-P0 is cleared for the local synchronous browser UX path: purpose, candidates, Safety Review, preview, generation result, copy, and download were verified with evidence. UI-level async polling remains a production/Cloud Tasks environment check rather than a localhost check.
+P0 is cleared for the local synchronous browser UX path: purpose, 候補文書, 生成前の安全確認, 生成前プレビュー, generation result, copy, and download were verified with evidence. UI-level async polling remains a production/Cloud Tasks environment check rather than a localhost check.
