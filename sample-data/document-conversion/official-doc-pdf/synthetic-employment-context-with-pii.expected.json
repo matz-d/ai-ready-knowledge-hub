@@ -7,14 +7,21 @@
     "氏名: 山田 太郎（架空）",
     "電話: 03-1234-5678（架空）",
     "住所: 東京都千代田区サンプル町1-2-3",
-    "署名欄（画像）"
+    "所属部署\t管理部",
+    "勤務地: 本社",
+    "契約期間: 2026年4月1日から2027年3月31日まで",
+    "業務内容は社内文書の整理と問い合わせ対応である",
+    "署名欄（画像）には労働者本人の署名または記名押印を行う想定"
   ],
   "expectedFieldTiers": {
     "雇用契約コンテキスト（合成データ）": "core",
     "本資料は学習目的のための合成データである": "core",
     "氏名: 山田 太郎（架空）": "core",
     "電話: 03-1234-5678（架空）": "core",
-    "住所: 東京都千代田区サンプル町1-2-3": "core"
+    "住所: 東京都千代田区サンプル町1-2-3": "core",
+    "所属部署\t管理部": "core",
+    "勤務地: 本社": "core",
+    "契約期間: 2026年4月1日から2027年3月31日まで": "core"
   },
   "expectedValues": [
     {
@@ -33,6 +40,13 @@
       "tier": "core"
     }
   ],
-  "expectedTableCells": "not_applicable",
-  "notes": "Local synthetic Japanese employment fixture. Expected fields include synthetic PII-bearing labels so P1-D can measure value retention before masker-output sidecars add true masking recall."
+  "expectedTableCells": [
+    {
+      "tableId": "p2-t0",
+      "rowLabel": "所属部署",
+      "expectedValue": "管理部",
+      "tier": "core"
+    }
+  ],
+  "notes": "Local synthetic Japanese employment fixture. Expected fields include synthetic PII-bearing labels so P1-D can measure value retention before masker-output sidecars add true masking recall. The committed sidecar includes full-page non-empty text and a minimal synthetic table with tableIndex/rowIndex locators for grounding quality."
 }

@@ -33,6 +33,19 @@
           "kind": "paragraph",
           "text": "氏名: 山田 太郎（架空）。電話: 03-1234-5678（架空）。住所: 東京都千代田区サンプル町1-2-3。",
           "locator": { "pageNumber": 2 }
+        },
+        {
+          "blockId": "p2-t0-r0",
+          "kind": "table",
+          "text": "項目\t内容",
+          "locator": { "pageNumber": 2, "tableIndex": 0, "rowIndex": 0 },
+          "metadata": { "isHeaderRow": true }
+        },
+        {
+          "blockId": "p2-t0-r1",
+          "kind": "table",
+          "text": "所属部署\t管理部",
+          "locator": { "pageNumber": 2, "tableIndex": 0, "rowIndex": 1 }
         }
       ]
     },
@@ -42,7 +55,7 @@
         {
           "blockId": "p3-b1",
           "kind": "paragraph",
-          "text": "   ",
+          "text": "勤務地: 本社。契約期間: 2026年4月1日から2027年3月31日まで。業務内容は社内文書の整理と問い合わせ対応である。",
           "locator": { "pageNumber": 3 }
         }
       ]
@@ -53,7 +66,8 @@
         {
           "blockId": "p4-b1",
           "kind": "image_text",
-          "text": "署名欄（画像）"
+          "text": "署名欄（画像）には労働者本人の署名または記名押印を行う想定で、合成データでは空欄として扱い、確認用の補足文を含む。",
+          "locator": { "pageNumber": 4 }
         }
       ]
     }
