@@ -3,14 +3,18 @@
  * DocumentIR fixtures committed under
  * `sample-data/document-conversion/official-doc-pdf/`.
  *
- * The MHLW fixtures are regenerated from the mainline pdf-parse extractor
+ * Most MHLW fixtures are regenerated from the mainline pdf-parse extractor
  * (`pnpm fixtures:official-doc-pdf:sidecars`), so these assertions describe what
- * pdf-parse actually produces on the real public PDFs — not hand-authored stubs:
+ * pdf-parse actually produces on the real public PDFs — not hand-authored stubs.
+ * The labor notice sidecar is the intentional stable exception: it is refreshed
+ * through the mainline table-assist path
+ * (`pnpm fixtures:official-doc-pdf:table-assist-sidecars`) so CI measures the
+ * product-quality Context Package input for that table-heavy form:
  *  - `mhlw-overtime-limit-guide` / `mhlw-r07-model-work-rules` keep full page
  *    coverage and DO yield pdf-parse table grids (116 / 78 table candidates).
- *  - `mhlw-labor-conditions-notice-general` keeps full page coverage but yields
- *    NO pdf-parse table grids (its 2-column form table is not recovered) — the
- *    documented born-digital table gap that P1-E Gemini table-assist targets.
+ *  - `mhlw-labor-conditions-notice-general` keeps full page coverage and adds
+ *    grounded Gemini table-assist rows for the 2-column form table pdf-parse
+ *    could not recover on its own.
  *  - `synthetic-employment-context-with-pii` is a hand-authored fixture covering
  *    PII value-retention, full page coverage, table locators, and the
  *    `image_text` block kind.
@@ -52,12 +56,9 @@ const FIXTURES: Record<FixtureBasename, DocumentIr> = FIXTURE_BASENAMES.reduce(
 );
 
 describe('evalCoverage (heuristic, fixture-driven)', () => {
-  // NOTE: the table-candidate counts below (116 / 78 / 0) are the pinned
-  // pdf-parse *extractor baseline*, not "true" document table counts. If a
-  // pdf-parse upgrade or a DocumentIR-adapter change shifts them, that is a
-  // signal to regenerate the baseline
-  // (`pnpm fixtures:official-doc-pdf:sidecars`) and update these numbers — not a
-  // regression to debug.
+  // NOTE: the overtime/model table-candidate counts below (116 / 78) are the
+  // pinned pdf-parse *extractor baseline*, not "true" document table counts.
+  // Labor is pinned to the table-assist-augmented stable sidecar.
   it('mhlw-overtime-limit-guide: full coverage and 116 table candidates', () => {
     const { coverage } = evalCoverage({
       documentIr: FIXTURES['mhlw-overtime-limit-guide'],
@@ -76,15 +77,13 @@ describe('evalCoverage (heuristic, fixture-driven)', () => {
     expect(coverage.tableCandidates).toBe(78);
   });
 
-  it('mhlw-labor-conditions-notice-general: full coverage but no pdf-parse table candidates', () => {
+  it('mhlw-labor-conditions-notice-general: full coverage with table-assist candidates', () => {
     const { coverage } = evalCoverage({
       documentIr: FIXTURES['mhlw-labor-conditions-notice-general'],
       chunks: [],
     });
     expect(coverage.pageCoverage).toBe(1);
-    // pdf-parse does not recover the 2-column form table; the born-digital table
-    // gap that P1-E Gemini table-assist targets.
-    expect(coverage.tableCandidates).toBe(0);
+    expect(coverage.tableCandidates).toBe(8);
   });
 
   it('synthetic-employment-context-with-pii: full coverage and synthetic table candidate', () => {
@@ -182,8 +181,7 @@ describe('evalLocatorQuality (heuristic, fixture-driven)', () => {
   it.each([
     ['mhlw-overtime-limit-guide', true, true],
     ['mhlw-r07-model-work-rules', true, true],
-    // labor notice: pdf-parse emits page locators but no table grids.
-    ['mhlw-labor-conditions-notice-general', true, false],
+    ['mhlw-labor-conditions-notice-general', true, true],
     ['synthetic-employment-context-with-pii', true, true],
   ] as const)(
     '%s reports hasPageLocators=%s and hasTableLocators=%s',
