@@ -79,6 +79,7 @@ jobs:
       PDF_TABLE_ASSIST_WORKER_OIDC_AUDIENCE: ${{ vars.PDF_TABLE_ASSIST_WORKER_OIDC_AUDIENCE }}
       PDF_TABLE_ASSIST_WORKER_TOKEN_SECRET: ${{ vars.PDF_TABLE_ASSIST_WORKER_TOKEN_SECRET }}
       PDF_TABLE_ASSIST_TASK_SIGNING_SECRET_NAME: ${{ vars.PDF_TABLE_ASSIST_TASK_SIGNING_SECRET_NAME }}
+      MASKER_PROVIDER: ${{ vars.MASKER_PROVIDER }}
 
     steps:
       - name: Checkout
@@ -133,6 +134,15 @@ jobs:
             exit 1
           fi
 
+          masker_provider="${MASKER_PROVIDER:-cloud-dlp}"
+          if [[ "${masker_provider}" != "cloud-dlp" && "${masker_provider}" != "simple-rule" ]]; then
+            echo "MASKER_PROVIDER must be cloud-dlp or simple-rule, got ${masker_provider}" >&2
+            exit 1
+          fi
+          if [[ "${masker_provider}" != "cloud-dlp" ]]; then
+            echo "Warning: MASKER_PROVIDER=${masker_provider}. Client delivery should use cloud-dlp." >&2
+          fi
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
@@ -184,7 +194,7 @@ jobs:
             "GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-global}"
             "KNOWLEDGE_HUB_BUCKET=${KNOWLEDGE_HUB_BUCKET}"
             "IAP_JWT_AUDIENCE=${IAP_JWT_AUDIENCE}"
-            "MASKER_PROVIDER=simple-rule"
+            "MASKER_PROVIDER=${MASKER_PROVIDER:-cloud-dlp}"
             "FIRESTORE_PREFER_REST=false"
           )
 

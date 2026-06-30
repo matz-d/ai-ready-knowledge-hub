@@ -12,17 +12,20 @@ Upload / Google Workspace import → Firestore/GCS → Inventory → Context Pac
 - demo service では Context Package 候補・生成・文書一覧・文書詳細を `demoSampleSet=accounting-office` の文書だけにスコープする。
 - Docker image は同一。環境変数で入口とデータスコープだけを切り替えるため、配布形式の説明と矛盾しない。
 
-GitHub Actions は [`.github/workflows/deploy-demo.yml`](../.github/workflows/deploy-demo.yml) を手動実行する。必要な GitHub Variables は通常 deploy の値を流用し、必要なら `DEMO_` prefix で上書きする。
+GitHub Actions は [`.github/workflows/deploy-demo.yml`](../.github/workflows/deploy-demo.yml) を手動実行する。**デモは本番 GitHub Variables へフォールバックしない。** 専用 GCP プロジェクト向けに `DEMO_*` をすべて明示設定する。
 
 | Variable | 用途 |
 |---|---|
+| `DEMO_GCP_PROJECT_ID` | **必須**。本番 `GCP_PROJECT_ID` と同じ値は workflow が拒否する |
+| `DEMO_GCP_REGION` | **必須** |
+| `DEMO_ARTIFACT_REGISTRY_REPO` | **必須** |
+| `DEMO_WIF_PROVIDER` | **必須** |
+| `DEMO_DEPLOY_SERVICE_ACCOUNT` | **必須** |
+| `DEMO_RUNTIME_SERVICE_ACCOUNT` | **必須** |
+| `DEMO_KNOWLEDGE_HUB_BUCKET` | **必須**。本番 `KNOWLEDGE_HUB_BUCKET` と同じ値は workflow が拒否する |
 | `DEMO_CLOUD_RUN_SERVICE` | 省略時 `ai-ready-knowledge-hub-demo` |
-| `DEMO_GCP_PROJECT_ID` / `DEMO_GCP_REGION` | 省略時 `GCP_PROJECT_ID` / `GCP_REGION` |
-| `DEMO_ARTIFACT_REGISTRY_REPO` | 省略時 `ARTIFACT_REGISTRY_REPO` |
-| `DEMO_WIF_PROVIDER` / `DEMO_DEPLOY_SERVICE_ACCOUNT` | 省略時は通常 deploy と同じ WIF / deploy SA |
-| `DEMO_RUNTIME_SERVICE_ACCOUNT` | 省略時 `RUNTIME_SERVICE_ACCOUNT` |
-| `DEMO_KNOWLEDGE_HUB_BUCKET` | 省略時 `KNOWLEDGE_HUB_BUCKET`。可能なら demo 用 bucket を推奨 |
 | `DEMO_KNOWLEDGE_HUB_TENANT_ID` | 省略時 `public-demo` |
+| `DEMO_GOOGLE_CLOUD_LOCATION` | 省略時 `global` |
 
 現時点の提出デモでは、PDF / CSV / XLSX / Google Sheets / Google Docs の主要 ingest、`/upload` の複数ファイルキュー、Phase 4-UX の目的に応じた候補文書選定、「候補を表示」、生成前の安全確認、生成前プレビュー、各文書・各候補の判断を可視化する **Decision Trace**（文書詳細 / 生成前の安全確認）、async Context Package job、NotebookLM 用 source bundle が実装済みです。**Google Sheets** は [Phase 3-A](archive/phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。
 

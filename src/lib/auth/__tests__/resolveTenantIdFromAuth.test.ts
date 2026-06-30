@@ -64,6 +64,25 @@ describe('resolveTenantIdFromAuth', () => {
     );
   });
 
+  it('ignores spoofed forwarded headers when IAP email is present', () => {
+    const headers = new Headers({
+      [IAP_AUTHENTICATED_USER_EMAIL_HEADER]:
+        'accounts.google.com:alice@customer.example',
+      [TENANT_ID_HEADER]: 'attacker.example',
+      [ACTOR_EMAIL_HEADER]: 'attacker@evil.example',
+      [AUTH_PROVIDER_HEADER]: 'iap',
+    });
+
+    expect(resolveTenantIdFromAuth(headers)).toEqual({
+      tenantId: 'customer.example',
+      provider: 'iap',
+      actor: {
+        userId: 'alice@customer.example',
+        email: 'alice@customer.example',
+      },
+    });
+  });
+
   it('falls back to local-dev only when explicitly allowed', () => {
     expect(
       resolveTenantIdFromAuth(new Headers(), { allowLocalFallback: true })
