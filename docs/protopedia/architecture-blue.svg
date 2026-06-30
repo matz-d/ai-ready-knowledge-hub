@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="560" viewBox="0 0 1024 560">
+<defs>
+<filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur in="SourceAlpha" stdDeviation="5"/><feOffset dy="4" result="o"/><feComponentTransfer><feFuncA type="linear" slope="0.22"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<linearGradient id="gExtract" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60A5FA"/><stop offset="1" stop-color="#3B82F6"/></linearGradient>
+<linearGradient id="gCurate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#2563EB"/></linearGradient>
+<linearGradient id="gMask" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2D6CF0"/><stop offset="1" stop-color="#1D4ED8"/></linearGradient>
+<linearGradient id="gUpload" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#38BDF8"/><stop offset="1" stop-color="#0EA5E9"/></linearGradient>
+<linearGradient id="gStrat" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3056D3"/><stop offset="1" stop-color="#1E3A8A"/></linearGradient>
+<linearGradient id="gLLM" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34D399"/><stop offset="1" stop-color="#0EA47A"/></linearGradient>
+<marker id="ah" markerWidth="10" markerHeight="10" refX="6.5" refY="3.3" orient="auto"><path d="M0,0 L7,3.3 L0,6.6 Z" fill="#2563EB"/></marker>
+<marker id="ahg" markerWidth="10" markerHeight="10" refX="6.5" refY="3.3" orient="auto"><path d="M0,0 L7,3.3 L0,6.6 Z" fill="#0EA47A"/></marker>
+<marker id="ahm" markerWidth="10" markerHeight="10" refX="6.5" refY="3.3" orient="auto"><path d="M0,0 L7,3.3 L0,6.6 Z" fill="#8AA0B6"/></marker>
+</defs>
+<rect x="0" y="0" width="1024" height="560" rx="0" ry="0" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="0" opacity="1.0"/>
+<text x="36" y="50" font-family="Noto Sans CJK JP" font-size="30" font-weight="800" fill="#0F2A4A" text-anchor="start">AI-Ready Knowledge Hub</text>
+<text x="37" y="79" font-family="Noto Sans CJK JP" font-size="13.5" font-weight="normal" fill="#5B7088" text-anchor="start">システムアーキテクチャ &amp; データパイプライン</text>
+<rect x="32" y="110" width="234" height="132" rx="14" ry="14" fill="#F4F8FF" stroke="#D8E2F0" stroke-width="1.3" opacity="1.0"/>
+<text x="46" y="138" font-family="Noto Sans CJK JP" font-size="14" font-weight="800" fill="#0F2A4A" text-anchor="start">クラウド連携</text>
+<rect x="176" y="120" width="81.0" height="22" rx="11" ry="11" fill="#E5EEFE" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="216.5" y="135" font-family="Noto Sans CJK JP" font-size="10" font-weight="700" fill="#1D4ED8" text-anchor="middle">Workspace</text>
+<circle cx="52" cy="166" r="4" fill="#38BDF8"/>
+<text x="64" y="170" font-family="Noto Sans CJK JP" font-size="11.5" font-weight="normal" fill="#27425F" text-anchor="start">Google スプレッドシート</text>
+<circle cx="52" cy="194" r="4" fill="#38BDF8"/>
+<text x="64" y="198" font-family="Noto Sans CJK JP" font-size="11.5" font-weight="normal" fill="#27425F" text-anchor="start">Google ドキュメント</text>
+<circle cx="52" cy="222" r="4" fill="#38BDF8"/>
+<text x="64" y="226" font-family="Noto Sans CJK JP" font-size="11.5" font-weight="normal" fill="#27425F" text-anchor="start">Google スライド</text>
+<rect x="32" y="258" width="234" height="228" rx="14" ry="14" fill="#F4F8FF" stroke="#D8E2F0" stroke-width="1.3" opacity="1.0"/>
+<text x="46" y="286" font-family="Noto Sans CJK JP" font-size="14" font-weight="800" fill="#0F2A4A" text-anchor="start">ローカルファイル</text>
+<rect x="190" y="270" width="60.0" height="22" rx="11" ry="11" fill="#E5EEFE" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="220.0" y="285" font-family="Noto Sans CJK JP" font-size="10" font-weight="700" fill="#1D4ED8" text-anchor="middle">Upload</text>
+<circle cx="52" cy="312" r="4" fill="#EF4444"/>
+<text x="64" y="316" font-family="Noto Sans CJK JP" font-size="11.5" font-weight="700" fill="#0F2A4A" text-anchor="start">PDF ドキュメント群</text>
+<text x="66" y="336" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="normal" fill="#5B7088" text-anchor="start">・公文書 (テーブル補正対応)</text>
+<text x="66" y="353" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="normal" fill="#5B7088" text-anchor="start">・スキャンPDF (劣化画像対応)</text>
+<text x="66" y="370" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="normal" fill="#5B7088" text-anchor="start">・スライドPDF</text>
+<circle cx="52" cy="398" r="4" fill="#22C55E"/>
+<text x="64" y="402" font-family="Noto Sans CJK JP" font-size="11.5" font-weight="normal" fill="#27425F" text-anchor="start">Excel (.xlsx) / CSV</text>
+<circle cx="52" cy="432" r="4" fill="#A855F7"/>
+<text x="64" y="436" font-family="Noto Sans CJK JP" font-size="11.5" font-weight="normal" fill="#27425F" text-anchor="start">テキスト / Markdown</text>
+<rect x="298" y="100" width="432" height="394" rx="20" ry="20" fill="#FBFDFF" stroke="#9DBEF5" stroke-width="1.6" stroke-dasharray="3 7" opacity="1.0"/>
+<text x="318" y="128" font-family="Noto Sans CJK JP" font-size="12.5" font-weight="800" fill="#1D4ED8" text-anchor="start" letter-spacing="0.5">KNOWLEDGE HUB CORE</text>
+<text x="530" y="128" font-family="Noto Sans CJK JP" font-size="11" font-weight="600" fill="#5B7088" text-anchor="start">(Next.js / Cloud Run)</text>
+<rect x="312" y="296" width="152" height="104" rx="13" ry="13" fill="url(#gUpload)" stroke="none" stroke-width="0" filter="url(#sh)" opacity="1.0"/>
+<text x="330" y="326" font-family="Noto Sans CJK JP" font-size="13.5" font-weight="800" fill="#FFFFFF" text-anchor="start">アップロード管理</text>
+<text x="330" y="346" font-family="Noto Sans CJK JP" font-size="9.8" font-weight="normal" fill="#EAF2FF" text-anchor="start">非同期ジョブ &amp; ルーティング</text>
+<rect x="330" y="374" width="174.0" height="18" rx="9" ry="9" fill="#FFFFFF" stroke="none" stroke-width="0" opacity="0.22"/>
+<text x="417.0" y="387" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="700" fill="#FFFFFF" text-anchor="middle">Next.js APIs · Cloud Tasks</text>
+<text x="486" y="148" font-family="Noto Sans CJK JP" font-size="10.8" font-weight="800" fill="#0F2A4A" text-anchor="start">自動知識処理パイプライン</text>
+<rect x="484" y="156" width="228" height="88" rx="13" ry="13" fill="url(#gExtract)" stroke="none" stroke-width="0" filter="url(#sh)" opacity="1.0"/>
+<text x="502" y="186" font-family="Noto Sans CJK JP" font-size="13.5" font-weight="800" fill="#FFFFFF" text-anchor="start">データ抽出 &amp; OCR解析</text>
+<text x="502" y="206" font-family="Noto Sans CJK JP" font-size="9.8" font-weight="normal" fill="#EAF2FF" text-anchor="start">レイアウト認識・表構造の正規化</text>
+<rect x="502" y="218" width="228.0" height="18" rx="9" ry="9" fill="#FFFFFF" stroke="none" stroke-width="0" opacity="0.22"/>
+<text x="616.0" y="231" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="700" fill="#FFFFFF" text-anchor="middle">MarkItDown · pdf-parse · Gemini OCR</text>
+<rect x="484" y="266" width="228" height="88" rx="13" ry="13" fill="url(#gCurate)" stroke="none" stroke-width="0" filter="url(#sh)" opacity="1.0"/>
+<text x="502" y="296" font-family="Noto Sans CJK JP" font-size="13.5" font-weight="800" fill="#FFFFFF" text-anchor="start">キュレーター AI</text>
+<text x="502" y="316" font-family="Noto Sans CJK JP" font-size="9.8" font-weight="normal" fill="#EAF2FF" text-anchor="start">コンテキストの自動分類・タグ付け</text>
+<rect x="502" y="328" width="180.0" height="18" rx="9" ry="9" fill="#FFFFFF" stroke="none" stroke-width="0" opacity="0.22"/>
+<text x="592.0" y="341" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="700" fill="#FFFFFF" text-anchor="middle">Genkit · Vertex AI (Gemini)</text>
+<rect x="484" y="376" width="228" height="84" rx="13" ry="13" fill="url(#gMask)" stroke="none" stroke-width="0" filter="url(#sh)" opacity="1.0"/>
+<text x="502" y="406" font-family="Noto Sans CJK JP" font-size="13.5" font-weight="800" fill="#FFFFFF" text-anchor="start">マスカー (秘匿化処理)</text>
+<text x="502" y="426" font-family="Noto Sans CJK JP" font-size="9.8" font-weight="normal" fill="#EAF2FF" text-anchor="start">PII・機密情報の検知とマスキング</text>
+<rect x="502" y="434" width="126.0" height="18" rx="9" ry="9" fill="#FFFFFF" stroke="none" stroke-width="0" opacity="0.22"/>
+<text x="565.0" y="447" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="700" fill="#FFFFFF" text-anchor="middle">Cloud DLP + Gemini</text>
+<rect x="298" y="506" width="430" height="46" rx="13" ry="13" fill="#EAF2FF" stroke="#BBD2F7" stroke-width="1.3" opacity="1.0"/>
+<text x="316" y="524" font-family="Noto Sans CJK JP" font-size="12" font-weight="800" fill="#1D4ED8" text-anchor="start">データストア &amp; 永続化</text>
+<text x="316" y="540" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="normal" fill="#5B7088" text-anchor="start">安全なチャンク・IRメタデータ</text>
+<text x="470" y="540" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="700" fill="#2563EB" text-anchor="start">[Firestore]</text>
+<circle cx="548" cy="529" r="3" fill="#94A9C4"/>
+<text x="560" y="524" font-family="Noto Sans CJK JP" font-size="9.5" font-weight="normal" fill="#27425F" text-anchor="start">原本ファイル (Raw Backup)</text>
+<text x="560" y="540" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="700" fill="#2563EB" text-anchor="start">[Cloud Storage]</text>
+<rect x="752" y="196" width="240" height="150" rx="13" ry="13" fill="url(#gStrat)" stroke="none" stroke-width="0" filter="url(#sh)" opacity="1.0"/>
+<text x="770" y="226" font-family="Noto Sans CJK JP" font-size="13.5" font-weight="800" fill="#FFFFFF" text-anchor="start">ストラテジスト</text>
+<text x="770" y="246" font-family="Noto Sans CJK JP" font-size="9.8" font-weight="normal" fill="#EAF2FF" text-anchor="start">利用目的に応じたコンテキスト収集</text>
+<text x="770" y="288" font-family="Noto Sans CJK JP" font-size="9.6" font-weight="normal" fill="#EAF2FF" text-anchor="start">Context Package (ZIP) の動的生成</text>
+<rect x="770" y="316" width="114.0" height="18" rx="9" ry="9" fill="#FFFFFF" stroke="none" stroke-width="0" opacity="0.22"/>
+<text x="827.0" y="329" font-family="Noto Sans CJK JP" font-size="8.6" font-weight="700" fill="#FFFFFF" text-anchor="middle">Agentic Workflow</text>
+<rect x="752" y="372" width="240" height="104" rx="13" ry="13" fill="url(#gLLM)" stroke="none" stroke-width="0" filter="url(#sh)" opacity="1.0"/>
+<text x="770" y="402" font-family="Noto Sans CJK JP" font-size="13.5" font-weight="800" fill="#FFFFFF" text-anchor="start">LLM / RAG</text>
+<text x="770" y="422" font-family="Noto Sans CJK JP" font-size="9.8" font-weight="normal" fill="#EAF2FF" text-anchor="start">ダウンストリームアプリ</text>
+<text x="770" y="438" font-family="Noto Sans CJK JP" font-size="9.6" font-weight="normal" fill="#EAFBF4" text-anchor="start">（回答生成・検索用基盤）</text>
+<path d="M266 176 C292 176 290 332 310 336" fill="none" stroke="#2563EB" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M266 372 C292 372 292 362 310 360" fill="none" stroke="#2563EB" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M420 296 C442 250 460 200 482 200" fill="none" stroke="#2563EB" stroke-width="2.4" marker-end="url(#ah)"/>
+<rect x="432.84" y="240" width="38.32" height="20" rx="10" ry="10" fill="#FFFFFF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="452" y="254" font-family="Noto Sans CJK JP" font-size="9" font-weight="700" fill="#1D4ED8" text-anchor="middle">生データ</text>
+<path d="M598 244 L598 266" fill="none" stroke="#2563EB" stroke-width="2.6" marker-end="url(#ah)"/>
+<rect x="539.78" y="245" width="116.44" height="20" rx="10" ry="10" fill="#FFFFFF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="598" y="259" font-family="Noto Sans CJK JP" font-size="9" font-weight="700" fill="#1D4ED8" text-anchor="middle">中間表現 (Document IR)</text>
+<path d="M598 354 L598 376" fill="none" stroke="#2563EB" stroke-width="2.6" marker-end="url(#ah)"/>
+<rect x="562.1" y="355" width="71.8" height="20" rx="10" ry="10" fill="#FFFFFF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="598" y="369" font-family="Noto Sans CJK JP" font-size="9" font-weight="700" fill="#1D4ED8" text-anchor="middle">メタデータ付与・分類</text>
+<path d="M560 460 C545 484 535 492 525 506" fill="none" stroke="#1D4ED8" stroke-width="2.6" marker-end="url(#ah)"/>
+<rect x="436.89" y="476" width="66.22" height="20" rx="10" ry="10" fill="#FFFFFF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="470" y="490" font-family="Noto Sans CJK JP" font-size="9" font-weight="700" fill="#1D4ED8" text-anchor="middle">安全な知識チャンク</text>
+<path d="M380 400 C380 468 372 486 392 506" fill="none" stroke="#8AA0B6" stroke-width="2.0" stroke-dasharray="2 5" marker-end="url(#ahm)"/>
+<rect x="324.68" y="460" width="60.64" height="20" rx="10" ry="10" fill="#FFFFFF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="355" y="474" font-family="Noto Sans CJK JP" font-size="9" font-weight="700" fill="#8AA0B6" text-anchor="middle">原本 (Raw)</text>
+<path d="M740 506 C790 460 808 410 812 348" fill="none" stroke="#1E3A8A" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M872 346 L872 372" fill="none" stroke="#0EA47A" stroke-width="2.8" marker-end="url(#ahg)"/>
+<rect x="833.31" y="349" width="77.38" height="20" rx="10" ry="10" fill="#FFFFFF" stroke="#C9DBFB" stroke-width="1" opacity="1.0"/>
+<text x="872" y="363" font-family="Noto Sans CJK JP" font-size="9" font-weight="700" fill="#0EA47A" text-anchor="middle">コンテキストパッケージ</text>
+</svg>

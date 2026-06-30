@@ -1639,7 +1639,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 6. **LLM 推薦は本フェーズ非対象**: M1 候補ランキングは deterministic（keyword + synonym map + メタデータ加点）のみ。LLM 推薦は次フェーズの別 decision とする。
 
-7. **MVP と Hardening の分離**: Phase 4-UX MVP は候補選択 UX（S1–S7 + docs）で完了とし、`#15`（job GC / stuck-running recovery）/ `#16`（large result GCS offload）/ runbook・監視（S8–S10）は **独立した Production Hardening** として MVP の必須完了条件から外す。
+7. **MVP と Hardening の分離**: Phase 4-UX MVP は候補文書 UX（S1–S7 + docs）で完了とし、`#15`（job GC / stuck-running recovery）/ `#16`（large result GCS offload）/ runbook・監視（S8–S10）は **独立した Production Hardening** として MVP の必須完了条件から外す。
 
 **代替案（却下）:**
 - 今回を正式 Phase 4 とし旧 Phase 4（商用化）を改称 → decisions.md 全参照の更新コストが高く却下。
@@ -1648,7 +1648,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 
 **撤退条件:** deterministic ランキングの候補精度が実務で不十分（誤 include/exclude が多い）なら、次フェーズで LLM 推薦（決定6の見直し）を別 decision で検討する。
 
-**影響:** 新規 `src/services/candidateSelection/`、新規 `src/app/api/context-package/candidates/route.ts`、`src/app/context-package/`（候補選択 UI / Safety Review / Preview）。既存 `safetyGate` / `applyStrategistInputBudget` / `strategistFlow` / Curator enum / 除外 taxonomy は改変しない。
+**影響:** 新規 `src/services/candidateSelection/`、新規 `src/app/api/context-package/candidates/route.ts`、`src/app/context-package/`（候補文書 UI / 生成前の安全確認 / 生成前プレビュー）。既存 `safetyGate` / `applyStrategistInputBudget` / `strategistFlow` / Curator enum / 除外 taxonomy は改変しない。
 
 ---
 
@@ -1769,7 +1769,7 @@ W0 = 実装着手前の docs 同期。M6-1 以降の指示書 v2 と整合させ
 **決定:**
 1. `unmaskablePiiFindings.count >= 1` の文書は `status = restricted` で終端する（fail-closed）。
 2. 対象は `unmaskablePiiFindings`（マスク不能と判定されたもの）に限定する。通常の `piiFindings`（検出済みかつマスク可能）は対象外。
-3. `restricted` は削除ではなく在庫に残し、Safety Review / human confirmation で復旧可能とする。過剰除外は人間確認で回復でき、マスク不能 PII を AI に渡すリスクの方が大きいという非対称性に基づく。
+3. `restricted` は削除ではなく在庫に残し、生成前の安全確認 / human confirmation で復旧可能とする。過剰除外は人間確認で回復でき、マスク不能 PII を AI に渡すリスクの方が大きいという非対称性に基づく。
 4. 閾値に窓は設けない（N=0、すなわち `>= 1`）。
 
 **代替案:**

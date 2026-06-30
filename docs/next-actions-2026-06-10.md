@@ -28,7 +28,7 @@
 | P1-E2 | born-digital PDF Gemini layout/table compare | official-doc-pdf の table / heading / locator 弱点を、Gemini layout/table enrichment で改善できるかを負債なく判定する | **実装・検証済み**。既存 compare harness に `gemini` / `pdf-parse+gemini-tables` arm を追加。page-group / table-only / grounding filter / hallucination-candidate check を実測。table-assist 専用 golden も追加済み | 採用判断: full Gemini 置換はしない。`pdf-parse` primary + grounded Gemini table-assist を PoC 最善とする。証跡は [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6 |
 | P1-E3 | table-assist mainline wiring + product reprocess + async ingest worker | compare 勝ち筋を本線 dispatcher に接続し、同期 upload では走らせない。opt-in reprocess と upload 後の async worker で gated 実行 | **完了（2026-06-18 live smoke 済み）**。Step 1（2026-06-16）: dispatcher + reprocess API + mainline harness。Step 2（PR #53）: `pdfTableAssistIngestEnqueuer`、worker route、`reprocessPdfWithTableAssist` 共有。production smoke は fresh PDF → worker 200 → queue empty | 同期 upload は `disabled` 固定。gated 実行は flag + `async` のみ（reprocess API / worker）。enqueue audit (#51) と cost guard (#52) は後続。正本: [docs/p1-e-large-file-pre-splitting.md](p1-e-large-file-pre-splitting.md) §6「2026-06-16」「2026-06-17」、[docs/decisions.md](decisions.md) `D-P1-E-TA-1` / `D-P1-E-TA-2`、[docs/table-assist-async-ingest-live-smoke-2026-06-18.md](table-assist-async-ingest-live-smoke-2026-06-18.md) |
 | P1-ING1 | Multi-file upload UI | 散らばった資料を `/upload` から複数選択で投入できるようにする | **完了（2026-06-18 live smoke 済み）**。`UploadForm` + `uploadQueue.ts`（最大 20 件、`UPLOAD_CONCURRENCY=1`、失敗後も継続、per-file status）。本番 `/upload` で 10 files が 10/10 完了 | ディレクトリ一括 / zip 一括は未対応（P3 Ingest 判断）。現 smoke は「複数ファイル選択キュー」の検証であり、directory picker ではない。証跡: [docs/upload-multi-file-live-smoke-2026-06-18.md](upload-multi-file-live-smoke-2026-06-18.md) |
-| P2 | Phase 3-F デモ polish | 動画シナリオを現状の product truth に合わせる | **完了**。`demo-scenario.md` / `demo-runbook.md` を multi-file upload、Dashboard / Pipeline Funnel、purpose-driven candidates、Safety Review、source bundle 前提に更新 | 動画カットとナレーションが現 UI / bundle 導線と一致する |
+| P2 | Phase 3-F デモ polish | 動画シナリオを現状の product truth に合わせる | **完了**。`demo-scenario.md` / `demo-runbook.md` を multi-file upload、Dashboard / Pipeline Funnel、候補文書、生成前の安全確認、source bundle 前提に更新 | 動画カットとナレーションが現 UI / bundle 導線と一致する |
 | P2 | 提出前の軽い運用補強 | 「まわす」説明力を上げる | **完了**。alert / sweeper / TTL に加え、UI submit 重複 guard と簡易 SLO を追記済み | `ContextPackageForm` の in-flight lock、`operate-deliver-readiness.md` §E |
 | P3 | 不要 CSS / UI 残骸 cleanup | 保守性を上げ、次の UI 変更を軽くする | 旧 heatmap / risk-callout / status badge modifier / sensitivity 重複などが残る | 挙動変更なしで未使用 CSS と古い `inventory-demo-*` naming を整理 |
 | P3 | Ingest 拡張判断 | 次の product expansion を決める | Drive folder bulk / local directory batch / standalone images が候補 | 提出前は Drive folder bulk か local directory batch のどちらかを選定。standalone images は OCR/PII/eval 設計が重いので後続寄り |
@@ -41,8 +41,8 @@
 1. `/context-package` を localhost または本番 IAP で開く。
 2. purpose を入力する。
 3. candidates API の結果を確認する。
-4. Safety Review と candidate selection を確認する。
-5. Preview acknowledgement を確認する。
+4. 「候補を表示」で候補文書を確認し、生成前の安全確認を見る。
+5. 生成前プレビューの確認チェックを見る。
 6. async 生成に入り、polling `queued/running/succeeded` を確認する。
 7. result を表示し、Markdown copy と download を確認する。
 
@@ -276,7 +276,7 @@ P1 は範囲が広いため、提出価値に直結する delivery 導線と、�
 - Export は「NotebookLM には source bundle の全ファイルを source 追加」、単一 `.md` は Gemini / RAG / copy 用 primary artifact として説明。
 - Dashboard refresh 後の画面構成に合わせ、旧 heatmap ではなく Pipeline Funnel / KPI / 文書一覧を見せる流れへ更新。
 - `/upload` の multi-file キュー（最大 20 件、per-file status）をデモに反映。
-- `/context-package` の purpose → candidates → Safety Review → Preview acknowledgement → result panel の撮影順を runbook に追加。
+- `/context-package` の purpose → 「候補を表示」→ 生成前の安全確認 → 生成前プレビュー → result panel の撮影順を runbook に追加。
 - official-doc-pdf table-assist reprocess は任意カットとして分離し、本編では必須にしない。
 
 ## P2: 提出前の軽い運用補強

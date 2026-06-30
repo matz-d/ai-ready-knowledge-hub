@@ -1,0 +1,174 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1760" height="990" viewBox="0 0 1760 990">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="12" stdDeviation="13" flood-color="#0F2A4A" flood-opacity="0.14"/>
+    </filter>
+    <linearGradient id="cardA" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="cardB" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="cardC" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#1E40AF"/>
+    </linearGradient>
+    <linearGradient id="cardD" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#1E3A8A"/>
+    </linearGradient>
+    <linearGradient id="cardE" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#0284C7"/>
+    </linearGradient>
+    <linearGradient id="cardF" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1E3A8A"/>
+      <stop offset="1" stop-color="#172554"/>
+    </linearGradient>
+    <linearGradient id="cardG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0EA5E9"/>
+      <stop offset="1" stop-color="#0369A1"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#2563EB"/>
+    </marker>
+    <marker id="arrowSoft" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#7EA6E8"/>
+    </marker>
+    <pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.35" fill="#D7E5FA"/>
+    </pattern>
+    <style>
+      .jp { font-family: "Noto Sans CJK JP", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif; }
+      .en { font-family: Inter, "Noto Sans CJK JP", "Hiragino Sans", "Yu Gothic", sans-serif; }
+      .h1 { font-size: 50px; font-weight: 850; fill: #0F2A4A; letter-spacing: 0; }
+      .sub { font-size: 22px; font-weight: 650; fill: #5B7088; letter-spacing: 0; }
+      .section { font-size: 22px; font-weight: 800; fill: #0F2A4A; }
+      .small { font-size: 17px; fill: #5B7088; }
+      .tiny { font-size: 15px; fill: #5B7088; }
+      .cardTitle { font-size: 25px; font-weight: 850; fill: #FFFFFF; }
+      .cardSub { font-size: 16px; font-weight: 550; fill: #EAF2FF; }
+      .pillText { font-size: 15px; font-weight: 800; fill: #1D4ED8; }
+      .labelText { font-size: 15px; font-weight: 800; fill: #1D4ED8; }
+    </style>
+  </defs>
+
+  <rect width="1760" height="990" fill="#FFFFFF"/>
+  <rect width="1760" height="990" fill="url(#grid)" opacity="0.9"/>
+  <path d="M0 176 H1760" stroke="#ECF3FF" stroke-width="1"/>
+  <path d="M0 820 H1760" stroke="#ECF3FF" stroke-width="1"/>
+
+  <text x="64" y="86" class="en h1">AI-Ready Knowledge Hub</text>
+  <text x="66" y="125" class="jp sub">システムアーキテクチャ &amp; データパイプライン</text>
+  <rect x="1395" y="58" width="286" height="44" rx="14" fill="#EAF2FF" stroke="#C9DBFB"/>
+  <text x="1538" y="87" class="en" font-size="18" font-weight="800" fill="#1D4ED8" text-anchor="middle">Next.js / Cloud Run / Genkit</text>
+
+  <rect x="58" y="226" width="308" height="194" rx="22" fill="#F4F8FF" stroke="#D8E2F0" stroke-width="2"/>
+  <text x="86" y="272" class="jp section">クラウド連携</text>
+  <rect x="244" y="244" width="94" height="30" rx="15" fill="#E5EEFE" stroke="#C9DBFB"/>
+  <text x="291" y="265" class="en pillText" text-anchor="middle">Workspace</text>
+  <circle cx="94" cy="316" r="6" fill="#38BDF8"/>
+  <text x="118" y="323" class="jp small">Google スプレッドシート</text>
+  <circle cx="94" cy="358" r="6" fill="#38BDF8"/>
+  <text x="118" y="365" class="jp small">Google ドキュメント</text>
+  <circle cx="94" cy="400" r="6" fill="#38BDF8"/>
+  <text x="118" y="407" class="jp small">Google スライド</text>
+
+  <rect x="58" y="462" width="308" height="272" rx="22" fill="#F4F8FF" stroke="#D8E2F0" stroke-width="2"/>
+  <text x="86" y="508" class="jp section">ローカルファイル</text>
+  <rect x="264" y="480" width="74" height="30" rx="15" fill="#E5EEFE" stroke="#C9DBFB"/>
+  <text x="301" y="501" class="en pillText" text-anchor="middle">Upload</text>
+  <circle cx="94" cy="552" r="6" fill="#2563EB"/>
+  <text x="118" y="559" class="en small" font-weight="700">PDF / CSV / Excel</text>
+  <circle cx="94" cy="604" r="6" fill="#3B82F6"/>
+  <text x="118" y="611" class="jp small">テキスト / Markdown</text>
+  <circle cx="94" cy="656" r="6" fill="#60A5FA"/>
+  <text x="118" y="663" class="jp small">既存テンプレート・メモ</text>
+  <text x="86" y="704" class="jp tiny">Synthetic / masked fixture only</text>
+
+  <rect x="442" y="176" width="920" height="720" rx="34" fill="#FBFDFF" stroke="#9DBEF5" stroke-width="2.4" stroke-dasharray="8 10"/>
+  <text x="492" y="226" class="en" font-size="21" font-weight="850" fill="#1D4ED8">Knowledge Hub Core</text>
+  <text x="770" y="226" class="en" font-size="18" font-weight="650" fill="#5B7088">(Next.js / Cloud Run)</text>
+
+  <path d="M366 322 C408 322 412 530 468 530" fill="none" stroke="#2563EB" stroke-width="5" marker-end="url(#arrow)"/>
+  <path d="M366 600 C408 600 414 554 468 554" fill="none" stroke="#2563EB" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <rect x="488" y="460" width="220" height="144" rx="22" fill="url(#cardE)" filter="url(#shadow)"/>
+  <text x="520" y="515" class="jp" font-size="21" font-weight="850" fill="#FFFFFF">アップロード管理</text>
+  <text x="522" y="544" class="jp cardSub">非同期ジョブ</text>
+  <text x="522" y="566" class="jp cardSub">&amp; ルーティング</text>
+  <rect x="532" y="574" width="132" height="28" rx="14" fill="#FFFFFF" opacity="0.22"/>
+  <text x="598" y="594" class="en" font-size="15" font-weight="800" fill="#FFFFFF" text-anchor="middle">Next.js APIs</text>
+
+  <rect x="742" y="244" width="410" height="528" rx="24" fill="#F4F8FF" stroke="#BBD2F7" stroke-width="2" stroke-dasharray="7 8"/>
+  <text x="818" y="290" class="jp" font-size="22" font-weight="850" fill="#0F2A4A">自動知識処理パイプライン</text>
+
+  <path d="M708 520 C734 460 734 364 778 360" fill="none" stroke="#2563EB" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="640" y="400" width="88" height="30" rx="15" fill="#FFFFFF" stroke="#C9DBFB"/>
+  <text x="684" y="421" class="jp labelText" text-anchor="middle">生データ</text>
+
+  <rect x="780" y="324" width="330" height="92" rx="18" fill="url(#cardB)" filter="url(#shadow)"/>
+  <text x="822" y="363" class="jp cardTitle">データ抽出 &amp; OCR解析</text>
+  <text x="822" y="394" class="jp cardSub">レイアウト認識・表構造を正規化</text>
+
+  <path d="M945 416 L945 468" fill="none" stroke="#2563EB" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="876" y="428" width="138" height="30" rx="15" fill="#FFFFFF" stroke="#C9DBFB"/>
+  <text x="945" y="449" class="en labelText" text-anchor="middle">Document IR</text>
+
+  <rect x="780" y="476" width="330" height="92" rx="18" fill="url(#cardC)" filter="url(#shadow)"/>
+  <text x="822" y="515" class="en cardTitle">Curator AI</text>
+  <text x="822" y="546" class="jp cardSub">目的別に分類・タグ付け</text>
+
+  <path d="M945 568 L945 620" fill="none" stroke="#2563EB" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="864" y="580" width="162" height="30" rx="15" fill="#FFFFFF" stroke="#C9DBFB"/>
+  <text x="945" y="601" class="jp labelText" text-anchor="middle">メタデータ付与</text>
+
+  <rect x="780" y="628" width="330" height="92" rx="18" fill="url(#cardD)" filter="url(#shadow)"/>
+  <text x="822" y="667" class="en cardTitle">Masker</text>
+  <text x="822" y="698" class="jp cardSub">PII・機密情報を検知・マスク</text>
+
+  <path d="M945 720 L945 782" fill="none" stroke="#2563EB" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="838" y="740" width="214" height="30" rx="15" fill="#FFFFFF" stroke="#C9DBFB"/>
+  <text x="945" y="761" class="jp labelText" text-anchor="middle">安全な知識チャンク</text>
+
+  <path d="M594 604 L594 842 L774 842" fill="none" stroke="#7EA6E8" stroke-width="4" stroke-dasharray="6 8" marker-end="url(#arrowSoft)"/>
+  <rect x="536" y="776" width="98" height="30" rx="15" fill="#FFFFFF" stroke="#C9DBFB"/>
+  <text x="585" y="797" class="en" font-size="15" font-weight="800" fill="#6B7F99" text-anchor="middle">Raw</text>
+
+  <rect x="780" y="790" width="330" height="82" rx="18" fill="#EAF2FF" stroke="#BBD2F7" stroke-width="2"/>
+  <text x="820" y="827" class="jp" font-size="24" font-weight="850" fill="#1D4ED8">データストア &amp; 永続化</text>
+  <text x="820" y="858" class="jp tiny">安全なチャンク・IRメタデータ / Raw Backup</text>
+
+  <rect x="1180" y="410" width="260" height="150" rx="20" fill="url(#cardF)" filter="url(#shadow)"/>
+  <text x="1216" y="461" class="en cardTitle">Strategist</text>
+  <text x="1216" y="493" class="jp cardSub">使える情報・除外情報</text>
+  <text x="1216" y="524" class="jp cardSub">不足情報・確認質問を整理</text>
+
+  <path d="M1110 522 L1178 486" fill="none" stroke="#2563EB" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M1110 832 C1168 820 1228 700 1284 562" fill="none" stroke="#2563EB" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <path d="M1440 486 L1488 486" fill="none" stroke="#2563EB" stroke-width="5" marker-end="url(#arrow)"/>
+  <text x="1438" y="386" class="en" font-size="16" font-weight="850" fill="#1D4ED8" text-anchor="middle">Context Package</text>
+  <rect x="1504" y="414" width="202" height="144" rx="22" fill="url(#cardA)" filter="url(#shadow)"/>
+  <text x="1538" y="470" class="en cardTitle">Context</text>
+  <text x="1538" y="504" class="en cardTitle">Package</text>
+  <text x="1538" y="535" class="jp cardSub">目的別パッケージ</text>
+
+  <path d="M1605 558 L1605 620" fill="none" stroke="#2563EB" stroke-width="5" marker-end="url(#arrow)"/>
+  <rect x="1456" y="632" width="280" height="170" rx="22" fill="url(#cardG)" filter="url(#shadow)"/>
+  <text x="1490" y="690" class="en cardTitle">LLM / RAG</text>
+  <text x="1490" y="727" class="en" font-size="19" font-weight="800" fill="#FFFFFF">Retrieval-Augmented</text>
+  <text x="1490" y="756" class="en" font-size="19" font-weight="800" fill="#FFFFFF">Generation</text>
+  <text x="1490" y="788" class="jp cardSub">NotebookLM・Gemini へ</text>
+
+  <rect x="494" y="822" width="150" height="34" rx="17" fill="#EAF2FF" stroke="#C9DBFB"/>
+  <text x="569" y="846" class="en pillText" text-anchor="middle">Cloud Storage</text>
+  <rect x="1124" y="822" width="140" height="34" rx="17" fill="#EAF2FF" stroke="#C9DBFB"/>
+  <text x="1194" y="846" class="en pillText" text-anchor="middle">Firestore</text>
+
+  <rect x="64" y="840" width="274" height="54" rx="16" fill="#F4F8FF" stroke="#D8E2F0"/>
+  <text x="86" y="864" class="jp tiny" font-weight="800" fill="#0F2A4A">安全上の不変条件</text>
+  <text x="86" y="886" class="jp tiny">不明な文書は投入前に除外または人間確認</text>
+</svg>
