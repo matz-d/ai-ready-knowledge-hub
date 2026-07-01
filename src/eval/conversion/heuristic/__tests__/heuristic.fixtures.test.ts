@@ -12,7 +12,8 @@
  *    NO pdf-parse table grids (its 2-column form table is not recovered) — the
  *    documented born-digital table gap that P1-E Gemini table-assist targets.
  *  - `synthetic-employment-context-with-pii` is a hand-authored fixture covering
- *    partial coverage (a whitespace-only page) and the `image_text` block kind.
+ *    PII value-retention, full page coverage, table locators, and the
+ *    `image_text` block kind.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -86,17 +87,12 @@ describe('evalCoverage (heuristic, fixture-driven)', () => {
     expect(coverage.tableCandidates).toBe(0);
   });
 
-  it('synthetic-employment-context-with-pii: partial coverage flags whitespace-only page', () => {
+  it('synthetic-employment-context-with-pii: full coverage and synthetic table candidate', () => {
     const ir = FIXTURES['synthetic-employment-context-with-pii'];
     const { coverage } = evalCoverage({ documentIr: ir, chunks: [] });
-    // 3 of 4 pages have at least one non-empty block; page 3 is whitespace-only.
-    expect(coverage.pageCoverage).toBeCloseTo(0.75, 5);
-    expect(coverage.tableCandidates).toBe(0);
-    // The whitespace-only page must produce an "all blocks empty after trim"
-    // warning so reviewers can see the gap.
-    expect(
-      coverage.textDensityWarnings.some((w) => w.includes('page 3'))
-    ).toBe(true);
+    expect(coverage.pageCoverage).toBe(1);
+    expect(coverage.tableCandidates).toBe(2);
+    expect(coverage.textDensityWarnings).toEqual([]);
   });
 
   it('returns zero coverage and no warnings for an empty document', () => {
@@ -147,6 +143,39 @@ describe('evalCoverage (heuristic, fixture-driven)', () => {
       String(LOW_DENSITY_PAGE_CHAR_THRESHOLD)
     );
   });
+
+  it('flags a page whose blocks are all empty after trim', () => {
+    const whitespaceOnlyIr = parseDocumentIr({
+      schemaVersion: 1,
+      source: {
+        fileName: 'whitespace-only-page.pdf',
+        mediaType: 'application/pdf',
+        sourceKind: 'poc',
+        sourceSubtype: 'official-doc-pdf',
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: 'p1-b1',
+              kind: 'paragraph',
+              text: '   ',
+              locator: { pageNumber: 1 },
+            },
+          ],
+        },
+      ],
+    });
+    const { coverage } = evalCoverage({
+      documentIr: whitespaceOnlyIr,
+      chunks: [],
+    });
+    expect(coverage.pageCoverage).toBe(0);
+    expect(coverage.textDensityWarnings).toContain(
+      'page 1: all blocks are empty after trim'
+    );
+  });
 });
 
 describe('evalLocatorQuality (heuristic, fixture-driven)', () => {
@@ -155,7 +184,7 @@ describe('evalLocatorQuality (heuristic, fixture-driven)', () => {
     ['mhlw-r07-model-work-rules', true, true],
     // labor notice: pdf-parse emits page locators but no table grids.
     ['mhlw-labor-conditions-notice-general', true, false],
-    ['synthetic-employment-context-with-pii', true, false],
+    ['synthetic-employment-context-with-pii', true, true],
   ] as const)(
     '%s reports hasPageLocators=%s and hasTableLocators=%s',
     (basename, expectedPage, expectedTable) => {
