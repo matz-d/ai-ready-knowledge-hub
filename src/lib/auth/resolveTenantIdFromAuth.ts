@@ -91,6 +91,21 @@ export function resolveTenantIdFromAuth(
   options: ResolveTenantIdOptions = {}
 ): ResolvedAuthContext {
   const headers = headersFrom(input);
+
+  const iapEmail = normalizeIapAuthenticatedUserEmail(
+    headers.get(IAP_AUTHENTICATED_USER_EMAIL_HEADER)
+  );
+  if (iapEmail) {
+    return {
+      tenantId: tenantIdFromEmail(iapEmail, options.tenantIdOverride),
+      provider: 'iap',
+      actor: {
+        userId: iapEmail,
+        email: iapEmail,
+      },
+    };
+  }
+
   const forwardedTenantId = headers.get(TENANT_ID_HEADER);
   const forwardedActorEmail = headers.get(ACTOR_EMAIL_HEADER);
   if (forwardedTenantId && forwardedActorEmail) {
@@ -103,20 +118,6 @@ export function resolveTenantIdFromAuth(
       tenantId,
       provider:
         headers.get(AUTH_PROVIDER_HEADER) === 'local-dev' ? 'local-dev' : 'iap',
-      actor: {
-        userId: email,
-        email,
-      },
-    };
-  }
-
-  const email = normalizeIapAuthenticatedUserEmail(
-    headers.get(IAP_AUTHENTICATED_USER_EMAIL_HEADER)
-  );
-  if (email) {
-    return {
-      tenantId: tenantIdFromEmail(email, options.tenantIdOverride),
-      provider: 'iap',
       actor: {
         userId: email,
         email,
