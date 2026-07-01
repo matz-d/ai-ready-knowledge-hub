@@ -48,16 +48,16 @@ jobs:
     needs: ci
 
     env:
-      GCP_PROJECT_ID: ${{ vars.DEMO_GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.DEMO_GCP_REGION || vars.GCP_REGION }}
+      GCP_PROJECT_ID: ${{ vars.DEMO_GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.DEMO_GCP_REGION }}
       CLOUD_RUN_SERVICE: ${{ vars.DEMO_CLOUD_RUN_SERVICE || 'ai-ready-knowledge-hub-demo' }}
-      ARTIFACT_REGISTRY_REPO: ${{ vars.DEMO_ARTIFACT_REGISTRY_REPO || vars.ARTIFACT_REGISTRY_REPO }}
-      WIF_PROVIDER: ${{ vars.DEMO_WIF_PROVIDER || vars.WIF_PROVIDER }}
-      DEPLOY_SERVICE_ACCOUNT: ${{ vars.DEMO_DEPLOY_SERVICE_ACCOUNT || vars.DEPLOY_SERVICE_ACCOUNT }}
-      RUNTIME_SERVICE_ACCOUNT: ${{ vars.DEMO_RUNTIME_SERVICE_ACCOUNT || vars.RUNTIME_SERVICE_ACCOUNT }}
-      KNOWLEDGE_HUB_BUCKET: ${{ vars.DEMO_KNOWLEDGE_HUB_BUCKET || vars.KNOWLEDGE_HUB_BUCKET }}
+      ARTIFACT_REGISTRY_REPO: ${{ vars.DEMO_ARTIFACT_REGISTRY_REPO }}
+      WIF_PROVIDER: ${{ vars.DEMO_WIF_PROVIDER }}
+      DEPLOY_SERVICE_ACCOUNT: ${{ vars.DEMO_DEPLOY_SERVICE_ACCOUNT }}
+      RUNTIME_SERVICE_ACCOUNT: ${{ vars.DEMO_RUNTIME_SERVICE_ACCOUNT }}
+      KNOWLEDGE_HUB_BUCKET: ${{ vars.DEMO_KNOWLEDGE_HUB_BUCKET }}
       KNOWLEDGE_HUB_TENANT_ID: ${{ vars.DEMO_KNOWLEDGE_HUB_TENANT_ID || 'public-demo' }}
-      GOOGLE_CLOUD_LOCATION: ${{ vars.DEMO_GOOGLE_CLOUD_LOCATION || vars.GOOGLE_CLOUD_LOCATION || 'global' }}
+      GOOGLE_CLOUD_LOCATION: ${{ vars.DEMO_GOOGLE_CLOUD_LOCATION || 'global' }}
 
     steps:
       - name: Checkout
@@ -65,6 +65,9 @@ jobs:
 
       - name: Validate demo deploy variables
         shell: bash
+        env:
+          PRODUCTION_GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PRODUCTION_KNOWLEDGE_HUB_BUCKET: ${{ vars.KNOWLEDGE_HUB_BUCKET }}
         run: |
           required_vars=(
             GCP_PROJECT_ID
@@ -79,10 +82,20 @@ jobs:
 
           for var_name in "${required_vars[@]}"; do
             if [[ -z "${!var_name}" ]]; then
-              echo "Missing required GitHub Variable for demo deploy: ${var_name}" >&2
+              echo "Missing required demo deploy value for ${var_name}. Set the corresponding DEMO_* GitHub Variable explicitly." >&2
               exit 1
             fi
           done
+
+          if [[ -n "${PRODUCTION_GCP_PROJECT_ID}" && "${GCP_PROJECT_ID}" == "${PRODUCTION_GCP_PROJECT_ID}" ]]; then
+            echo "Demo deploy must target DEMO_GCP_PROJECT_ID, not production GCP_PROJECT_ID (${PRODUCTION_GCP_PROJECT_ID})." >&2
+            exit 1
+          fi
+
+          if [[ -n "${PRODUCTION_KNOWLEDGE_HUB_BUCKET}" && "${KNOWLEDGE_HUB_BUCKET}" == "${PRODUCTION_KNOWLEDGE_HUB_BUCKET}" ]]; then
+            echo "Demo deploy must use DEMO_KNOWLEDGE_HUB_BUCKET, not production KNOWLEDGE_HUB_BUCKET." >&2
+            exit 1
+          fi
 
           if [[ "${CLOUD_RUN_SERVICE}" == "ai-ready-knowledge-hub" ]]; then
             echo "Demo deploy must not target the production service ai-ready-knowledge-hub." >&2
