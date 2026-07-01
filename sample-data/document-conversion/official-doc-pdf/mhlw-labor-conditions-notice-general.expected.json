@@ -48,29 +48,29 @@
     },
     {
       "field": "就業の場所",
-      "expectedValue": "○○事業所"
+      "expectedValue": "（雇入れ直後）"
     },
     {
-      "field": "従事すべき業務",
-      "expectedValue": "事務職"
+      "field": "従事すべき業務の内容",
+      "expectedValue": "（変更の範囲）"
     }
   ],
   "expectedTableCells": [
     {
-      "tableId": "p1-t1",
-      "rowLabel": "契約期間",
-      "expectedValue": "期間の定めなし"
-    },
-    {
-      "tableId": "p1-t1",
+      "tableId": "p1-t0",
       "rowLabel": "就業の場所",
-      "expectedValue": "○○事業所"
+      "expectedValue": "（雇入れ直後）"
     },
     {
-      "tableId": "p1-t1",
-      "rowLabel": "従事すべき業務",
-      "expectedValue": "事務職"
+      "tableId": "p1-t0",
+      "rowLabel": "従事すべき業務の内容",
+      "expectedValue": "特定有期業務"
+    },
+    {
+      "tableId": "p1-t0",
+      "rowLabel": "休 日",
+      "expectedValue": "国民の祝日"
     }
   ],
-  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW public form, no PII. The committed DocumentIR sidecar is the raw pdf-parse baseline (pnpm fixtures:official-doc-pdf:sidecars); these expectations encode document-level truth, so unmet value/table cells are the intentional P1-E table-assist / label-value gaps, not loosened goldens."
+  "notes": "Source and license follow sample-data/document-conversion/README.md: MHLW public form, no PII. The committed DocumentIR sidecar is regenerated through the grounded table-assist mainline path (pnpm fixtures:official-doc-pdf:table-assist-sidecars) so stable CI measures product-quality table locators. These expectations remain document-level truth and are not loosened to fit extractor output."
 }

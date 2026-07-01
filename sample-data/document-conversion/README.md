@@ -61,7 +61,22 @@ stable P1-D の `STABLE_FIXTURES` には入れず、live Gemini 依存の gate �
 
 **Golden recall ベースライン（M6 後続）:** scan-pdf の `*.expected.json` / `*.document-ir.json` sidecar は **本線** `extractScanPdfFromBuffer` で再生成済み（2026-05-21）。初回記録: [docs/phase-3-h-3-scan-pdf-golden-baseline.md](../../docs/phase-3-h-3-scan-pdf-golden-baseline.md)。sidecar 再生成: `pnpm tsx scripts/regenerateScanPdfGoldenSidecars.ts <documentId>`。
 
-**official-doc-pdf raw baseline（P1-E Step 0, 2026-06-14）:** 公開 MHLW 3件（`mhlw-labor-conditions-notice-general` / `mhlw-overtime-limit-guide` / `mhlw-r07-model-work-rules`）の `*.document-ir.json` sidecar は、手書き stub を廃し **本線 pdf-parse**（`extractPdf` → `buildDocumentIr`）で再生成済み。scan-pdf と同じ raw baseline 方針。`*.expected.json` は document-level truth として据え置き（未達の value/table cell は P1-E の table-assist / label-value gap で、golden を緩めたものではない）。`synthetic-employment-context-with-pii` は手書きの PII value-retention fixture（`expectedTableCells: not_applicable`）のため対象外。sidecar 再生成: `pnpm fixtures:official-doc-pdf:sidecars [<documentId>]`。
+**official-doc-pdf stable sidecars（CI が読む正本）:**
+
+| Fixture | Policy | Regenerate with |
+|---------|--------|-----------------|
+| `mhlw-overtime-limit-guide` | raw pdf-parse baseline | `pnpm fixtures:official-doc-pdf:sidecars` |
+| `mhlw-r07-model-work-rules` | raw pdf-parse baseline | `pnpm fixtures:official-doc-pdf:sidecars` |
+| `mhlw-labor-conditions-notice-general` | grounded table-assist merged stable sidecar | `pnpm fixtures:official-doc-pdf:table-assist-sidecars -- --fixture mhlw-labor-conditions-notice-general` |
+| `synthetic-employment-context-with-pii` | hand-authored quality fixture (not auto-regenerated) | — |
+
+`pnpm fixtures:official-doc-pdf:sidecars` は overtime / model 用。labor をこのコマンドで再生成すると table-assist blocks が消え、CI の locator_quality が劣化する。`*.expected.json` は **document-level truth**（白紙様式に実在する見出し・欄ラベル）であり、extractor 出力に合わせて緩めない。
+
+**heuristic quality gate（PR1/PR2/PR3 後の期待状態）:** `pnpm exec tsx scripts/runConversionEvalForCi.ts --stage heuristic` は UI の緑表示ではなく、coverage / locator_quality / safety_readiness の product-quality gate である。7 fixture すべてで `pass 7 warn 0 fail 0` を維持する:
+
+- `coverage`: pass 7 / warn 0 / fail 0
+- `locator_quality`: pass 7 / warn 0 / fail 0
+- `safety_readiness`: pass 7 / warn 0 / fail 0
 
 自社資料を masking して commit する案は採用しない。自社資料はローカル `tmp/` で `pnpm poc:conversion:scan-pdf <path>` を走らせて観察し、観察した失敗パターンを synthetic fixture として再現する（[docs/phase-3-h-3-direction.md](../../docs/phase-3-h-3-direction.md) §9.2）。
 
