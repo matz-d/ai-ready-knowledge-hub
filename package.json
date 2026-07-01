@@ -16,6 +16,7 @@
     "fixtures:scan-pdf:ocr-fail-closed": "bash poc/document-conversion/scan-pdf/fixtures/generate-ocr-fail-closed.sh",
     "fixtures:scan-pdf:invoice": "tsx poc/document-conversion/scan-pdf/fixtures/generate-synthetic-invoice.ts",
     "fixtures:official-doc-pdf:sidecars": "tsx poc/document-conversion/official-doc-pdf/fixtures/regenerate-golden-sidecars.ts",
+    "fixtures:official-doc-pdf:table-assist-sidecars": "tsx scripts/regenerateOfficialDocTableAssistSidecars.ts",
     "test": "vitest run",
     "test:e2e:smoke": "vitest run --config vitest.e2e.smoke.config.ts",
     "test:e2e:live": "vitest run --config vitest.e2e.live.config.ts",

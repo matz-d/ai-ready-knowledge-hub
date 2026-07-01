@@ -1,37 +1,37 @@
 #!/usr/bin/env tsx
 /**
- * Regenerate committed `*.document-ir.json` sidecars for the public born-digital
- * official-doc-pdf golden fixtures straight from the mainline pdf-parse path
- * (`extractPdf` -> `buildDocumentIr`). Pure local extraction; no Vertex.
+ * Regenerate committed raw-baseline `*.document-ir.json` sidecars for public
+ * born-digital official-doc-pdf golden fixtures straight from the mainline
+ * pdf-parse path (`extractPdf` -> `buildDocumentIr`). Pure local extraction;
+ * no Vertex.
  *
  * Why this exists (P1-E Step 0):
  *   The original official-doc-pdf sidecars were small hand-authored DocumentIR
  *   stubs. When `*.expected.json` was later broadened to the full real-document
- *   field list, the stable P1-D gate started measuring a tiny stub against a
- *   large golden, producing a misleadingly low `fieldRecall` (e.g. labor notice
- *   2/33 = 0.06) that reflected sidecar coverage, not extractor quality.
+ *   field list, the stable P1-D gate started measuring tiny stubs against
+ *   large goldens, producing misleadingly low recall that reflected sidecar
+ *   coverage, not extractor quality.
  *
  *   This regenerator replaces those stubs with the real pdf-parse output so the
  *   stable gate measures the actual production extractor, matching the scan-pdf
  *   "raw OCR baseline" sidecar policy. Honest consequences are expected:
  *   `fieldRecall` rises (all page text is present) while `tableCellRecall` /
  *   `valuePrecision` / locator coverage drop where pdf-parse cannot reconstruct
- *   the 2-column form tables or keep label/value adjacency. Those gaps are the
- *   real P1-E targets (Gemini table-assist + label/value enrichment).
+ *   tables or keep label/value adjacency.
  *
  * Scope:
- *   The 3 public MHLW born-digital fixtures only. `*.expected.json` files are
- *   NOT modified here: they encode document-level truth and must stay
- *   independent of extractor output.
+ *   Public MHLW born-digital raw-baseline fixtures only. The labor notice is
+ *   intentionally excluded because its stable sidecar is table-assist merged;
+ *   regenerate it with `pnpm fixtures:official-doc-pdf:table-assist-sidecars`.
+ *   `*.expected.json` files are NOT modified here: they encode document-level
+ *   truth and must stay independent of extractor output.
  *
  *   `synthetic-employment-context-with-pii` is intentionally excluded. It is a
- *   hand-authored PII value-retention fixture that declares
- *   `expectedTableCells: "not_applicable"`; regenerating it would both destroy
- *   that purpose and risk tripping the not_applicable table-cell contradiction
- *   check (a fresh `getTable()` grid would contradict the N/A declaration).
+ *   hand-authored PII value-retention fixture with synthetic table locators;
+ *   regenerating it would destroy that purpose.
  *
  * Usage:
- *   pnpm fixtures:official-doc-pdf:sidecars            # all 3
+ *   pnpm fixtures:official-doc-pdf:sidecars            # raw-baseline fixtures
  *   pnpm fixtures:official-doc-pdf:sidecars mhlw-...   # one by basename
  */
 import { writeFile } from 'node:fs/promises';
@@ -48,19 +48,26 @@ const fixtureDir = path.join(
   'sample-data/document-conversion/official-doc-pdf'
 );
 
-const GOLDEN_FIXTURES = [
-  'mhlw-labor-conditions-notice-general',
+const RAW_BASELINE_FIXTURES = [
   'mhlw-overtime-limit-guide',
   'mhlw-r07-model-work-rules',
 ] as const;
 
-type GoldenFixture = (typeof GOLDEN_FIXTURES)[number];
+const TABLE_ASSIST_STABLE_FIXTURES = [
+  'mhlw-labor-conditions-notice-general',
+] as const;
 
-function isGoldenFixture(value: string): value is GoldenFixture {
-  return (GOLDEN_FIXTURES as readonly string[]).includes(value);
+type RawBaselineFixture = (typeof RAW_BASELINE_FIXTURES)[number];
+
+function isRawBaselineFixture(value: string): value is RawBaselineFixture {
+  return (RAW_BASELINE_FIXTURES as readonly string[]).includes(value);
 }
 
-async function regenerateOne(documentId: GoldenFixture): Promise<{
+function isTableAssistStableFixture(value: string): boolean {
+  return (TABLE_ASSIST_STABLE_FIXTURES as readonly string[]).includes(value);
+}
+
+async function regenerateOne(documentId: RawBaselineFixture): Promise<{
   documentId: string;
   pages: number;
   blockCount: number;
@@ -112,14 +119,25 @@ async function main(): Promise<void> {
     .slice(2)
     .filter((arg) => !arg.startsWith('-'));
   for (const arg of requested) {
-    if (!isGoldenFixture(arg)) {
+    if (isTableAssistStableFixture(arg)) {
       throw new Error(
-        `Unknown fixture "${arg}". Known: ${GOLDEN_FIXTURES.join(', ')}`
+        `${arg} is a table-assist stable sidecar. Use "pnpm fixtures:official-doc-pdf:table-assist-sidecars -- --fixture ${arg}" instead.`
+      );
+    }
+    if (!isRawBaselineFixture(arg)) {
+      throw new Error(
+        `Unknown raw-baseline fixture "${arg}". Known: ${RAW_BASELINE_FIXTURES.join(
+          ', '
+        )}. Table-assist stable fixtures: ${TABLE_ASSIST_STABLE_FIXTURES.join(
+          ', '
+        )}`
       );
     }
   }
-  const fixtures: readonly GoldenFixture[] =
-    requested.length > 0 ? (requested as GoldenFixture[]) : GOLDEN_FIXTURES;
+  const fixtures: readonly RawBaselineFixture[] =
+    requested.length > 0
+      ? (requested as RawBaselineFixture[])
+      : RAW_BASELINE_FIXTURES;
 
   const regenerated = [];
   for (const documentId of fixtures) {
