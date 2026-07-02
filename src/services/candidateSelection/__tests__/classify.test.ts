@@ -268,4 +268,128 @@ describe('classifyInventory', () => {
     expect(payrollResult?.score).toBeGreaterThan(otherResult?.score ?? 0);
     expect(payrollResult?.recommendation).toBe('include');
   });
+
+  it('excludes an older same-family year version even when stale metadata is wrong', () => {
+    const stalePricing = doc({
+      id: 'pricing-2023',
+      fileName: '料金表_2023.csv',
+      documentType: '表',
+      businessDomain: '料金管理',
+      freshness: 'current',
+      isAuthoritativeCandidate: true,
+      updatedAt: '2026-05-01T00:00:00.000Z',
+    });
+    const currentPricing = doc({
+      id: 'pricing-2026',
+      fileName: '料金表_2026.csv',
+      documentType: '表',
+      businessDomain: '料金管理',
+      freshness: 'current',
+      isAuthoritativeCandidate: true,
+      updatedAt: '2026-05-01T00:00:00.000Z',
+    });
+
+    const result = classifyInventory('料金問い合わせ', [stalePricing, currentPricing], NOW);
+    const byId = Object.fromEntries(result.map((candidate) => [candidate.docId, candidate]));
+
+    expect(byId['pricing-2026']).toEqual(
+      expect.objectContaining({
+        recommendation: 'include',
+      }),
+    );
+    expect(byId['pricing-2026']?.reasonCode).toBeUndefined();
+    expect(byId['pricing-2023']).toEqual(
+      expect.objectContaining({
+        recommendation: 'exclude',
+        reasonCode: 'superseded_or_stale',
+        reasonLabel: '古い／上書き候補',
+      }),
+    );
+    expect(byId['pricing-2023']?.reasonDetail).toContain('料金表_2026.csv');
+  });
+
+  it('routes an older version to review, not exclusion, when the newer version is not includable', () => {
+    const olderPricing = doc({
+      id: 'pricing-2023',
+      fileName: '料金表_2023.csv',
+      documentType: '表',
+      businessDomain: '料金管理',
+      freshness: 'current',
+      isAuthoritativeCandidate: true,
+      updatedAt: '2026-05-01T00:00:00.000Z',
+    });
+    const pendingNewerPricing = doc({
+      id: 'pricing-2026',
+      fileName: '料金表_2026.csv',
+      documentType: '表',
+      businessDomain: '料金管理',
+      freshness: 'current',
+      isAuthoritativeCandidate: true,
+      aiUsePolicy: 'requires_masking',
+      status: 'masking',
+      updatedAt: '2026-05-01T00:00:00.000Z',
+    });
+
+    const result = classifyInventory(
+      '料金問い合わせ',
+      [olderPricing, pendingNewerPricing],
+      NOW,
+    );
+    const byId = Object.fromEntries(result.map((candidate) => [candidate.docId, candidate]));
+
+    expect(byId['pricing-2026']).toEqual(
+      expect.objectContaining({
+        recommendation: 'needs_review',
+        reasonCode: 'masking_required_unavailable',
+      }),
+    );
+    expect(byId['pricing-2023']).toEqual(
+      expect.objectContaining({
+        recommendation: 'needs_review',
+        reasonCode: 'superseded_or_stale',
+      }),
+    );
+  });
+
+  it('keeps a masking-pending older version on masking_required, not superseded exclusion', () => {
+    const pendingOlderPricing = doc({
+      id: 'pricing-2023',
+      fileName: '料金表_2023.csv',
+      documentType: '表',
+      businessDomain: '料金管理',
+      freshness: 'current',
+      isAuthoritativeCandidate: true,
+      aiUsePolicy: 'requires_masking',
+      status: 'masking',
+      updatedAt: '2026-05-01T00:00:00.000Z',
+    });
+    const currentPricing = doc({
+      id: 'pricing-2026',
+      fileName: '料金表_2026.csv',
+      documentType: '表',
+      businessDomain: '料金管理',
+      freshness: 'current',
+      isAuthoritativeCandidate: true,
+      updatedAt: '2026-05-01T00:00:00.000Z',
+    });
+
+    const result = classifyInventory(
+      '料金問い合わせ',
+      [pendingOlderPricing, currentPricing],
+      NOW,
+    );
+    const byId = Object.fromEntries(result.map((candidate) => [candidate.docId, candidate]));
+
+    // The newer version is still includable...
+    expect(byId['pricing-2026']).toEqual(
+      expect.objectContaining({ recommendation: 'include' }),
+    );
+    // ...but the older version's unmasked-PII blocker must survive supersession.
+    expect(byId['pricing-2023']).toEqual(
+      expect.objectContaining({
+        recommendation: 'needs_review',
+        reasonCode: 'masking_required_unavailable',
+      }),
+    );
+  });
 });

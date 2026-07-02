@@ -165,7 +165,7 @@ exports[`candidateSelection golden (S4) > matches snapshot for payroll onboardin
       "matchReason": null,
       "reasonCode": "superseded_or_stale",
       "reasonLabel": "古い／上書き候補",
-      "recommendation": "needs_review",
+      "recommendation": "exclude",
       "score": 0,
       "scoreBreakdown": {
         "authoritative": 0,
@@ -349,7 +349,7 @@ exports[`candidateSelection golden (S4) > matches snapshot for payroll purpose (
       "matchReason": null,
       "reasonCode": "superseded_or_stale",
       "reasonLabel": "古い／上書き候補",
-      "recommendation": "needs_review",
+      "recommendation": "exclude",
       "score": 0,
       "scoreBreakdown": {
         "authoritative": 0,
