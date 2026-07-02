@@ -97,3 +97,20 @@ export async function uploadMaskedObject(
 export async function deleteMaskedObject(objectPath: string): Promise<void> {
   await bucketFile(objectPath).delete({ ignoreNotFound: true });
 }
+
+/**
+ * Deletes all objects under a GCS prefix. Callers should pass a trailing `/`
+ * (for example `raw/{docId}/`) to avoid matching sibling docIds.
+ */
+export async function deleteObjectsWithPrefix(prefix: string): Promise<number> {
+  const bucket = new Storage().bucket(getKnowledgeHubBucketName());
+  const [files] = await bucket.getFiles({ prefix });
+  if (files.length === 0) {
+    return 0;
+  }
+
+  await Promise.all(
+    files.map((file) => file.delete({ ignoreNotFound: true }))
+  );
+  return files.length;
+}

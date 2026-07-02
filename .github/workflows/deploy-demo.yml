@@ -58,6 +58,7 @@ jobs:
       KNOWLEDGE_HUB_BUCKET: ${{ vars.DEMO_KNOWLEDGE_HUB_BUCKET }}
       KNOWLEDGE_HUB_TENANT_ID: ${{ vars.DEMO_KNOWLEDGE_HUB_TENANT_ID || 'public-demo' }}
       GOOGLE_CLOUD_LOCATION: ${{ vars.DEMO_GOOGLE_CLOUD_LOCATION || 'global' }}
+      DEMO_RESET_TOKEN_SECRET: ${{ vars.DEMO_RESET_TOKEN_SECRET }}
 
     steps:
       - name: Checkout
@@ -78,6 +79,7 @@ jobs:
             DEPLOY_SERVICE_ACCOUNT
             RUNTIME_SERVICE_ACCOUNT
             KNOWLEDGE_HUB_BUCKET
+            DEMO_RESET_TOKEN_SECRET
           )
 
           for var_name in "${required_vars[@]}"; do
@@ -156,11 +158,13 @@ jobs:
             "GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION}"
             "KNOWLEDGE_HUB_BUCKET=${KNOWLEDGE_HUB_BUCKET}"
             "KNOWLEDGE_HUB_TENANT_ID=${KNOWLEDGE_HUB_TENANT_ID}"
-            "MASKER_PROVIDER=simple-rule"
+            "MASKER_PROVIDER=cloud-dlp"
             "FIRESTORE_PREFER_REST=false"
           )
 
           ENV_CSV="$(IFS=,; echo "${ENV_VARS[*]}")"
+          SECRET_VARS=("DEMO_RESET_TOKEN=${DEMO_RESET_TOKEN_SECRET}:latest")
+          SECRET_CSV="$(IFS=,; echo "${SECRET_VARS[*]}")"
 
           gcloud run deploy "${CLOUD_RUN_SERVICE}" \
             --image="${{ steps.image.outputs.image }}:${{ steps.image.outputs.short_sha }}-demo" \
@@ -171,6 +175,7 @@ jobs:
             --max-instances=2 \
             --no-invoker-iam-check \
             --set-env-vars="${ENV_CSV}" \
+            --set-secrets="${SECRET_CSV}" \
             --quiet
 
           service_url="$(gcloud run services describe "${CLOUD_RUN_SERVICE}" \

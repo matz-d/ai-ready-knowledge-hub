@@ -26,6 +26,74 @@ GitHub Actions は [`.github/workflows/deploy-demo.yml`](../.github/workflows/de
 | `DEMO_CLOUD_RUN_SERVICE` | 省略時 `ai-ready-knowledge-hub-demo` |
 | `DEMO_KNOWLEDGE_HUB_TENANT_ID` | 省略時 `public-demo` |
 | `DEMO_GOOGLE_CLOUD_LOCATION` | 省略時 `global` |
+| `DEMO_RESET_TOKEN_SECRET` | **必須**。Secret Manager secret 名。Cloud Scheduler からの sample reset 用 `DEMO_RESET_TOKEN` を参照する |
+
+デモ runtime は `MASKER_PROVIDER=cloud-dlp` を使う。Cloud Scheduler からの定期 reset 後も DLP ベースの `ai_safe` 判定を再現するため。
+
+### Demo sample reset（Cloud Scheduler）
+
+公開 demo では `demoSampleSet=accounting-office` の文書だけを対象に、Firestore / GCS を purge してから `sample-data/accounting-office/` を再投入する。
+
+- Endpoint: `POST /api/demo/sample-documents/reset`
+- 認証: `X-Demo-Reset-Token`（Cloud Run env `DEMO_RESET_TOKEN`、Secret Manager 参照）
+- ガード: `DEMO_MODE=true` の demo service のみ。token 未設定時は 401 fail-closed
+- 重複実行: Firestore `demoMaintenance/resetLock` で軽量 lock（30 分 stale 後は回収可能）
+- 削除順: `chunks` → Firestore `documents/{docId}` → GCS `raw/{docId}/` / `masked/{docId}/`
+
+Secret 作成例:
+
+```bash
+export DEMO_PROJECT_ID="your-demo-project"
+export DEMO_RUNTIME_SERVICE_ACCOUNT="aiknh-runner@your-demo-project.iam.gserviceaccount.com"
+export DEMO_RESET_TOKEN_SECRET="demo-sample-reset-token"
+
+gcloud secrets create "$DEMO_RESET_TOKEN_SECRET" \
+  --project="$DEMO_PROJECT_ID" \
+  --replication-policy="automatic"
+
+openssl rand -base64 32 | tr -d '\n' | gcloud secrets versions add "$DEMO_RESET_TOKEN_SECRET" \
+  --project="$DEMO_PROJECT_ID" \
+  --data-file=-
+
+gcloud secrets add-iam-policy-binding "$DEMO_RESET_TOKEN_SECRET" \
+  --project="$DEMO_PROJECT_ID" \
+  --member="serviceAccount:${DEMO_RUNTIME_SERVICE_ACCOUNT}" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+Scheduler 作成例（週次・日曜 03:00 JST）:
+
+```bash
+export DEMO_REGION="asia-northeast1"
+export DEMO_SERVICE="ai-ready-knowledge-hub-demo"
+export DEMO_SERVICE_URL="$(gcloud run services describe "$DEMO_SERVICE" \
+  --project="$DEMO_PROJECT_ID" \
+  --region="$DEMO_REGION" \
+  --format='value(status.url)')"
+export RESET_TOKEN="$(gcloud secrets versions access latest \
+  --project="$DEMO_PROJECT_ID" \
+  --secret="$DEMO_RESET_TOKEN_SECRET")"
+
+gcloud scheduler jobs create http demo-sample-reset \
+  --project="$DEMO_PROJECT_ID" \
+  --location="$DEMO_REGION" \
+  --schedule="0 3 * * 0" \
+  --time-zone="Asia/Tokyo" \
+  --uri="${DEMO_SERVICE_URL}/api/demo/sample-documents/reset" \
+  --http-method=POST \
+  --headers="Content-Type=application/json,X-Demo-Reset-Token=${RESET_TOKEN}" \
+  --message-body='{}' \
+  --attempt-deadline=600s
+```
+
+手動確認:
+
+```bash
+curl -sS -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Demo-Reset-Token: ${RESET_TOKEN}" \
+  "${DEMO_SERVICE_URL}/api/demo/sample-documents/reset"
+```
 
 現時点の提出デモでは、PDF / CSV / XLSX / Google Sheets / Google Docs の主要 ingest、`/upload` の複数ファイルキュー、Phase 4-UX の目的に応じた候補文書選定、「候補を表示」、生成前の安全確認、生成前プレビュー、各文書・各候補の判断を可視化する **Decision Trace**（文書詳細 / 生成前の安全確認）、async Context Package job、NotebookLM 用 source bundle が実装済みです。**Google Sheets** は [Phase 3-A](archive/phase-3-google-sheets-import.md) の URL 取り込み（`/import/google-sheets`）で Drive 上のブックをスナップショット化して投入できます。
 
