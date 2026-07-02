@@ -157,6 +157,33 @@ describe('exportContextPackageSourceBundle', () => {
     expect(byName.get('顧客対応メモ_匿名化.txt')).toBe('text/plain');
   });
 
+  it('keeps recognized source extensions at the end for NotebookLM uploads', () => {
+    const input = baseInput({
+      includedDocuments: [
+        {
+          fileName: '料金表_2026.csv (sheet=Sheet1, range=A1:D12)',
+          reason: '現行料金表',
+          sourceType: '表',
+          sensitivity: 'Internal',
+          aiSafeContent: '業務,料金\n給与計算,33000',
+        },
+      ],
+    });
+
+    const { files } = exportContextPackageSourceBundle(input);
+
+    expect(files[1]).toEqual(
+      expect.objectContaining({
+        fileName: '料金表_2026 (sheet=Sheet1, range=A1_D12).csv',
+        originalFileName: '料金表_2026.csv (sheet=Sheet1, range=A1:D12)',
+        contentType: 'text/csv',
+      })
+    );
+    expect(files[0].content).toContain(
+      'Source file: `料金表_2026 (sheet=Sheet1, range=A1_D12).csv`'
+    );
+  });
+
   it('disambiguates duplicate included file names', () => {
     const input = baseInput({
       includedDocuments: [

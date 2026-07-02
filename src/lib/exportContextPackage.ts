@@ -356,9 +356,45 @@ function fileNameWithIndex(fileName: string, index: number): string {
   return `${fileName.slice(0, dot)}-${index}${fileName.slice(dot)}`;
 }
 
+const KNOWN_SOURCE_BUNDLE_EXTENSIONS = [
+  '.md',
+  '.markdown',
+  '.csv',
+  '.tsv',
+  '.txt',
+  '.json',
+] as const;
+
+/**
+ * Some generated source names include a locator after the original extension,
+ * e.g. `料金表_2026.csv (sheet=Sheet1, range=A1:D12)`. NotebookLM relies on
+ * the final extension when adding sources, so keep that locator before the
+ * extension: `料金表_2026 (sheet=Sheet1, range=A1_D12).csv`.
+ */
+function keepRecognizedExtensionAtEnd(fileName: string): string {
+  const lower = fileName.toLowerCase();
+  for (const extension of KNOWN_SOURCE_BUNDLE_EXTENSIONS) {
+    const index = lower.indexOf(extension);
+    if (index < 0 || index + extension.length === fileName.length) {
+      continue;
+    }
+
+    const beforeExtension = fileName.slice(0, index).trimEnd();
+    const suffix = fileName.slice(index + extension.length).trim();
+    if (!suffix) {
+      continue;
+    }
+
+    return `${beforeExtension} ${suffix}${extension}`;
+  }
+  return fileName;
+}
+
 /** bundle 内でファイル名衝突（同名 included 文書）を避ける。 */
 function dedupeFileName(fileName: string, used: Set<string>): string {
-  const safeFileName = sanitizeSourceBundleFileName(fileName);
+  const safeFileName = sanitizeSourceBundleFileName(
+    keepRecognizedExtensionAtEnd(fileName)
+  );
   if (!used.has(safeFileName)) {
     used.add(safeFileName);
     return safeFileName;
