@@ -43,7 +43,7 @@
     "knip": "knip"
   },
   "dependencies": {
-    "@genkit-ai/google-genai": "^1.33.0",
+    "@genkit-ai/google-genai": "^1.39.0",
     "@google-cloud/dlp": "^6.6.1",
     "@google-cloud/firestore": "^8.5.0",
     "@google-cloud/storage": "^7.18.0",
@@ -51,7 +51,7 @@
     "@napi-rs/canvas": "0.1.80",
     "csv-parse": "^6.2.1",
     "exceljs": "^4.4.0",
-    "genkit": "^1.33.0",
+    "genkit": "^1.39.0",
     "googleapis": "^171.4.0",
     "jose": "^6.2.3",
     "next": "^16.0.10",
@@ -69,7 +69,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "dotenv": "^16.6.1",
-    "genkit-cli": "^1.33.0",
+    "genkit-cli": "^1.39.0",
     "jsdom": "^29.1.1",
     "knip": "^6.16.1",
     "pdfkit": "0.18.0",
