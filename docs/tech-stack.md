@@ -164,7 +164,7 @@ MVPでは Vector Search と embeddings 生成は行わず、タグ検索 + LLM�
 | サービス | 用途 | 必須要件カテゴリ |
 |---|---|---|
 | Cloud Run | アプリ実行環境（IAP 保護済み） | **必須1** |
-| Vertex AI API (Gemini 2.5 Flash) | 4エージェントのLLM | **必須2** |
+| Vertex AI API (Gemini 3.5 Flash; scan-pdf OCR は 3.1 Flash-Lite) | Curator / Masker / Strategist の LLM | **必須2** |
 | Cloud DLP | PII検出/マスキング | 加点 (AI技術) |
 | Cloud Storage | ファイル保存 | 加点 |
 | Firestore | メタデータDB + AuditEvent ストア | 加点 |

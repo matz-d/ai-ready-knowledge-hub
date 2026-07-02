@@ -8,7 +8,7 @@
 
 ## 目的
 
-AI-Ready Knowledge Hub の各エージェント (Curator / Masker / Strategist / Interviewer) の挙動を確認するためのデモ用データ。
+AI-Ready Knowledge Hub の各エージェント (Curator / Masker / Strategist) と候補選定フローの挙動を確認するためのデモ用データ。
 社会保険労務士事務所のSME業務を想定して構成している。
 
 ## 構成方針

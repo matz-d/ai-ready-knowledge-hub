@@ -1,6 +1,6 @@
 # システムアーキテクチャ
 
-## 現在の実装状態 (2026-05-08)
+## 現在の実装状態 (2026-07-02)
 
 W1 で Curator / Masker の Genkit flow、A9 Markdown export、Cloud Run デプロイ検証まで完了。
 W2 Walking Skeleton として `/upload` → `POST /api/documents` で、multipart 検証のあと
@@ -9,13 +9,13 @@ W2 Walking Skeleton として `/upload` → `POST /api/documents` で、multipar
 書き、`curatorFlow` と必要時 `maskerPipelineFlow` までを同一リクエスト内で完結させ、
 結果を UI に返す経路を実装済み。
 
-MVP のマスク処理はルールベースの `SimpleMasker` とし、プロバイダ境界だけを固定しておき、将来 Cloud DLP に差し替え可能にする。
-Task2 で `SimpleMasker` → 既存 `maskerRiskFlow` → `ai_safe_ready` / `restricted_promoted`
-の pipeline を実装し、実 Vertex 接続でサンプル 2 件の期待挙動を確認済み。
+Masker は Cloud DLP（`cloudDlpMasker`）と Vertex AI のハイブリッド経路を本番 profile で利用可能。
+Strategist / `strategistOrchestrator` による Context Package 生成、metadata-only 候補選定
+（`/api/context-package/candidates`）、Markdown / NotebookLM source bundle export、
+delivery E2E（本番アプリ生成 bundle の実 NotebookLM 検証）まで到達済み。
 
-Task3 で Masker の `Restricted` 昇格を文書メタデータへ反映する純関数と、Context Package
-入力ビルダを実装済み。W1 snapshot を読み取り時に適用し、Restricted 文書の本文が
-`Full AI-Ready Sources` に入らないことを `npm run context:demo` で確認済み。
+本ドキュメントの「Walking Skeleton」「MVP 完成時の予定」節は経緯の記録として残す。
+現行の製品定義・エージェント構成の正本は [CLAUDE.md](../CLAUDE.md) と [README.md](../README.md)。
 
 ### HTTP API: `/api/documents` と `/api/curator`
 
@@ -66,8 +66,7 @@ Task3 で Masker の `Restricted` 昇格を文書メタデータへ反映する�
     for the UI. Curator or Masker failures return docId when available.
 ```
 
-未実装の主要部分は Cloud DLP 統合、Strategist / Interviewer、Knowledge Inventory の実
-Firestore 一覧・詳細 UI、GitHub Actions eval の強化などである。
+未実装または将来拡張の例: Interviewer の独立実装・複数ラウンド対話、Vector embeddings による検索、本格的な Inventory 詳細 UI の拡張など。
 
 ### Task2: Masker Pipeline MVP
 
@@ -169,29 +168,29 @@ gs://{KNOWLEDGE_HUB_BUCKET}/
 │ Next.js Server Actions / Route Handlers                     │
 │  - POST /api/documents: multipart 検証 → uploadOrchestrator │
 │    (GCS / Firestore / Curator / Masker の順序・rollback)    │
-│  - POST /api/curator: Curator 単体 smoke（UI upload 非経路） │
-│  - Run Strategist + Interviewer Agent on demand (将来)     │
+│  - POST /api/context-package/candidates: metadata-only 候補選定          │
+│  - POST /api/context-package: Strategist 経由の Context Package 生成    │
+│  - POST /api/curator: Curator 単体 smoke（UI upload 非経路）             │
 └─────────────────────────────────────────────────────────────┘
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ Agent Layer (Genkit TypeScript)                             │
-│  ┌──────────┐ ┌──────────┐ ┌──────────────┐ ┌────────────┐  │
-│  │ Curator  │→│ Masker   │→│ Strategist   │→│ Interviewer│  │
-│  │ (分類)   │ │ (マスク) │ │ (目的→計画)  │ │ (質問生成) │  │
-│  └──────────┘ └──────────┘ └──────────────┘ └────────────┘  │
-│       ▲            │              │                │         │
-│       │ 逆feedback │              │                │         │
-│       │ 機密度格上げ│              ▼                ▼         │
-│       └────────────┘          Vertex AI         Vertex AI     │
-│                               (Gemini           (Gemini       │
-│       │            │          2.5 Flash)        2.5 Flash)    │
-│       ▼            ▼              │                           │
-│   Vertex AI    Cloud DLP          ▼                           │
-│   (Gemini      + Vertex AI    Context Package                 │
-│   2.5 Flash)   (Gemini)           │                           │
-│                                   ▼                           │
-│                              Markdown Export (A9)             │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────────────┐   │
+│  │ Curator  │→│ Masker   │→│ Strategist               │   │
+│  │ (分類)   │ │ (マスク) │ │ (目的→Context Package)   │   │
+│  └──────────┘ └──────────┘ └──────────────────────────┘   │
+│       ▲            │              │                         │
+│       │ 逆feedback │              │                         │
+│       │ 機密度格上げ│              ▼                         │
+│       └────────────┘          Vertex AI                     │
+│                               (Gemini 3.5 Flash)            │
+│       │            │              │                           │
+│       ▼            ▼              ▼                         │
+│   Vertex AI    Cloud DLP    Context Package                 │
+│   (Gemini      + Vertex AI       │                          │
+│   3.5 Flash)   (Gemini)          ▼                          │
+│                              Markdown / source bundle export│
 └─────────────────────────────────────────────────────────────┘
 
 Masker → Curator の逆矢印 (A8): Masker が `recommendedSensitivity: "Restricted"`
@@ -220,7 +219,7 @@ Strategist は格上げ済み文書を Context Package から自動除外する�
 
 ---
 
-## 4エージェントの責務
+## 3エージェントと候補選定
 
 ### Curator Agent
 **入力**: アップロード文書 (PDF/text/md/CSV)
@@ -272,37 +271,34 @@ type MaskerOutput = {
 **逆feedback (A8):**
 `recommendedSensitivity === "Restricted"` の場合、Firestore の文書 metadata の機密度を
 `Restricted` に更新する。この更新は Masker が Curator の判定を覆す挙動であり、
-4エージェントの協調を成立させる中核的な自律判断点。
+3エージェントの協調を成立させる中核的な自律判断点。
 
 ### Strategist Agent
-**入力**: ユーザの目的 (自然言語)
+**入力**: ユーザの目的 (自然言語) + 人間が選んだ docIds
 
 **処理**:
 1. 目的を分解 (誰が、何を、どう使うか)
-2. Inventory から候補文書を検索 (MVPではタグ検索 + LLM選定)
+2. 選ばれた文書の safe chunk を safetyGate 経由で Strategist に渡す
 3. AI参照版がある文書はそちらを優先
-4. 候補を「使える」「除外」に分類
-5. 不足領域を判定 → Interviewer を呼ぶ
+4. 候補を「使える」「除外」「人間確認」に分類
+5. 不足領域と人間への確認質問を生成（独立 Interviewer エージェントは持たない）
+6. duplicate version guard / document supersession policy で旧版の曖昧さを human review へ回す
 
 **出力 (Context Package)**:
 - 使える情報 (理由付き)
 - 除外すべき情報 (理由付き)
 - 足りない情報 (領域)
-- Interviewer への質問依頼
+- 人間に確認すべき質問
 
-### Interviewer Agent
-**入力**: 不足領域 + 既存文書からの文脈
+### 候補選定（metadata-only、`/context-package`）
+**入力**: purpose + Inventory メタデータ（本文は読まない）
 
 **処理**:
-- 暗黙知が必要そうなポイントを抽出
-- 質問を生成
-- 回答を受けて追加質問を判断 (将来拡張)
+- `classifyInventory` で include / exclude / needs_review を決定論的に分類
+- cross-document version supersession で旧版を自動 exclude（masking 待ちは上書きしない）
+- 生成前に人間が docIds を選択
 
-**MVP実装メモ:**
-内部実装は Strategist flow 内の質問生成ステップでよい。画面上は Interviewer Agent の出力として見せる。
-
-**出力**:
-- 質問リスト (3〜7個程度)
+**出力**: 候補一覧 + missing hints。独立 Genkit エージェントではない。
 
 ---
 
@@ -360,20 +356,20 @@ H-3 以前の `curated + maskingPending: true` park は新規 upload では使�
 
 ```
 User → Purpose Query 入力
-    → Strategist Agent 起動
-        → 目的分解
-        → Firestore で候補文書検索 (MVPでは tag filter)
-        → Restricted 文書は自動除外 (A8 の格上げ結果を尊重)
-        → Curator/Masker結果を考慮し取捨選択
-        → Context Package 組み立て
-        → 不足判定 → Interviewer Agent 起動
-            → 質問生成
-    → Context Package + 質問 を UI に返す
-    → User が [Export as Markdown] ボタンを押下 (A9)
-        → src/lib/exportContextPackage.ts 経由でMarkdown文字列を生成
-        → Excluded セクションに Restricted 文書名を理由付きで列挙 (本文は含めない)
-        → Included セクションに ai_safe_version 本文を inline で含める
-        → ブラウザにダウンロードを返す
+    → POST /api/context-package/candidates
+        → classifyInventory（metadata-only）
+        → include / exclude / needs_review 候補 + missingHints
+    → User が docIds を選択し、生成前の安全確認
+    → POST /api/context-package
+        → safetyGate → Strategist Agent
+            → 目的分解・取捨選択
+            → duplicate version guard（旧版は human_confirmation_required へ）
+            → Context Package 組み立て（4分類）
+    → Context Package を UI に表示
+    → User が [Export as Markdown] または [source bundle zip]
+        → src/lib/exportContextPackage.ts 経由で出力
+        → Excluded 文書の本文は bundle に含めない（exclusion by absence）
+        → Included 文書は ai_safe 本文を同梱
 ```
 
 ---
@@ -492,8 +488,7 @@ MVP評価対象:
 │       ├── _shared/
 │       ├── curator/
 │       ├── masker/
-│       ├── strategist/
-│       └── interviewer/
+│       └── strategist/
 ├── sample-data/
 │   └── accounting-office/
 └── eval/

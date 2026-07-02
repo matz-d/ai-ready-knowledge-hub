@@ -1,18 +1,18 @@
 # システム構成（Protopedia 提出用）
 
-SME に散らばった社内文書（PDF・CSV・Google Sheets・メモ・旧版資料・暗黙知）を、**AI に安全に渡せる Context Package** へ変換する前段プラットフォームです。NotebookLM / Gemini / RAG を置き換えるのではなく、それらに投入する情報を「実務で使える粒度」と「セキュリティ観点」で準備します。全体は **Genkit（TypeScript）の 4 エージェント** を中心に、Next.js を Cloud Run に載せて構成しています。
+SME に散らばった社内文書（PDF・CSV・Google Sheets・メモ・旧版資料・暗黙知）を、**AI に安全に渡せる Context Package** へ変換する前段プラットフォームです。NotebookLM / Gemini / RAG を置き換えるのではなく、それらに投入する情報を「実務で使える粒度」と「セキュリティ観点」で準備します。全体は **Genkit（TypeScript）の 3 エージェント**（Curator / Masker / Strategist）を中心に、Next.js を Cloud Run に載せて構成しています。
 
 ## 全体の流れ
 
-ユーザーは `/upload` から複数ファイルをまとめて投入します。HTTP 境界（`POST /api/documents`）は multipart の検証だけを行い、副作用の順序は **uploadOrchestrator** にすべて委ねます。orchestrator が「Cloud Storage への原本保存 → Firestore へのメタデータ作成 → Curator → 必要時 Masker」を rollback 付きで直列実行し、結果を UI に返します。文書の準備が整ったら、ユーザーは目的（例:「新人スタッフ向けに月次の給与計算業務を安全に学べる AI を作りたい」）を入力し、Strategist が Context Package を生成します。
+ユーザーは `/upload` から複数ファイルをまとめて投入します。HTTP 境界（`POST /api/documents`）は multipart の検証だけを行い、副作用の順序は **uploadOrchestrator** にすべて委ねます。orchestrator が「Cloud Storage への原本保存 → Firestore へのメタデータ作成 → Curator → 必要時 Masker」を rollback 付きで直列実行し、結果を UI に返します。文書の準備が整ったら、ユーザーは目的（例:「新人スタッフ向けに月次の給与計算業務を安全に学べる AI を作りたい」）を入力し、**metadata-only の候補選定**で文書を確認・選択したうえで、Strategist が Context Package を生成します。
 
-## 4 エージェント（Genkit / Vertex AI）
+## 3 エージェント（Genkit / Vertex AI）
 
 **Curator** が文書を分類します（種別・業務領域・機密度・鮮度・AI 利用可否）。機密度から AI 利用方針を自動派生し、`direct`（そのまま AI 参照可）・`blocked`（AI 参照不可）・`requires_masking`（マスキングが必要）へ振り分けます。
 
 **Masker** は `requires_masking` の文書だけを受け取り、**Cloud DLP による構造化 PII 検出**（マイナンバー・口座番号・氏名など）と **Vertex AI（Gemini）による文脈依存 PII 判定**を組み合わせてマスクし、さらにマスク後の残存リスク（特定企業・取引・個人が再識別できないか）を再評価します。
 
-**Strategist** が目的を分解し、Inventory から候補を選び、「使える情報 / 除外すべき情報 / 足りない情報」に整理します。**Interviewer** は不足領域から、暗黙知を引き出すための確認質問を生成します。
+**Strategist** が目的を分解し、人間が選んだ文書から取捨選択し、「使える情報 / 除外すべき情報 / 足りない情報 / 人間に確認すべき質問」の 4 分類に整理します。候補文書の metadata-only スキャン（旧版 supersession の自動降格など）は `/context-package` の生成前フローで行い、独立エージェントではありません。
 
 ### 中核となる逆フィードバック（図中の赤い矢印）
 

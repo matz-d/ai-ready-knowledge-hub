@@ -62,26 +62,27 @@ NotebookLMやGeminiのようなAIツールを、SMEが本当に活用できる�
 ## コアフロー
 
 ```
-1. Dump          : 雑多な資料を一箇所に投入
-2. Curator       : AIが自動分類・タグ付け
-3. Masker        : 機密度高なら自動マスキング → AI参照可能版を生成
-4. Inventory     : 会社の情報資産マップを表示
-5. Purpose Query : ユーザが目的を入力
-6. Strategist    : AI-ready Context Package を生成
-                   (使える情報 / 除外すべき情報 / 足りない情報)
-7. Interviewer   : 暗黙知を質問化
+1. Dump              : 雑多な資料を一箇所に投入
+2. Curator           : AIが自動分類・タグ付け
+3. Masker            : 機密度高なら自動マスキング → AI参照可能版を生成
+4. Inventory         : 会社の情報資産マップを表示
+5. Purpose Query     : ユーザが目的を入力
+6. Candidate scan    : metadata-only で候補文書を提示（include / exclude / needs_review）
+7. Human selection   : 生成前に文書を選び、安全確認
+8. Strategist        : AI-ready Context Package を生成
+                       (使える情報 / 除外すべき情報 / 足りない情報 / 人間に確認すべき質問)
 ```
 
 ---
 
-## 4エージェント構成
+## 3エージェント + 候補選定
 
-| エージェント | 役割 | 自律的判断の例 |
+| コンポーネント | 役割 | 自律的判断の例 |
 |---|---|---|
 | **Curator** | 文書分類・タグ付け | 「この文書は古い/新しい?」「機密度は?」「同一文書の別バージョンか?」 |
 | **Masker** | PII検出+マスキング | 「Cloud DLP では検出されないが文脈上機密性の高い箇所」を判断、マスク範囲を決定 |
-| **Strategist** | 目的→Context Package | 目的→必要情報を計画、Curatorの結果から取捨選択。情報不足を判断したら Interviewer を呼ぶ |
-| **Interviewer** | 暗黙知の質問化 | 不足領域から質問を生成、回答を受けて追加質問を判断 |
+| **Strategist** | 目的→Context Package | 目的→必要情報を計画、選ばれた文書から取捨選択し、不足領域と人間への確認質問を整理 |
+| **候補選定** (`/context-package`) | metadata-only の助言レイヤ | 目的に対する relevance / supersession / masking 状態を決定論的に分類。独立エージェントではない |
 
 ---
 

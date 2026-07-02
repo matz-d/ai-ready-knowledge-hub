@@ -70,7 +70,7 @@
 | Strategist A/B評価 | やらない | 複雑度が高く、デモ価値に直結しない |
 | PDF本格解析 | やらない。テキスト抽出済みPDFまたは簡易抽出まで | OCRやレイアウト解析で時間を溶かさない |
 | 画像PDF OCR | やらない | Cloud Vision等は将来拡張 |
-| Interviewer独立実装 | 実装上はStrategist flow内の質問生成でよい | 画面上の体験を優先し、内部構成を軽くする |
+| Interviewer独立実装 | **現行: 採用しない。** Strategist flow 内で human review questions を生成 | 独立エージェント化はスコープ外。候補選定も metadata-only フローで実装 |
 | Evalダッシュボード | やらない。CIログ/PRコメントで十分 | UI実装コストを削る |
 | `openai/privacy-filter` 比較ベンチマーク | 後回し | 発表の補強材料だがMVPの中核ではない |
 | Live大量処理デモ | やらない。少数サンプルの実行経路と投入済みデータ状態で見せる | 3分デモでは安定性を優先。通常UIは固定fixtureを読ませない |
