@@ -1,6 +1,7 @@
 import type { InventoryDocument } from '../../lib/inventory';
 import { isBlockedForAi, needsMaskerEvaluation } from '../../agents/masker/upgrade';
 import { ExclusionReasonLabels } from '../../agents/strategist/schema';
+import { evaluateDocumentSupersessionPolicy } from '../documentSupersessionPolicy';
 import { purposeTerms } from '../strategistOrchestrator/budget';
 import { expandTermsWithSynonyms } from './synonyms';
 import { scoreDocumentForPurpose } from './ranking';
@@ -141,11 +142,80 @@ export function classifyInventory(
   const baseTerms = purposeTerms(purpose);
   const terms = expandTermsWithSynonyms(baseTerms);
 
-  const candidates = docs.map((doc) => classifyDocument(doc, terms, now));
+  const candidates = applyCrossDocumentVersionExclusions(
+    docs.map((doc) => classifyDocument(doc, terms, now)),
+  );
 
   // Stable sort: score desc, ties keep input order
   return candidates
     .map((c, i) => ({ c, i }))
     .sort((a, b) => b.c.score - a.c.score || a.i - b.i)
     .map(({ c }) => c);
+}
+
+function applyCrossDocumentVersionExclusions(
+  candidates: CandidateDoc[],
+): CandidateDoc[] {
+  const policy = evaluateDocumentSupersessionPolicy(
+    candidates
+      .filter((candidate) => candidate.recommendation !== 'exclude')
+      .map((candidate) => ({
+        id: candidate.docId,
+        fileName: candidate.fileName,
+        freshness: candidate.freshness,
+        isAuthoritativeCandidate: candidate.isAuthoritativeCandidate,
+        updatedAt: candidate.updatedAt,
+        eligibleAsCurrent: candidate.recommendation === 'include',
+      })),
+  );
+
+  if (policy.superseded.length === 0 && policy.ambiguous.length === 0) {
+    return candidates;
+  }
+
+  const supersededByDocId = new Map(
+    policy.groups.flatMap((group) =>
+      group.currentRepresentative
+        ? group.superseded.map(
+            (member) =>
+              [member.document.id, group.currentRepresentative!.document.fileName] as const,
+          )
+        : [],
+    ),
+  );
+  const ambiguousDocIds = new Set(
+    policy.ambiguous.map((member) => member.document.id),
+  );
+
+  return candidates.map((candidate) => {
+    // Safety-critical needs_review reasons must not be relabeled as mere
+    // version supersession. A masking-pending document still carries unmasked
+    // PII; that must remain the surfaced blocker even when a newer version
+    // exists (mirrors the guard already applied on the ambiguous path below).
+    if (candidate.reasonCode === 'masking_required_unavailable') {
+      return candidate;
+    }
+    const strongerFileName = supersededByDocId.get(candidate.docId);
+    if (strongerFileName) {
+      return {
+        ...candidate,
+        recommendation: 'exclude',
+        reasonCode: 'superseded_or_stale',
+        reasonLabel: ExclusionReasonLabels.superseded_or_stale,
+        reasonDetail: `より新しい同系統の文書「${strongerFileName}」が候補に存在するため、旧版は AI に渡しません。`,
+        matchReason: undefined,
+      };
+    }
+    if (!ambiguousDocIds.has(candidate.docId) || candidate.recommendation !== 'include') {
+      return candidate;
+    }
+    return {
+      ...candidate,
+      recommendation: 'needs_review',
+      reasonCode: 'superseded_or_stale',
+      reasonLabel: ExclusionReasonLabels.superseded_or_stale,
+      reasonDetail: '同系統の複数版候補があります。最新版を人間が確認してください。',
+      matchReason: undefined,
+    };
+  });
 }
