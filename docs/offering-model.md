@@ -7,7 +7,7 @@
 
 ## 1. 基本方針
 
-AI-Ready Knowledge Hub は、NotebookLM / Gemini / RAG の前段で、社内文書を分類・マスキングし、目的別 Context Package に変換する。扱うデータには個人情報、顧客情報、契約情報、暗黙知が含まれうるため、将来の商用提供では **顧客の慎重さに応じた複数の提供形態**を用意する。
+AI-Ready Knowledge Hubは、AIエージェントが社内文書を分類・マスキングし、目的に応じたContext Packageを生成する前段プラットフォームである。NotebookLM / Gemini / RAGを置き換えるのではなく、人間が生成前に確認したContext PackageをMarkdownまたはNotebookLM向けbundleとして出力する。扱うデータには個人情報、顧客情報、契約情報、暗黙知が含まれうるため、将来の商用提供では**顧客の慎重さに応じた複数の提供形態**を用意する。
 
 **基本方針:**
 

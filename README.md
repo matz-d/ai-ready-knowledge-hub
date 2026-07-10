@@ -1,10 +1,10 @@
 # AI-Ready Knowledge Hub
 
-> SME の散らばった文書を分類・マスキングし、AI に渡せる Context Package へ変換する「前段プラットフォーム」。
+> AIエージェントが社内文書を分類・マスキングし、目的に応じたContext Packageを生成する前段プラットフォーム
 
-[DevOps x AI Agent Hackathon 2026](https://findy.notion.site/devops-ai-agent-hackathon-2026) (Findy x Google Cloud) 提出作品です。
+[DevOps x AI Agent Hackathon 2026](https://findy.notion.site/devops-ai-agent-hackathon-2026) | Findy x Google Cloud
 
-![AI-Ready Knowledge Hub — AIに渡す前に、社内文書を安全化](docs/protopedia/hero-v1.png)
+![AI-Ready Knowledge Hub — 社内文書から目的に応じたContext Packageを生成](docs/protopedia/hero-v1.png)
 
 <!-- 提出前に差し込む:
 🎥 デモ動画: <https://youtu.be/IOevgO04qg4>
@@ -13,43 +13,43 @@
 
 ## 課題と解決
 
-SME では、AI に使わせたい社内情報が PDF、CSV、Google Sheets、メモ、テンプレート、古い資料、個人知に散らばっています。NotebookLM、Gemini、RAG などを使いたくても、**どの情報を渡してよいか、顧客情報や個人情報を含む資料をそのまま渡してよいかを判断しにくい**のが現場の課題です。
+SMEでは、AIに使わせたい社内情報がPDF、CSV、Google Sheets、メモ、テンプレート、古い資料、個人知に散らばっています。NotebookLM、Gemini、RAGなどを使いたくても、**どの情報を渡してよいか、顧客情報や個人情報を含む資料をそのまま渡してよいかを判断しにくい**のが現場の課題です。
 
-AI-Ready Knowledge Hub はその前段を担当します。文書をアップロードすると AI エージェントが分類・抽出・マスキングし、目的を入力すると「**使える情報**」「**除外すべき情報**」「**足りない情報**」「**人間に確認すべき質問**」の4分類を整理した Context Package を生成します。
+AI-Ready Knowledge Hubはその前段を担当します。Curatorが文書を分類し、MaskerがPIIや再識別リスクを検出して安全化または除外します。Strategistは目的に応じて「**使える情報**」「**除外すべき情報と除外理由**」「**足りない情報**」「**人間に確認すべき質問**」を整理し、目的に応じたContext Packageを生成します。
 
-本作品は NotebookLM / Gemini / RAG を置き換えるものではありません。下流 AI に投入する情報を、実務で使える粒度とセキュリティ観点で準備するための前段プラットフォームです。
+本作品はNotebookLM / Gemini / RAGを置き換えるものではありません。生成前に人間が候補文書と安全性を確認し、Context PackageをMarkdownまたはNotebookLM向けbundleとして出力します。下流AIへの自動送信は行いません。
 
-## なぜ「前段の AI エージェント」なのか
+## なぜ「前段のAIエージェント」なのか
 
-AI 導入担当者が毎回手作業で行っていた多段の判断を、エージェントが肩代わりします。
+AI導入担当者が毎回手作業で行っていた多段の判断を、AIエージェントが肩代わりします。
 
-1. **読む** — 文書ごとに種別・業務領域・鮮度・機密性・AI 利用可否を判定する（Curator）
-2. **守る** — 個人情報・再識別リスクを検出し、AI 参照版を生成するか除外する（Masker + Cloud DLP）
+1. **読む** — 文書ごとに種別・業務領域・鮮度・機密性・AI利用可否を判定する（Curator）
+2. **守る** — PII・再識別リスクを検出し、AI参照版を生成するか除外する（Masker + Cloud DLP）
 3. **選ぶ** — 目的に対して必要な文書・不足情報・人間への確認質問を整理する（Strategist）
 
-ここで重要なのは、**このパイプラインが fail-closed であること**です。マスキングできない PII を含む文書は自動で restricted に降格し、判断できない文書は「AI に渡す」のではなく「人間に確認する」へ倒します。除外は構造で保証し（bundle に本文が存在しない）、送信は人間が生成前に確認できます。**自律性を誇るのではなく、自律判断の安全境界を製品仕様として固定している**のが本作品のエージェント設計です。
+ここで重要なのは、**このパイプラインがfail-closedであること**です。マスキングできないPIIを含む文書は自動でrestrictedに降格し、判断できない文書は「AIに渡す」のではなく「人間に確認する」へ倒します。除外は構造で保証し（bundleに本文が存在しない）、人間が生成前に候補と安全性を確認します。**自律性を誇るのではなく、自律判断の安全境界を製品仕様として固定している**のが本作品のAIエージェント設計です。
 
-## 実例: 散らばった社内文書 → Context Package → 実 NotebookLM で 5/5 PASS
+## 実例: 散らばった社内文書 → Context Package → 実NotebookLMで5/5 PASS
 
-会計・社労士事務所の synthetic corpus（[sample-data/accounting-office/](sample-data/accounting-office/)）を使い、**本番 Cloud Run 上のアプリ（IAP 越し）で Context Package を生成 → 実 NotebookLM に投入**した実測ケースです（2026-07-02、検証ログ: [docs/delivery-e2e/2026-07-02-verification-log.md](docs/delivery-e2e/2026-07-02-verification-log.md)）。
+会計・社労士事務所のsynthetic corpus（[sample-data/accounting-office/](sample-data/accounting-office/)）を使い、**本番Cloud Run上のアプリ（IAP越し）でContext Packageを生成 → 実NotebookLMに投入**した実測ケースです（2026-07-02、検証ログ: [docs/delivery-e2e/2026-07-02-verification-log.md](docs/delivery-e2e/2026-07-02-verification-log.md)）。
 
-**Before** — 現行と旧版の料金表、テンプレート、実案件の契約書サンプル、PII を含む顧客対応メモが混在した文書群。
+**Before** — 現行と旧版の料金表、テンプレート、実案件の契約書サンプル、PIIを含む顧客対応メモが混在した文書群。
 
 **Purpose（1行入力）**: 「顧問先からの料金・手続き問い合わせに即答する社内アシスタント」
 
 **After** — `/context-package` の実出力（本番 UI のスクリーンショット）:
 
-![Context Package 生成結果: INCLUDED 3 / EXCLUDED 2 / SAFETY EXCLUDED 0 / MISSING 1 / REVIEW QUESTIONS 1](docs/delivery-e2e/screenshots/2026-07-02-production-result-summary-crop.png)
+![Context Package生成結果: INCLUDED 3 / EXCLUDED 2 / SAFETY EXCLUDED 0 / MISSING 1 / REVIEW QUESTIONS 1](docs/delivery-e2e/screenshots/2026-07-02-production-result-summary-crop.png)
 
 | 分類 | 文書 | 理由（実出力より） |
 |---|---|---|
 | ✅ 使える (3件) | 料金表_2026.csv / 年末調整_案内文.txt / 給与計算チェックリスト.md | 現行料金の権威ソースと、purpose に直接対応する手続き文書 |
-| 🚫 除外（候補段階で自動降格） | 料金表_2023.csv | superseded。新版 2026 が存在するため候補 UI が自動で「除外すべき」へ降格。本文は bundle に存在しない |
+| 🚫 除外（候補段階で自動降格） | 料金表_2023.csv | superseded。新版2026が存在するため候補UIが自動で「除外すべき」へ降格。本文はbundleに存在しない |
 | 🚫 除外（理由付き） | 就業規則テンプレート.md / 顧客対応メモ_匿名化.txt | purpose_mismatch — マスキング済みで安全な文書でも、目的に合わなければ理由付きで絞る |
 | 🔍 足りない | 社会保険・労働保険手続きの具体的な必要書類と提出期限 | 社内に存在しない知識を明示 |
 | ❓ 質問 | 「基本顧問契約」の月額料金や対象人数の上限は定義されていますか？ | 料金表だけでは確定回答できない前提を人間へ確認 |
 
-この bundle を**実際の NotebookLM に source 追加**し、4分類が下流 AI の回答として機能するかを検証しました:
+このbundleを**実際のNotebookLMにsource追加**し、4分類が下流AIの回答として機能するかを検証しました:
 
 | # | 質問 | 期待 | 実結果 | 合否 |
 |---|---|---|---|---|
@@ -59,19 +59,19 @@ AI 導入担当者が毎回手作業で行っていた多段の判断を、エ�
 | 4 | この料金で確定見積もりを出してよい？ | 人間の確認が必要と返す | 仮見積もり＋社内確認を推奨（基本顧問契約の未定義を指摘） | ✅ |
 | 5 | 2023年の旧料金はいくらでしたか？ | 除外済みで参照できないと答える | ソースに含まれていないと回答 | ✅ |
 
-included のみ使用・excluded 不使用・missing の認識・human questions の反映 — **4分類すべてが、本番アプリ生成の bundle と実 NotebookLM で機能することを確認済み**です。
+includedのみ使用・excluded不使用・missingの認識・human questionsの反映 — **4分類すべてが、本番アプリ生成のbundleと実NotebookLMで機能することを確認済み**です。
 
-> さらにこの E2E 検証は、本番の実バグ2件（bundle ファイル名の拡張子位置 / 旧版料金表が候補に残る supersession 判定）を**検出し、同日中に修正 → redeploy → 再検証 PASS** まで到達しました。E2E 検証が回帰検出として機能した記録も[検証ログ](docs/delivery-e2e/2026-07-02-verification-log.md)にあります。初回検証（[2026-06-09 ログ](docs/delivery-e2e/2026-06-09-verification-log.md)）では「単一 Markdown では NotebookLM が本文を grounding しない」という下流 AI の挙動を発見し、source 分割 bundle 出力（`exportContextPackageSourceBundle()`）の実装に至った経緯も残しています。
+> さらにこのE2E検証は、本番の実バグ2件（bundleファイル名の拡張子位置 / 旧版料金表が候補に残るsupersession判定）を**検出し、同日中に修正 → redeploy → 再検証PASS**まで到達しました。E2E検証が回帰検出として機能した記録も[検証ログ](docs/delivery-e2e/2026-07-02-verification-log.md)にあります。初回検証（[2026-06-09ログ](docs/delivery-e2e/2026-06-09-verification-log.md)）では「単一MarkdownではNotebookLMが本文をgroundingしない」という下流AIの挙動を発見し、source分割bundle出力（`exportContextPackageSourceBundle()`）の実装に至った経緯も残しています。
 
 ## デモで見せること
 
-デモ題材は会計・社労士事務所です。士業の専門判断を代替するものではなく、機密文書と暗黙知を多く持つ SME の「AI 活用前の準備」を支援するユースケースとして扱います。
+デモ題材は会計・社労士事務所です。士業の専門判断を代替するものではなく、機密文書と暗黙知を多く持つSMEの「AI活用前の準備」を支援するユースケースとして扱います。
 
 1. `/upload` から複数ファイルをまとめて投入する
-2. Inventory で AI 利用可、マスキング済み、保護中の文書を確認する
+2. InventoryでAI利用可、マスキング済み、保護中の文書を確認する
 3. `/context-package` で目的を入力する
 4. 「候補を表示」で候補文書を選び、生成前の安全確認と生成前プレビューを確認する
-5. Markdown または NotebookLM 用 source bundle zip として出力する
+5. MarkdownまたはNotebookLM向けsource bundle zipとして出力する
 
 撮影用 purpose:
 
@@ -87,28 +87,28 @@ included のみ使用・excluded 不使用・missing の認識・human questions
 | ![upload](docs/screenshots/upload.png) | 複数ファイル一括アップロードと逐次処理 |
 | ![inventory](docs/screenshots/inventory.png) | AI利用可 / マスキング済み / 保護中の分類ビュー |
 | ![candidates](docs/screenshots/candidates.png) | 候補文書の選択と生成前の安全確認 |
-| ![package](docs/screenshots/package.png) | Context Package 4分類の生成結果 |
-| ![export](docs/screenshots/export.png) | Markdown / NotebookLM bundle zip 出力 |
+| ![package](docs/screenshots/package.png) | Context Packageの4分類の生成結果 |
+| ![export](docs/screenshots/export.png) | Markdown / NotebookLM向けbundle zip出力 |
 -->
 
 ## 主要機能
 
 - **Multi-file upload**: PDF / CSV / XLSX / TXT / Markdown などをファイル単位で逐次処理
 - **Google Workspace import**: Google Sheets / Google Docs を Drive API 経由で取り込み
-- **Curator agent**: 文書種別、業務領域、鮮度、機密性、AI 利用可否を分類
-- **Masker agent**: 個人情報や再識別リスクを検出し、AI 参照版または除外へ振り分け
-- **Strategist agent**: 目的に対して必要な文書・不足情報・確認質問を整理
+- **Curator**: 文書種別、業務領域、鮮度、機密性、AI利用可否を分類
+- **Masker**: PIIや再識別リスクを検出し、安全化または除外
+- **Strategist**: 目的に応じて必要情報・除外理由・不足情報・確認質問を整理
 - **候補文書**: 目的から Inventory を metadata-only でスキャンし、生成前に人間が文書を選べる
-- **Context Package export**: Markdown と NotebookLM 用 source bundle zip を生成
+- **Context Package出力**: MarkdownとNotebookLM向けsource bundle zipを生成
 - **Document conversion**: official PDF / slide PDF / scan PDF を DocumentIR に変換し、評価可能な chunk へ変換
 - **Quality gates**: extraction / masking / scan PDF drift を CI と eval で継続確認
 - **Cloud Run delivery**: GitHub Actions から Cloud Run にデプロイ（Workload Identity Federation）
 
-## AI エージェント構成
+## AIエージェント構成
 
-| Agent | 役割 |
+| AIエージェント | 役割 |
 |---|---|
-| Curator | 文書を分類し、業務領域・鮮度・AI 利用可否を判断する |
+| Curator | 文書を分類し、業務領域・鮮度・AI利用可否を判断する |
 | Masker | 個人情報・顧客情報・再識別リスクを検出し、安全化または除外する |
 | Strategist | 目的に対して必要な情報、除外理由、不足情報、確認質問をまとめる |
 
@@ -172,7 +172,7 @@ flowchart LR
 | アクセス制御 | IAP で UI / API を保護。async worker は Cloud Tasks の OIDC token で検証し、table-assist payload はさらに HMAC 署名を検証 |
 | PII 検出 | Cloud DLP（`[REDACTED:<INFO_TYPE>]` トークン置換、custom infoTypes 拡張済み）または simple-rule provider |
 | fail-closed 降格 | マスキング不能な PII を検出した文書は自動で restricted へ（AI 利用可へ倒さない） |
-| 本文ゲート | `requires_masking` 文書の raw text は Context Package に fallback しない。restricted / masking 未完了 chunk は Strategist に渡さない |
+| 本文ゲート | `requires_masking`文書のraw textはContext Packageにfallbackしない。restricted / masking未完了chunkはStrategistに渡さない |
 | 除外の構造保証 | NotebookLM bundle に excluded 文書の本文は存在しない（exclusion by absence） |
 | PII-at-rest | GCS `raw/` オブジェクトは lifecycle policy で 14 日後に自動削除（[docs/production-readiness.md](docs/production-readiness.md)） |
 | データ衛生 | sample-data / fixture は synthetic・public・masked のみ。実顧客データ・credential・本番 export は commit しない |
@@ -228,7 +228,7 @@ SCAN_PDF_GEMINI_MODEL=gemini-3.1-flash-lite
 | `pnpm eval:p1d:masker-drift` | Cloud DLP live masker drift check |
 | `pnpm eval:curator:classification` | curator over-restriction live eval |
 | `pnpm eval:scan-pdf:ocr-live-drift --ci` | scan PDF OCR live drift check |
-| `pnpm context:demo:live` | Firestore / GCS の実データから Context Package を生成 |
+| `pnpm context:demo:live` | Firestore / GCSの実データからContext Packageを生成 |
 | `pnpm chunks:regenerate <docId>` | raw object から chunks を再生成 |
 
 ## 主要ディレクトリ
@@ -238,7 +238,7 @@ SCAN_PDF_GEMINI_MODEL=gemini-3.1-flash-lite
 | `src/app/` | Next.js pages / API routes |
 | `src/agents/` | Curator / Masker / Strategist flows |
 | `src/lib/` | upload, extractors, storage, Firestore, masking, chunk generation |
-| `src/services/` | Context Package orchestration と候補文書選定（`selectCandidates`） |
+| `src/services/` | Context Packageのorchestrationと候補文書選定（`selectCandidates`） |
 | `src/eval/` | conversion eval / quality gates |
 | `sample-data/` | synthetic / public / masked fixtures |
 | `docs/` | design docs, runbooks, evidence |

@@ -4,15 +4,15 @@
 
 **AI-Ready Knowledge Hub**
 
-機能名: **Context Curator**
+正式な一文説明: **AIエージェントが社内文書を分類・マスキングし、目的に応じたContext Packageを生成する前段プラットフォーム | DevOps x AI Agent Hackathon 2026**
 
-サブコピー: **SMEの散らばった情報を、AIが使える会社の記憶に変える。**
+主催: **Findy x Google Cloud**
 
 ---
 
 ## 提供価値
 
-NotebookLMやGeminiのようなAIツールを、SMEが本当に活用できるようにするための **前段プラットフォーム**。
+NotebookLMやGeminiのようなAIツールを、SMEが本当に活用できるようにするための**前段プラットフォーム**。
 
 社内に散らばった文書をAIに渡したいが、
 
@@ -23,7 +23,7 @@ NotebookLMやGeminiのようなAIツールを、SMEが本当に活用できる�
 
 という現実的な障壁を解消する。
 
-「整理する」のではなく「変換する」。**AIに渡せない情報を、AIに渡せる形に変える** ことが核心。
+「整理する」のではなく「変換する」。**AIに渡せない情報を、AIに渡せる形に変える**ことが核心。
 
 ---
 
@@ -64,12 +64,12 @@ NotebookLMやGeminiのようなAIツールを、SMEが本当に活用できる�
 ```
 1. Dump              : 雑多な資料を一箇所に投入
 2. Curator           : AIが自動分類・タグ付け
-3. Masker            : 機密度高なら自動マスキング → AI参照可能版を生成
+3. Masker            : PII・再識別リスクを検出し、安全化または除外
 4. Inventory         : 会社の情報資産マップを表示
 5. Purpose Query     : ユーザが目的を入力
 6. Candidate scan    : metadata-only で候補文書を提示（include / exclude / needs_review）
 7. Human selection   : 生成前に文書を選び、安全確認
-8. Strategist        : AI-ready Context Package を生成
+8. Strategist        : Context Packageを生成
                        (使える情報 / 除外すべき情報 / 足りない情報 / 人間に確認すべき質問)
 ```
 
@@ -80,8 +80,8 @@ NotebookLMやGeminiのようなAIツールを、SMEが本当に活用できる�
 | コンポーネント | 役割 | 自律的判断の例 |
 |---|---|---|
 | **Curator** | 文書分類・タグ付け | 「この文書は古い/新しい?」「機密度は?」「同一文書の別バージョンか?」 |
-| **Masker** | PII検出+マスキング | 「Cloud DLP では検出されないが文脈上機密性の高い箇所」を判断、マスク範囲を決定 |
-| **Strategist** | 目的→Context Package | 目的→必要情報を計画、選ばれた文書から取捨選択し、不足領域と人間への確認質問を整理 |
+| **Masker** | PII・再識別リスクの検出、安全化・除外 | 「Cloud DLPでは検出されないが文脈上機密性の高い箇所」を判断し、安全化できない文書を除外 |
+| **Strategist** | 目的→Context Package | 目的→必要情報を計画、選ばれた文書から取捨選択し、除外理由・不足領域・人間への確認質問を整理 |
 | **候補選定** (`/context-package`) | metadata-only の助言レイヤ | 目的に対する relevance / supersession / masking 状態を決定論的に分類。独立エージェントではない |
 
 ---
@@ -120,7 +120,7 @@ NotebookLMやGeminiのようなAIツールを、SMEが本当に活用できる�
 ## ハッカソンでの勝ち筋 (3点)
 
 1. **Purpose Query の知性** : 目的を後から入れると、必要情報・不足情報・質問が自動生成される
-2. **AI-ready Context Package** : NotebookLMやGeminiに渡す前の情報セットを作る
+2. **Context Package**: NotebookLMやGeminiに渡す前の情報セットを作る
 3. **Curator eval pipeline** : AIの分類品質をGitHub Actionsで継続評価し、「まわす」を見せる
 
 ---
