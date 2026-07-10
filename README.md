@@ -6,10 +6,9 @@
 
 ![AI-Ready Knowledge Hub — 社内文書から目的に応じたContext Packageを生成](docs/protopedia/hero-v1.png)
 
-<!-- 提出前に差し込む:
-🎥 デモ動画: <https://youtu.be/IOevgO04qg4>
-（デプロイ先は IAP 保護の per-client 環境のため公開 URL はありません。動作は動画とスクリーンショットで確認できます）
--->
+🎥 **デモ動画**: <https://youtu.be/IOevgO04qg4>
+
+🚀 **公開デモ**: <https://ai-ready-knowledge-hub-demo-127729019743.asia-northeast1.run.app/> — 合成サンプルで分類結果の閲覧からContext Package生成まで試せます（任意アップロードは無効・定期リセット前提）。本番はIAP保護のper-client環境のため公開URLはありません。
 
 ## 課題と解決
 
