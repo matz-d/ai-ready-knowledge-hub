@@ -1,10 +1,12 @@
 # AI-Ready Knowledge Hub
 
-> AIエージェントが社内文書を分類・マスキングし、目的に応じたContext Packageを生成する前段プラットフォーム
+> **あらゆる業務AIに、セキュアな社内コンテキストを。**
+>
+> AIエージェントが社内書類を分類・マスキングし、目的に応じたContext Packageを作成します。
 
 [DevOps x AI Agent Hackathon 2026](https://findy.notion.site/devops-ai-agent-hackathon-2026) | Findy x Google Cloud
 
-![AI-Ready Knowledge Hub — 社内文書から目的に応じたContext Packageを生成](docs/protopedia/hero-v1.png)
+![AI-Ready Knowledge Hub — あらゆる業務AIに、セキュアな社内コンテキストを。](docs/protopedia/hero-v1.png)
 
 🎥 **デモ動画**: <https://youtu.be/IOevgO04qg4>
 
@@ -12,13 +14,13 @@
 
 ## 課題と解決
 
-SMEでは、AIに使わせたい社内情報がPDF、CSV、Google Sheets、メモ、テンプレート、古い資料、個人知に散らばっています。NotebookLM、Gemini、RAGなどを使いたくても、**どの情報を渡してよいか、顧客情報や個人情報を含む資料をそのまま渡してよいかを判断しにくい**のが現場の課題です。
+社内には、PDF、CSV、Google Sheets、メモ、テンプレート、古い資料、個人知など、AI活用に役立つ情報が散らばっています。しかし、顧客情報や個人情報、古い資料も混在しているため、**どの情報をAIに渡してよいのか判断できません**。
 
-AI-Ready Knowledge Hubはその前段を担当します。Curatorが文書を分類し、MaskerがPIIや再識別リスクを検出して安全化または除外します。Strategistは目的に応じて「**使える情報**」「**除外すべき情報と除外理由**」「**足りない情報**」「**人間に確認すべき質問**」を整理し、目的に応じたContext Packageを生成します。
+AI-Ready Knowledge Hubは、社内書類を安全に業務AIへつなぐプラットフォームです。Curatorが文書を分類し、MaskerがPIIや再識別リスクを検出して安全化または除外します。Strategistは目的に応じて「**使える情報**」「**除外すべき情報と除外理由**」「**足りない情報**」「**人間に確認すべき質問**」を整理し、Context Packageを作成します。
 
-本作品はNotebookLM / Gemini / RAGを置き換えるものではありません。生成前に人間が候補文書と安全性を確認し、Context PackageをMarkdownまたはNotebookLM向けbundleとして出力します。下流AIへの自動送信は行いません。
+作成したContext Packageは、NotebookLMやRAGだけでなく、社内QA、研修資料の作成、情報整理など、さまざまな業務AIのコンテキストとして利用できます。候補文書は人間が生成前に確認し、MarkdownまたはNotebookLM向けbundleとして出力します。取り込んだ元ファイル（rawデータ）は、Cloud Storageのライフサイクル設定により14日後に自動削除されます。
 
-## なぜ「前段のAIエージェント」なのか
+## なぜ「社内コンテキストを整えるAIエージェント」なのか
 
 AI導入担当者が毎回手作業で行っていた多段の判断を、AIエージェントが肩代わりします。
 
@@ -28,7 +30,7 @@ AI導入担当者が毎回手作業で行っていた多段の判断を、AIエ�
 
 ここで重要なのは、**このパイプラインがfail-closedであること**です。マスキングできないPIIを含む文書は自動でrestrictedに降格し、判断できない文書は「AIに渡す」のではなく「人間に確認する」へ倒します。除外は構造で保証し（bundleに本文が存在しない）、人間が生成前に候補と安全性を確認します。**自律性を誇るのではなく、自律判断の安全境界を製品仕様として固定している**のが本作品のAIエージェント設計です。
 
-## 実例: 散らばった社内文書 → Context Package → 実NotebookLMで5/5 PASS
+## 実例: 散らばった社内書類 → Context Package → 実NotebookLMで5/5 PASS
 
 会計・社労士事務所のsynthetic corpus（[sample-data/accounting-office/](sample-data/accounting-office/)）を使い、**本番Cloud Run上のアプリ（IAP越し）でContext Packageを生成 → 実NotebookLMに投入**した実測ケースです（2026-07-02、検証ログ: [docs/delivery-e2e/2026-07-02-verification-log.md](docs/delivery-e2e/2026-07-02-verification-log.md)）。
 
@@ -48,7 +50,7 @@ AI導入担当者が毎回手作業で行っていた多段の判断を、AIエ�
 | 🔍 足りない | 社会保険・労働保険手続きの具体的な必要書類と提出期限 | 社内に存在しない知識を明示 |
 | ❓ 質問 | 「基本顧問契約」の月額料金や対象人数の上限は定義されていますか？ | 料金表だけでは確定回答できない前提を人間へ確認 |
 
-このbundleを**実際のNotebookLMにsource追加**し、4分類が下流AIの回答として機能するかを検証しました:
+このbundleを**実際のNotebookLMにsource追加**し、4分類がNotebookLMの回答に反映されるかを検証しました:
 
 | # | 質問 | 期待 | 実結果 | 合否 |
 |---|---|---|---|---|
@@ -60,11 +62,11 @@ AI導入担当者が毎回手作業で行っていた多段の判断を、AIエ�
 
 includedのみ使用・excluded不使用・missingの認識・human questionsの反映 — **4分類すべてが、本番アプリ生成のbundleと実NotebookLMで機能することを確認済み**です。
 
-> さらにこのE2E検証は、本番の実バグ2件（bundleファイル名の拡張子位置 / 旧版料金表が候補に残るsupersession判定）を**検出し、同日中に修正 → redeploy → 再検証PASS**まで到達しました。E2E検証が回帰検出として機能した記録も[検証ログ](docs/delivery-e2e/2026-07-02-verification-log.md)にあります。初回検証（[2026-06-09ログ](docs/delivery-e2e/2026-06-09-verification-log.md)）では「単一MarkdownではNotebookLMが本文をgroundingしない」という下流AIの挙動を発見し、source分割bundle出力（`exportContextPackageSourceBundle()`）の実装に至った経緯も残しています。
+> さらにこのE2E検証は、本番の実バグ2件（bundleファイル名の拡張子位置 / 旧版料金表が候補に残るsupersession判定）を**検出し、同日中に修正 → redeploy → 再検証PASS**まで到達しました。E2E検証が回帰検出として機能した記録も[検証ログ](docs/delivery-e2e/2026-07-02-verification-log.md)にあります。初回検証（[2026-06-09ログ](docs/delivery-e2e/2026-06-09-verification-log.md)）では「単一MarkdownではNotebookLMが本文をgroundingしない」というNotebookLMの挙動を発見し、source分割bundle出力（`exportContextPackageSourceBundle()`）の実装に至った経緯も残しています。
 
 ## デモで見せること
 
-デモ題材は会計・社労士事務所です。士業の専門判断を代替するものではなく、機密文書と暗黙知を多く持つSMEの「AI活用前の準備」を支援するユースケースとして扱います。
+デモ題材は会計・社労士事務所です。士業の専門判断を代替するものではなく、機密文書と暗黙知を多く持つ中小企業の「AI活用前の準備」を支援するユースケースとして扱います。
 
 1. `/upload` から複数ファイルをまとめて投入する
 2. InventoryでAI利用可、マスキング済み、保護中の文書を確認する
@@ -117,7 +119,7 @@ includedのみ使用・excluded不使用・missingの認識・human questionsの
 
 ```mermaid
 flowchart LR
-  U["User / SME operator"] --> UI["Next.js UI on Cloud Run"]
+  U["User / company operator"] --> UI["Next.js UI on Cloud Run"]
   UI --> UP["Upload / Workspace Import"]
   UP --> GCS["Cloud Storage raw / masked objects"]
   UP --> FS["Firestore documents / chunks / jobs"]
@@ -157,7 +159,7 @@ flowchart LR
 | OCR drift 監視 | `pnpm eval:scan-pdf:ocr-live-drift --ci`: live 3-run で major drift **0 件**（[証跡](docs/p1-e-plus-scan-pdf-quality-floor-2026-06-18.md)） |
 | 分類の過剰制限チェック | 公開文書 20 件の live eval で over-restriction **0/20**（[証跡](docs/curator-classification-precision-2026-06-09.md)） |
 | eval の改ざん防御 | scan-pdf expected の refresh に **append-only guard**（期待値を黙って弱められない設計） |
-| 下流 AI E2E | 本番アプリ（IAP 越し）生成の bundle で、実 NotebookLM の質問バッテリー **5/5 PASS**（2026-07-02） |
+| NotebookLM E2E | 本番アプリ（IAP 越し）生成の bundle で、実 NotebookLM の質問バッテリー **5/5 PASS**（2026-07-02） |
 | E2E の回帰検出実績 | delivery E2E 検証が本番バグ2件を検出 → **同日中に修正 → redeploy → 再検証 PASS**（2026-07-02） |
 | 環境分離 | production / demo の 2 系統 Cloud Run deploy workflow |
 | 本番 live smoke | multi-file upload / table-assist async ingest を本番環境で実測（[1](docs/upload-multi-file-live-smoke-2026-06-18.md), [2](docs/table-assist-async-ingest-live-smoke-2026-06-18.md)） |

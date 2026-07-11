@@ -1,6 +1,6 @@
 # システム構成（Protopedia 提出用）
 
-AIエージェントが社内文書を分類・マスキングし、目的に応じたContext Packageを生成する前段プラットフォームです。NotebookLM / Gemini / RAGを置き換えるのではなく、生成前に人間が候補文書と安全性を確認し、MarkdownまたはNotebookLM向けbundleとして出力します。全体は**Genkit（TypeScript）の3つのAIエージェント**（Curator / Masker / Strategist）を中心に、Next.jsをCloud Runに載せて構成しています。
+AI-Ready Knowledge Hubは、社内書類を安全に業務AIへつなぐプラットフォームです。AIエージェントが社内書類を分類・マスキングし、目的に応じたContext Packageを作成します。候補文書は人間が生成前に確認し、MarkdownまたはNotebookLM向けbundleとして出力します。全体は**Genkit（TypeScript）の3つのAIエージェント**（Curator / Masker / Strategist）を中心に、Next.jsをCloud Runに載せて構成しています。
 
 ## 全体の流れ
 
@@ -16,13 +16,13 @@ AIエージェントが社内文書を分類・マスキングし、目的に応
 
 ### 中核となる逆フィードバック（図中の赤い矢印）
 
-Masker が再識別リスクありと判断した場合、`recommendedSensitivity: "Restricted"` を返し、**Curator が付けた機密度を Restricted に格上げ**します。格上げされた文書は Strategist によって Context Package から自動除外され、本文は下流 AI に渡りません。これがエージェント同士の協調を成立させる中核的な自律判断点です。
+Masker が再識別リスクありと判断した場合、`recommendedSensitivity: "Restricted"` を返し、**Curator が付けた機密度を Restricted に格上げ**します。格上げされた文書はStrategistによってContext Packageから自動除外され、本文は出力に含まれません。これがエージェント同士の協調を成立させる中核的な自律判断点です。
 
 ## データ層と出力
 
 原本は Cloud Storage（`raw/`）、AI 参照用のマスク済み本文は `masked/`（`ai_safe` のときのみ）に保存し、**GCS を正本**とします。Firestore にはメタデータと Curator / Masker の監査ブロックのみを保持し、本文そのものは持ちません（GCS パス参照とハッシュのみ）。
 
-出力の**Context Package**は「使える情報」「除外すべき情報と除外理由」「足りない情報」「人間に確認すべき質問」を明確に区別し、Markdownまたは**NotebookLM向けsource bundle（.zip）**としてエクスポートできます。下流AIへは自動送信せず、利用者が出力後の用途を判断します。
+出力の**Context Package**は「使える情報」「除外すべき情報と除外理由」「足りない情報」「人間に確認すべき質問」を明確に区別し、Markdownまたは**NotebookLM向けsource bundle（.zip）**としてエクスポートできます。取り込んだ元ファイル（rawデータ）は、Cloud Storageのライフサイクル設定により14日後に自動削除されます。
 
 ## DevOps（まわす）
 
