@@ -1,15 +1,14 @@
 # AI-Ready Knowledge Hub
 
-> SME の散らばった文書を分類・マスキングし、AI に渡せる Context Package へ変換する「前段プラットフォーム」。
+> AIエージェントが社内書類を分類・マスキングし、目的に応じたContext Packageを作成します。
 
 [DevOps x AI Agent Hackathon 2026](https://findy.notion.site/devops-ai-agent-hackathon-2026) (Findy x Google Cloud) 提出作品です。
 
-![AI-Ready Knowledge Hub — AIに渡す前に、社内文書を安全化](docs/protopedia/hero-v1.png)
+![AI-Ready Knowledge Hub — あらゆる業務AIに、セキュアな社内コンテキストを。](docs/protopedia/hero-v1.png)
 
-<!-- 提出前に差し込む:
-🎥 デモ動画: <https://youtu.be/IOevgO04qg4>
-（デプロイ先は IAP 保護の per-client 環境のため公開 URL はありません。動作は動画とスクリーンショットで確認できます）
--->
+🎥 **デモ動画**: <https://youtu.be/IOevgO04qg4>
+
+🚀 **公開デモ**: <https://ai-ready-knowledge-hub-demo-127729019743.asia-northeast1.run.app/> — 合成サンプルで分類結果の閲覧から Context Package 生成まで試せます（任意アップロードは無効・定期リセット前提）。本番は IAP 保護の per-client 環境のため公開 URL はありません。
 
 ## 課題と解決
 
