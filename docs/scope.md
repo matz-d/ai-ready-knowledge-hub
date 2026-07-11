@@ -2,7 +2,7 @@
 
 ## MVPの成功条件
 
-3分デモで「散らばった機密文書が、AIに渡せるContext Packageへ変換される」ことが伝わる状態を作る。
+3分デモで「AIエージェントが社内書類を分類・マスキングし、目的に応じたContext Packageを作成することで、社内書類を安全に業務AIへつなぐプラットフォーム」であることが伝わる状態を作る。
 
 ## 現在の到達点 (2026-05-08 Task1/2/3 後)
 
@@ -27,14 +27,14 @@
 1. text / markdown / CSV / テキスト抽出済みPDF のアップロード
 2. Cloud Storage への保存
 3. Firestore への文書メタデータ保存
-4. **Curator Agent** による自動分類
+4. **Curator** による自動分類
    - 文書種別
    - 業務領域
    - 機密度
    - 鮮度
    - AI利用方針
    - 重複/旧版候補フラグ
-5. **Masker Agent** によるデモ対象文書のマスキング
+5. **Masker** によるデモ対象文書のマスキング
    - MVPでは text / markdown / CSV / 抽出済みテキストを対象
    - Cloud DLP + Vertex AI のハイブリッド方針は維持
    - 位置情報の厳密な評価より、原本 → AI参照版の変換体験を優先
@@ -45,16 +45,16 @@
    - ヒートマップ (業務領域 × 文書種別) で確定
    - Restricted 格上げ済み文書は専用バッジ表示
 8. **Purpose Query** 入力UI
-9. **Strategist Agent** による AI-ready Context Package 生成
+9. **Strategist** によるContext Package生成
    - 使える情報
    - 除外すべき情報 (Masker による Restricted 格上げ済みを含む)
    - 足りない情報
    - 確認質問
-10. **Export Context Package (A9)**
+10. **Context Packageの出力 (A9)**
     - Purpose Query 実行後、選ばれた文書セットだけを Markdown 形式でダウンロード可能にする
     - Package Manifest + Instructions + Full AI-Ready Sources の構成で出力
     - 採用文書のAI参照版本文は省略せず含める
-    - NotebookLM / Gemini / Codex / RAG に貼り付けられる成果物を出力
+    - 人間が生成前に確認したうえで、MarkdownまたはNotebookLM向けbundleとして出力
 11. GitHub Actions による Cloud Run デプロイ + **Curator簡易評価**
 
 ---
@@ -83,7 +83,7 @@
 |---|---|
 | Google Drive OAuth 本格連携 | 認証実装で時間溶ける |
 | NotebookLM代替のRAGチャットUI | 本作品の独自性 (前段) が薄まる |
-| Drive 全体クロール | スコープ大、SME向けでない |
+| Drive 全体クロール | スコープが大きく、初期の中小企業向けユースケースに合わない |
 | 自動ファイル移動 | 副作用が読めない |
 | マルチユーザ認証 | デモ用は単一ユーザで十分 |
 | 本格 OCR (画像PDF) | 沼る、Cloud Vision呼ぶなら別途検討 |

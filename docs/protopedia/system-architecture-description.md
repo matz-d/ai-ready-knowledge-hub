@@ -1,6 +1,6 @@
 # システム構成（Protopedia 提出用）
 
-SME に散らばった社内文書（PDF・CSV・Google Sheets・メモ・旧版資料・暗黙知）を、**AI に安全に渡せる Context Package** へ変換する前段プラットフォームです。NotebookLM / Gemini / RAG を置き換えるのではなく、それらに投入する情報を「実務で使える粒度」と「セキュリティ観点」で準備します。全体は **Genkit（TypeScript）の 3 エージェント**（Curator / Masker / Strategist）を中心に、Next.js を Cloud Run に載せて構成しています。
+AI-Ready Knowledge Hubは、社内書類を安全に業務AIへつなぐプラットフォームです。AIエージェントが社内書類を分類・マスキングし、目的に応じたContext Packageを作成します。候補文書は人間が生成前に確認し、MarkdownまたはNotebookLM向けbundleとして出力します。全体は**Genkit（TypeScript）の3つのAIエージェント**（Curator / Masker / Strategist）を中心に、Next.jsをCloud Runに載せて構成しています。
 
 ## 全体の流れ
 
@@ -10,19 +10,19 @@ SME に散らばった社内文書（PDF・CSV・Google Sheets・メモ・旧版
 
 **Curator** が文書を分類します（種別・業務領域・機密度・鮮度・AI 利用可否）。機密度から AI 利用方針を自動派生し、`direct`（そのまま AI 参照可）・`blocked`（AI 参照不可）・`requires_masking`（マスキングが必要）へ振り分けます。
 
-**Masker** は `requires_masking` の文書だけを受け取り、**Cloud DLP による構造化 PII 検出**（マイナンバー・口座番号・氏名など）と **Vertex AI（Gemini）による文脈依存 PII 判定**を組み合わせてマスクし、さらにマスク後の残存リスク（特定企業・取引・個人が再識別できないか）を再評価します。
+**Masker**は`requires_masking`の文書だけを受け取り、**Cloud DLPによる構造化PII検出**（マイナンバー・口座番号・氏名など）と**Vertex AI（Gemini）による文脈依存PII判定**を組み合わせて安全化し、さらにマスク後の残存リスク（特定企業・取引・個人が再識別できないか）を再評価します。安全化できない文書は除外します。
 
 **Strategist** が目的を分解し、人間が選んだ文書から取捨選択し、「使える情報 / 除外すべき情報 / 足りない情報 / 人間に確認すべき質問」の 4 分類に整理します。候補文書の metadata-only スキャン（旧版 supersession の自動降格など）は `/context-package` の生成前フローで行い、独立エージェントではありません。
 
 ### 中核となる逆フィードバック（図中の赤い矢印）
 
-Masker が再識別リスクありと判断した場合、`recommendedSensitivity: "Restricted"` を返し、**Curator が付けた機密度を Restricted に格上げ**します。格上げされた文書は Strategist によって Context Package から自動除外され、本文は下流 AI に渡りません。これがエージェント同士の協調を成立させる中核的な自律判断点です。
+Masker が再識別リスクありと判断した場合、`recommendedSensitivity: "Restricted"` を返し、**Curator が付けた機密度を Restricted に格上げ**します。格上げされた文書はStrategistによってContext Packageから自動除外され、本文は出力に含まれません。これがエージェント同士の協調を成立させる中核的な自律判断点です。
 
 ## データ層と出力
 
 原本は Cloud Storage（`raw/`）、AI 参照用のマスク済み本文は `masked/`（`ai_safe` のときのみ）に保存し、**GCS を正本**とします。Firestore にはメタデータと Curator / Masker の監査ブロックのみを保持し、本文そのものは持ちません（GCS パス参照とハッシュのみ）。
 
-出力の **Context Package** は「使える情報」「除外すべき情報」「足りない情報」「人間に確認すべき質問」を明確に区別し、Markdown または **NotebookLM 用の source bundle（.zip）** としてエクスポートできます。これをそのまま NotebookLM / Gemini / RAG に投入し、根拠つきの回答を得ます。
+出力の**Context Package**は「使える情報」「除外すべき情報と除外理由」「足りない情報」「人間に確認すべき質問」を明確に区別し、Markdownまたは**NotebookLM向けsource bundle（.zip）**としてエクスポートできます。取り込んだ元ファイル（rawデータ）は、Cloud Storageのライフサイクル設定により14日後に自動削除されます。
 
 ## DevOps（まわす）
 

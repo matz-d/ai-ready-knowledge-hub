@@ -7,7 +7,7 @@
 
 ## 1. 基本方針
 
-AI-Ready Knowledge Hub は、NotebookLM / Gemini / RAG の前段で、社内文書を分類・マスキングし、目的別 Context Package に変換する。扱うデータには個人情報、顧客情報、契約情報、暗黙知が含まれうるため、将来の商用提供では **顧客の慎重さに応じた複数の提供形態**を用意する。
+AI-Ready Knowledge Hubは、社内書類を安全に業務AIへつなぐプラットフォームである。AIエージェントが社内書類を分類・マスキングし、目的に応じたContext Packageを作成する。候補文書は人間が生成前に確認し、MarkdownまたはNotebookLM向けbundleとして出力する。扱うデータには個人情報、顧客情報、契約情報、暗黙知が含まれうるため、将来の商用提供では**顧客の慎重さに応じた複数の提供形態**を用意する。
 
 **基本方針:**
 
@@ -19,7 +19,7 @@ AI-Ready Knowledge Hub は、NotebookLM / Gemini / RAG の前段で、社内文�
 
 | 提供形態 | 想定顧客 | 説明 | 主な ProcessingProfile |
 |---|---|---|---|
-| Managed SaaS | ライトな顧客、試用、低リスク資料から始める SME | 当社管理環境で文書を受け、Cloud DLP + Masker を通して Context Package を作る。導入が速い。 | `cloud-managed` |
+| Managed SaaS | ライトな顧客、試用、低リスク資料から始める中小企業 | 当社管理環境で文書を受け、Cloud DLP + Masker を通して Context Package を作る。導入が速い。 | `cloud-managed` |
 | Dedicated SaaS / Private deployment | 士業・法人の本命顧客 | 顧客専用の GCP project / Cloud Run / Firestore / GCS などで運用する。運用は当社が持つが、環境は専用化する。 | `cloud-managed` の専用環境 |
 | Customer-managed / BYOC | 情シス・監査要件が強い顧客 | 顧客クラウド環境内にデプロイし、顧客がインフラ境界を管理する。導入・運用は重いが信頼境界を説明しやすい。 | 将来 `customer-managed` 候補 |
 | Sanitized ingress / Edge Sanitizer | 生データを当社境界に入れられない顧客 | 顧客側でサニタイズ済み payload を作り、当社側はマスク済み chunk と境界証跡だけを受け取る。 | `cloud-sanitized-ingress` |
@@ -48,7 +48,7 @@ AI-Ready Knowledge Hub は、NotebookLM / Gemini / RAG の前段で、社内文�
 
 訴求:
 
-> 御社専用環境で、社内文書を AI-ready に変換できます。
+> 御社専用環境で、安全な社内コンテキストを作成できます。
 
 想定:
 
